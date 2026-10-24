@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'book_mapping.dart';
 
@@ -28,7 +29,7 @@ class GetBibleAPI {
       }
       return [];
     } catch (e) {
-      print("Error fetching versions: \$e");
+      debugPrint("Error fetching versions: $e");
       return [];
     }
   }
@@ -79,7 +80,7 @@ class GetBibleAPI {
     String url = "$baseUrl/$bibleId/$bookNr/$chapter.json";
 
     try {
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
         List verses = data["verses"] ?? [];
@@ -101,7 +102,7 @@ class GetBibleAPI {
         return null;
       }
     } catch (e) {
-      print("Error fetching passage: \$e");
+      debugPrint("Error fetching passage: $e");
       return null;
     }
   }
