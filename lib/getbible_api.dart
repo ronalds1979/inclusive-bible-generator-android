@@ -28,7 +28,6 @@ class GetBibleAPI {
       }
       return [];
     } catch (e) {
-      print("Error fetching versions: \$e");
       return [];
     }
   }
@@ -101,7 +100,6 @@ class GetBibleAPI {
         return null;
       }
     } catch (e) {
-      print("Error fetching passage: \$e");
       return null;
     }
   }
