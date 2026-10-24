@@ -342,6 +342,198 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Widget _buildFontColorPicker(BuildContext context, String lang) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        Text(generator.getLocaleString(lang, "font_color_label")),
+        const SizedBox(width: 10),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: fontColor),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  title: const Text('Pick a color!'),
+                  content: SingleChildScrollView(
+                    child: ColorPicker(
+                      pickerColor: fontColor,
+                      onColorChanged: (c) => setState(() => fontColor = c),
+                    ),
+                  ),
+                  actions: <Widget>[
+                    ElevatedButton(
+                      child: const Text('Got it'),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+          child: const Text("Select Color", style: TextStyle(color: Colors.black)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAudioSettings(String lang) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        Checkbox(value: generateAudio, onChanged: (v) => setState(() => generateAudio = v!)),
+        Text(generator.getLocaleString(lang, "audio_label")),
+        const SizedBox(width: 20),
+        if (generateAudio) ...[
+          Text(generator.getLocaleString(lang, "gender_label")),
+          const SizedBox(width: 10),
+          DropdownButton<String>(
+            value: gender,
+            items: genders.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+            onChanged: (v) => setState(() => gender = v!),
+          )
+        ]
+      ],
+    );
+  }
+
+  List<Widget> _buildOutputTexts(String lang) {
+    List<Widget> widgets = [];
+    if (altText.isNotEmpty) {
+      widgets.addAll([
+        const SizedBox(height: 20),
+        const Text("Alt-Text:", style: TextStyle(fontWeight: FontWeight.bold)),
+        SelectableText(altText),
+        ElevatedButton(onPressed: () => _copyToClipboard(altText), child: Text(generator.getLocaleString(lang, "copy_alt_text_btn"))),
+      ]);
+    }
+    if (caption.isNotEmpty) {
+      widgets.addAll([
+        const SizedBox(height: 10),
+        const Text("Caption:", style: TextStyle(fontWeight: FontWeight.bold)),
+        SelectableText(caption),
+        ElevatedButton(onPressed: () => _copyToClipboard(caption), child: Text(generator.getLocaleString(lang, "copy_caption_btn"))),
+      ]);
+    }
+    return widgets;
+  }
+
+  Widget _buildFormContent(BuildContext context, String lang) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(generator.getLocaleString(lang, "instructions")),
+          const SizedBox(height: 10),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              Text(generator.getLocaleString(lang, "bible_version_label")),
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: selectedBibleVersion,
+                items: bibleVersions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (v) => setState(() => selectedBibleVersion = v!),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _fetchVerse,
+                child: Text(generator.getLocaleString(lang, "fetch_verse_btn")),
+              )
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: referenceController,
+            decoration: InputDecoration(labelText: generator.getLocaleString(lang, "reference_label")),
+            onChanged: (v) => setState(() {}),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: verseController,
+            maxLines: 4,
+            decoration: InputDecoration(labelText: generator.getLocaleString(lang, "verse_label")),
+            onChanged: (v) => setState(() {}),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              Text(generator.getLocaleString(lang, "background_label")),
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: selectedBackground,
+                items: backgrounds.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (v) => setState(() { selectedBackground = v!; customImagePath = null; }),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _selectCustomImage,
+                child: Text(generator.getLocaleString(lang, "custom_image_btn")),
+              )
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildFontColorPicker(context, lang),
+          const SizedBox(height: 10),
+          Text("${generator.getLocaleString(lang, "font_size_label")}: $fontSize"),
+          Slider(
+            value: fontSize,
+            min: 20,
+            max: 120,
+            onChanged: (v) => setState(() => fontSize = v),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              Text(generator.getLocaleString(lang, "aspect_ratio_label")),
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: aspectRatioStr,
+                items: ["1:1", "3:4", "4:3"].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (v) => setState(() => aspectRatioStr = v!),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text("${generator.getLocaleString(lang, "y_offset_label")}: $yOffset"),
+          Slider(
+            value: yOffset,
+            min: -400,
+            max: 400,
+            onChanged: (v) => setState(() => yOffset = v),
+          ),
+          const SizedBox(height: 10),
+          _buildAudioSettings(lang),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _generateContent,
+            child: Text(generator.getLocaleString(lang, "generate_btn")),
+          ),
+          if (statusMessage.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(statusMessage, style: const TextStyle(color: Colors.green)),
+            ),
+          ..._buildOutputTexts(lang),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -373,177 +565,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          Widget formContent = Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(generator.getLocaleString(lang, "instructions")),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      Text(generator.getLocaleString(lang, "bible_version_label")),
-                      const SizedBox(width: 10),
-                      DropdownButton<String>(
-                        value: selectedBibleVersion,
-                        items: bibleVersions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                        onChanged: (v) => setState(() => selectedBibleVersion = v!),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: _fetchVerse,
-                        child: Text(generator.getLocaleString(lang, "fetch_verse_btn")),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: referenceController,
-                    decoration: InputDecoration(labelText: generator.getLocaleString(lang, "reference_label")),
-                    onChanged: (v) => setState(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: verseController,
-                    maxLines: 4,
-                    decoration: InputDecoration(labelText: generator.getLocaleString(lang, "verse_label")),
-                    onChanged: (v) => setState(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      Text(generator.getLocaleString(lang, "background_label")),
-                      const SizedBox(width: 10),
-                      DropdownButton<String>(
-                        value: selectedBackground,
-                        items: backgrounds.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                        onChanged: (v) => setState(() { selectedBackground = v!; customImagePath = null; }),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: _selectCustomImage,
-                        child: Text(generator.getLocaleString(lang, "custom_image_btn")),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      Text(generator.getLocaleString(lang, "font_color_label")),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: fontColor),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return AlertDialog(
-                                title: const Text('Pick a color!'),
-                                content: SingleChildScrollView(
-                                  child: ColorPicker(
-                                    pickerColor: fontColor,
-                                    onColorChanged: (c) => setState(() => fontColor = c),
-                                  ),
-                                ),
-                                actions: <Widget>[
-                                  ElevatedButton(
-                                    child: const Text('Got it'),
-                                    onPressed: () => Navigator.of(context).pop(),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                        child: const Text("Select Color", style: TextStyle(color: Colors.black)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(generator.getLocaleString(lang, "font_size_label") + ": $fontSize"),
-                  Slider(
-                    value: fontSize,
-                    min: 20,
-                    max: 120,
-                    onChanged: (v) => setState(() => fontSize = v),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      Text(generator.getLocaleString(lang, "aspect_ratio_label")),
-                      const SizedBox(width: 10),
-                      DropdownButton<String>(
-                        value: aspectRatioStr,
-                        items: ["1:1", "3:4", "4:3"].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                        onChanged: (v) => setState(() => aspectRatioStr = v!),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(generator.getLocaleString(lang, "y_offset_label") + ": $yOffset"),
-                  Slider(
-                    value: yOffset,
-                    min: -400,
-                    max: 400,
-                    onChanged: (v) => setState(() => yOffset = v),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      Checkbox(value: generateAudio, onChanged: (v) => setState(() => generateAudio = v!)),
-                      Text(generator.getLocaleString(lang, "audio_label")),
-                      const SizedBox(width: 20),
-                      if (generateAudio) ...[
-                        Text(generator.getLocaleString(lang, "gender_label")),
-                        const SizedBox(width: 10),
-                        DropdownButton<String>(
-                          value: gender,
-                          items: genders.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                          onChanged: (v) => setState(() => gender = v!),
-                        )
-                      ]
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _generateContent,
-                    child: Text(generator.getLocaleString(lang, "generate_btn")),
-                  ),
-                  if (statusMessage.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Text(statusMessage, style: const TextStyle(color: Colors.green)),
-                    ),
-                  if (altText.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Text("Alt-Text:", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    SelectableText(altText),
-                    ElevatedButton(onPressed: () => _copyToClipboard(altText), child: Text(generator.getLocaleString(lang, "copy_alt_text_btn"))),
-                  ],
-                  if (caption.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text("Caption:", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    SelectableText(caption),
-                    ElevatedButton(onPressed: () => _copyToClipboard(caption), child: Text(generator.getLocaleString(lang, "copy_caption_btn"))),
-                  ]
-                ],
-              ),
-          );
+          Widget formContent = _buildFormContent(context, lang);
 
           if (constraints.maxWidth > 800) {
             return Row(
