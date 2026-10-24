@@ -81,6 +81,8 @@ class _MyHomePageState extends State<MyHomePage> {
   String statusMessage = "";
 
   bool isLoading = true;
+  bool isFetching = false;
+  bool isGenerating = false;
 
   @override
   void initState() {
@@ -160,18 +162,25 @@ class _MyHomePageState extends State<MyHomePage> {
     if (bibleId == null) return;
 
     setState(() {
+      isFetching = true;
       statusMessage = "Fetching verse...";
     });
 
-    String? content = await GetBibleAPI.getPassage(bibleId, reference, lang: getLangKey());
-    if (content != null) {
+    try {
+      String? content = await GetBibleAPI.getPassage(bibleId, reference, lang: getLangKey());
+      if (content != null) {
+        setState(() {
+          verseController.text = content;
+          statusMessage = "Verse fetched successfully.";
+        });
+      } else {
+        setState(() {
+          statusMessage = "Error fetching verse. Check reference format.";
+        });
+      }
+    } finally {
       setState(() {
-        verseController.text = content;
-        statusMessage = "Verse fetched successfully.";
-      });
-    } else {
-      setState(() {
-        statusMessage = "Error fetching verse. Check reference format.";
+        isFetching = false;
       });
     }
   }
@@ -193,26 +202,33 @@ class _MyHomePageState extends State<MyHomePage> {
     if (verse.isEmpty || reference.isEmpty) return;
 
     setState(() {
+      isGenerating = true;
       statusMessage = "Generating content...";
     });
 
-    String lang = getLangKey();
-    var texts = await generator.generateTexts(lang, verse, reference);
-    setState(() {
-      altText = texts["altText"]!;
-      caption = texts["caption"]!;
-    });
+    try {
+      String lang = getLangKey();
+      var texts = await generator.generateTexts(lang, verse, reference);
+      setState(() {
+        altText = texts["altText"]!;
+        caption = texts["caption"]!;
+      });
 
-    String? audioPath;
-    if (generateAudio) {
-      audioPath = await _generateAudio(verse, reference, lang);
+      String? audioPath;
+      if (generateAudio) {
+        audioPath = await _generateAudio(verse, reference, lang);
+      }
+
+      await _captureSaveAndShareImage(audioPath: audioPath);
+
+      setState(() {
+        statusMessage = generator.getLocaleString(lang, "success_msg");
+      });
+    } finally {
+      setState(() {
+        isGenerating = false;
+      });
     }
-
-    await _captureSaveAndShareImage(audioPath: audioPath);
-
-    setState(() {
-      statusMessage = generator.getLocaleString(lang, "success_msg");
-    });
   }
 
   Future<String?> _generateAudio(String verse, String reference, String lang) async {
@@ -394,8 +410,14 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton(
-                        onPressed: _fetchVerse,
-                        child: Text(generator.getLocaleString(lang, "fetch_verse_btn")),
+                        onPressed: isFetching ? null : _fetchVerse,
+                        child: isFetching
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(generator.getLocaleString(lang, "fetch_verse_btn")),
                       )
                     ],
                   ),
@@ -521,8 +543,14 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _generateContent,
-                    child: Text(generator.getLocaleString(lang, "generate_btn")),
+                    onPressed: isGenerating ? null : _generateContent,
+                    child: isGenerating
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(generator.getLocaleString(lang, "generate_btn")),
                   ),
                   if (statusMessage.isNotEmpty)
                     Padding(
