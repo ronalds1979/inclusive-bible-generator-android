@@ -32,7 +32,7 @@ class Generator {
     String template = locales[lang]?[key] ?? "";
     if (kwargs != null) {
       kwargs.forEach((k, v) {
-        template = template.replaceAll("{\$\$k}", v);
+        template = template.replaceAll("{$k}", v);
       });
     }
     return template;

@@ -265,7 +265,7 @@ class _MyHomePageState extends State<MyHomePage> {
           image: DecorationImage(
             image: customImagePath != null
                 ? FileImage(File(customImagePath!)) as ImageProvider
-                : AssetImage("assets/backgrounds/\$selectedBackground"),
+                : AssetImage("assets/backgrounds/$selectedBackground"),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(Colors.black.withAlpha(128), BlendMode.darken),
           )
@@ -338,18 +338,19 @@ class _MyHomePageState extends State<MyHomePage> {
           )
         ],
       ),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 1,
-            child: SingleChildScrollView(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          Widget formContent = Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(generator.getLocaleString(lang, "instructions")),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       Text(generator.getLocaleString(lang, "bible_version_label")),
                       const SizedBox(width: 10),
@@ -379,7 +380,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     onChanged: (v) => setState(() {}),
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       Text(generator.getLocaleString(lang, "background_label")),
                       const SizedBox(width: 10),
@@ -396,7 +400,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       Text(generator.getLocaleString(lang, "font_color_label")),
                       const SizedBox(width: 10),
@@ -437,7 +444,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     onChanged: (v) => setState(() => fontSize = v),
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       Text(generator.getLocaleString(lang, "aspect_ratio_label")),
                       const SizedBox(width: 10),
@@ -457,7 +467,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     onChanged: (v) => setState(() => yOffset = v),
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       Checkbox(value: generateAudio, onChanged: (v) => setState(() => generateAudio = v!)),
                       Text(generator.getLocaleString(lang, "audio_label")),
@@ -497,15 +510,37 @@ class _MyHomePageState extends State<MyHomePage> {
                   ]
                 ],
               ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: _buildPreview(),
-            ),
-          )
-        ],
+          );
+
+          if (constraints.maxWidth > 800) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: SingleChildScrollView(child: formContent),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Center(
+                    child: _buildPreview(),
+                  ),
+                )
+              ],
+            );
+          } else {
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  formContent,
+                  const SizedBox(height: 20),
+                  Center(child: _buildPreview()),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            );
+          }
+        },
       ),
     );
   }
