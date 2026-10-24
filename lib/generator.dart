@@ -71,8 +71,8 @@ class Generator {
     }
 
     img.Image? bgImage;
-    if (customImagePath != null && File(customImagePath).existsSync()) {
-      bgImage = img.decodeImage(File(customImagePath).readAsBytesSync());
+    if (customImagePath != null && await File(customImagePath).exists()) {
+      bgImage = img.decodeImage(await File(customImagePath).readAsBytes());
     } else {
       try {
         ByteData data = await rootBundle.load("assets/backgrounds/\$backgroundFilename");
