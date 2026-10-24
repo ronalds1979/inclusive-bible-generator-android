@@ -50,8 +50,9 @@ class GetBibleAPI {
     String? endVerse = match.group(4);
 
     int? bookNr;
+    String bookNameLower = bookName.toLowerCase();
     for (var entry in mapping.entries) {
-      if (entry.key.toLowerCase() == bookName.toLowerCase()) {
+      if (entry.key.toLowerCase() == bookNameLower) {
         bookNr = entry.value;
         break;
       }
