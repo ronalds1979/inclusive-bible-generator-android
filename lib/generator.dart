@@ -9,14 +9,14 @@ class Generator {
 
   Future<void> loadLocales() async {
     List<String> langCodes = ["pt-BR", "en", "es"];
-    for (String langCode in langCodes) {
+    await Future.wait(langCodes.map((langCode) async {
       try {
         String jsonString = await rootBundle.loadString("locales/$langCode.json");
         locales[langCode] = json.decode(jsonString);
       } catch (e) {
         print("Error loading locale $langCode: \$e");
       }
-    }
+    }));
   }
 
   String getLocaleString(String lang, String key, {Map<String, String>? kwargs}) {
