@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'book_mapping.dart';
 
 class GetBibleAPI {
@@ -33,7 +34,8 @@ class GetBibleAPI {
     }
   }
 
-  static Map<String, String?> _parseReference(String reference, {String lang = "en"}) {
+  @visibleForTesting
+  static Map<String, String?> parseReference(String reference, {String lang = "en"}) {
     String langPrefix = lang.substring(0, 2).toLowerCase();
     Map<String, int> mapping = bookMapping[langPrefix] ?? bookMapping["en"]!;
 
@@ -66,7 +68,7 @@ class GetBibleAPI {
   }
 
   static Future<String?> getPassage(String bibleId, String reference, {String lang = "en"}) async {
-    Map<String, String?> parsed = _parseReference(reference, lang: lang);
+    Map<String, String?> parsed = parseReference(reference, lang: lang);
     String? bookNr = parsed["book_nr"];
     String? chapter = parsed["chapter"];
     String? startVerse = parsed["start_verse"];
