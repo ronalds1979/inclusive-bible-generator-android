@@ -1,0 +1,3 @@
+## 2026-10-24 - API Caching Optimization
+**Learning:** The application fetches bible verses via the GetBible API on a per-chapter basis but did not cache the results locally. Successive requests for different verses in the same chapter resulted in redundant network requests for the entire chapter data.
+**Action:** Introduced an in-memory `_chapterCache` static map in `lib/getbible_api.dart` to cache the JSON response for each requested chapter URL. Future requests for the same chapter skip the network call, improving response time significantly. Caching text data is lightweight enough that an unbounded cache is acceptable for this use case.

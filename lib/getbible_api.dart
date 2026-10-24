@@ -5,6 +5,9 @@ import 'book_mapping.dart';
 class GetBibleAPI {
   static const String baseUrl = "https://api.getbible.net/v2";
 
+  // Cache for chapter data to prevent redundant network requests for verses in the same chapter
+  static final Map<String, List<dynamic>> _chapterCache = {};
+
   static Future<List<Map<String, String>>> getVersions({String lang = "en"}) async {
     try {
       String langPrefix = lang.substring(0, 2).toLowerCase();
@@ -78,31 +81,38 @@ class GetBibleAPI {
 
     String url = "$baseUrl/$bibleId/$bookNr/$chapter.json";
 
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        List verses = data["verses"] ?? [];
+    List<dynamic> verses = [];
 
-        if (startVerse != null) {
-          int startIdx = int.parse(startVerse) - 1;
-          int endIdx = endVerse != null ? int.parse(endVerse) : int.parse(startVerse);
-
-          if (startIdx >= 0 && startIdx < verses.length) {
-            int endIndex = endIdx > verses.length ? verses.length : endIdx;
-            List selectedVerses = verses.sublist(startIdx, endIndex);
-            return selectedVerses.map((v) => v["text"] ?? "").join(" ").trim();
-          }
-          return null;
+    if (_chapterCache.containsKey(url)) {
+      verses = _chapterCache[url]!;
+    } else {
+      try {
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          var data = jsonDecode(response.body);
+          verses = data["verses"] ?? [];
+          _chapterCache[url] = verses;
         } else {
-          return verses.map((v) => v["text"] ?? "").join(" ").trim();
+          return null;
         }
-      } else {
+      } catch (e) {
+        print("Error fetching passage: \$e");
         return null;
       }
-    } catch (e) {
-      print("Error fetching passage: \$e");
+    }
+
+    if (startVerse != null) {
+      int startIdx = int.parse(startVerse) - 1;
+      int endIdx = endVerse != null ? int.parse(endVerse) : int.parse(startVerse);
+
+      if (startIdx >= 0 && startIdx < verses.length) {
+        int endIndex = endIdx > verses.length ? verses.length : endIdx;
+        List selectedVerses = verses.sublist(startIdx, endIndex);
+        return selectedVerses.map((v) => v["text"] ?? "").join(" ").trim();
+      }
       return null;
+    } else {
+      return verses.map((v) => v["text"] ?? "").join(" ").trim();
     }
   }
 }
