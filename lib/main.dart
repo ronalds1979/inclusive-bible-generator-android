@@ -8,6 +8,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:gal/gal.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 
@@ -202,26 +203,45 @@ class _MyHomePageState extends State<MyHomePage> {
       caption = texts["caption"]!;
     });
 
+    String? audioPath;
     if (generateAudio) {
-      await _generateAudio(verse, reference, lang);
+      audioPath = await _generateAudio(verse, reference, lang);
     }
 
-    await _captureAndShareImage();
+    await _captureSaveAndShareImage(audioPath: audioPath);
 
     setState(() {
       statusMessage = generator.getLocaleString(lang, "success_msg");
     });
   }
 
-  Future<void> _generateAudio(String verse, String reference, String lang) async {
+  Future<String?> _generateAudio(String verse, String reference, String lang) async {
       await flutterTts.setLanguage(lang);
       if (gender == "Female") {
-        await flutterTts.setVoice({"name": "pt-BR-FranciscaNeural", "locale": "pt-BR"}); // Example, need proper mapping
+        await flutterTts.setVoice({"name": "pt-BR-FranciscaNeural", "locale": "pt-BR"});
       }
-      await flutterTts.speak("$reference. $verse");
+
+      String textToRead = "$reference. $verse";
+      if (Platform.isAndroid) {
+        String fileName = "verse_audio_${DateTime.now().millisecondsSinceEpoch}.wav";
+        // flutter_tts synthesizeToFile saves to getExternalStorageDirectory on Android by default or getApplicationDocumentsDirectory
+        // The file is saved internally and we need the path.
+        final dir = await getExternalStorageDirectory();
+        if (dir != null) {
+
+          // synthesizeToFile only takes the filename, not the full path in older flutter_tts or takes the filename and prepends path.
+          // Actually, in flutter_tts for android, synthesizeToFile saves to the external storage directory.
+          await flutterTts.synthesizeToFile(textToRead, fileName);
+          // Wait for file to exist
+          await Future.delayed(const Duration(seconds: 2));
+          return "${dir.path}/$fileName";
+        }
+      }
+      return null;
   }
 
-  Future<void> _captureAndShareImage() async {
+
+  Future<void> _captureSaveAndShareImage({String? audioPath}) async {
     try {
       RenderRepaintBoundary boundary = _globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
@@ -229,12 +249,25 @@ class _MyHomePageState extends State<MyHomePage> {
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
       final directory = (await getApplicationDocumentsDirectory()).path;
-      File imgFile = File('$directory/verse.png');
+      File imgFile = File('$directory/verse_${DateTime.now().millisecondsSinceEpoch}.png');
       await imgFile.writeAsBytes(pngBytes);
 
-      await Share.shareXFiles([XFile(imgFile.path)], text: "$altText\n\n$caption");
+      // Save directly to the public gallery
+      bool hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        await Gal.requestAccess();
+      }
+      await Gal.putImage(imgFile.path, album: 'Inclusive Bible');
+
+      // Share image (and audio if generated)
+      List<XFile> filesToShare = [XFile(imgFile.path)];
+      if (audioPath != null && File(audioPath).existsSync()) {
+        filesToShare.add(XFile(audioPath));
+      }
+
+      await Share.shareXFiles(filesToShare, text: "$altText\n\n$caption");
     } catch (e) {
-      print("Error capturing image: \$e");
+      print("Error capturing image: $e");
     }
   }
 
