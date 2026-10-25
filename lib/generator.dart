@@ -20,13 +20,15 @@ class Generator {
   }
 
   String getLocaleString(String lang, String key, {Map<String, String>? kwargs}) {
-    lang = lang
-        .replaceAll(" (Brasil)", "")
-        .replaceAll("English (US/UK)", "en")
-        .replaceAll("Español (España)", "es")
-        .replaceAll("Português", "pt-BR");
     if (!locales.containsKey(lang)) {
-      lang = "pt-BR";
+      lang = lang
+          .replaceAll(" (Brasil)", "")
+          .replaceAll("English (US/UK)", "en")
+          .replaceAll("Español (España)", "es")
+          .replaceAll("Português", "pt-BR");
+      if (!locales.containsKey(lang)) {
+        lang = "pt-BR";
+      }
     }
 
     String template = locales[lang]?[key] ?? "";
