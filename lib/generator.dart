@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
@@ -14,7 +15,9 @@ class Generator {
         String jsonString = await rootBundle.loadString("locales/$langCode.json");
         locales[langCode] = json.decode(jsonString);
       } catch (e) {
-        print("Error loading locale $langCode: \$e");
+        if (kDebugMode) {
+          debugPrint("Error loading locale $langCode: \$e");
+        }
       }
     }
   }

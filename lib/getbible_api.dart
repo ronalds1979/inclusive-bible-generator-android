@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'book_mapping.dart';
 
@@ -28,7 +29,9 @@ class GetBibleAPI {
       }
       return [];
     } catch (e) {
-      print("Error fetching versions: \$e");
+      if (kDebugMode) {
+        debugPrint("Error fetching versions: \$e");
+      }
       return [];
     }
   }
@@ -101,7 +104,9 @@ class GetBibleAPI {
         return null;
       }
     } catch (e) {
-      print("Error fetching passage: \$e");
+      if (kDebugMode) {
+        debugPrint("Error fetching passage: \$e");
+      }
       return null;
     }
   }
