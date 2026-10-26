@@ -1,0 +1,1 @@
+## 2024-03-XX - Disable Cleartext Traffic in AndroidManifest\n**Learning:** Android applications can permit unencrypted HTTP traffic by default or omission, exposing users to MITM attacks.\n**Action:** Enforce `android:usesCleartextTraffic="false"` in `AndroidManifest.xml` within the `<application>` tag for secure communication.
