@@ -65,8 +65,10 @@ class GetBibleAPI {
     String? endVerse = match.group(4);
 
     int? bookNr;
+    // Cache the lowercased bookName to avoid redundant string operations in the loop
+    String lowerBookName = bookName.toLowerCase();
     for (var entry in mapping.entries) {
-      if (entry.key.toLowerCase() == bookName.toLowerCase()) {
+      if (entry.key.toLowerCase() == lowerBookName) {
         bookNr = entry.value;
         break;
       }
