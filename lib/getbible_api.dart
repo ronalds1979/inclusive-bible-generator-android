@@ -101,7 +101,9 @@ class GetBibleAPI {
     String url = "$baseUrl/$bibleId/$bookNr/$chapter.json";
 
     try {
-      final response = await http.get(Uri.parse(url));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
         List verses = data["verses"] ?? [];
