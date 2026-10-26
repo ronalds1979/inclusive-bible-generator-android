@@ -20,11 +20,16 @@ class Generator {
   }
 
   String getLocaleString(String lang, String key, {Map<String, String>? kwargs}) {
-    lang = lang
-        .replaceAll(" (Brasil)", "")
-        .replaceAll("English (US/UK)", "en")
-        .replaceAll("Español (España)", "es")
-        .replaceAll("Português", "pt-BR");
+    // ⚡ Bolt: Performance optimization
+    // Avoid expensive string replacements if the `lang` key is already normalized
+    // and exists in the locales map (which is the case for all main.dart build calls).
+    if (!locales.containsKey(lang)) {
+      lang = lang
+          .replaceAll(" (Brasil)", "")
+          .replaceAll("English (US/UK)", "en")
+          .replaceAll("Español (España)", "es")
+          .replaceAll("Português", "pt-BR");
+    }
     if (!locales.containsKey(lang)) {
       lang = "pt-BR";
     }
