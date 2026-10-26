@@ -1,25 +1,33 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 class Generator {
   Map<String, Map<String, dynamic>> locales = {};
 
-
   Future<void> loadLocales() async {
     List<String> langCodes = ["pt-BR", "en", "es"];
     for (String langCode in langCodes) {
       try {
-        String jsonString = await rootBundle.loadString("locales/$langCode.json");
+        String jsonString = await rootBundle.loadString(
+          "locales/$langCode.json",
+        );
         locales[langCode] = json.decode(jsonString);
       } catch (e) {
-        print("Error loading locale $langCode: \$e");
+        if (kDebugMode) {
+          debugPrint("Error loading locale $langCode: \$e");
+        }
       }
     }
   }
 
-  String getLocaleString(String lang, String key, {Map<String, String>? kwargs}) {
+  String getLocaleString(
+    String lang,
+    String key, {
+    Map<String, String>? kwargs,
+  }) {
     lang = lang
         .replaceAll(" (Brasil)", "")
         .replaceAll("English (US/UK)", "en")
@@ -38,12 +46,26 @@ class Generator {
     return template;
   }
 
-  Future<Map<String, String>> generateTexts(String lang, String verse, String reference) async {
+  Future<Map<String, String>> generateTexts(
+    String lang,
+    String verse,
+    String reference,
+  ) async {
     String description = getLocaleString(lang, "default_description");
-    String altText = getLocaleString(lang, "alt_text_template",
-        kwargs: {"description": description, "verse": verse, "reference": reference});
-    String caption = getLocaleString(lang, "caption_template",
-        kwargs: {"verse": verse, "reference": reference});
+    String altText = getLocaleString(
+      lang,
+      "alt_text_template",
+      kwargs: {
+        "description": description,
+        "verse": verse,
+        "reference": reference,
+      },
+    );
+    String caption = getLocaleString(
+      lang,
+      "caption_template",
+      kwargs: {"verse": verse, "reference": reference},
+    );
     return {"altText": altText, "caption": caption};
   }
 
@@ -75,15 +97,19 @@ class Generator {
       bgImage = img.decodeImage(File(customImagePath).readAsBytesSync());
     } else {
       try {
-        ByteData data = await rootBundle.load("assets/backgrounds/\$backgroundFilename");
+        ByteData data = await rootBundle.load(
+          "assets/backgrounds/\$backgroundFilename",
+        );
         bgImage = img.decodeImage(data.buffer.asUint8List());
       } catch (e) {
         try {
-          ByteData data = await rootBundle.load("assets/backgrounds/default.png");
+          ByteData data = await rootBundle.load(
+            "assets/backgrounds/default.png",
+          );
           bgImage = img.decodeImage(data.buffer.asUint8List());
         } catch (e) {
-           bgImage = img.Image(width: targetWidth, height: targetHeight);
-           img.fill(bgImage, color: img.ColorRgba8(73, 109, 137, 255));
+          bgImage = img.Image(width: targetWidth, height: targetHeight);
+          img.fill(bgImage, color: img.ColorRgba8(73, 109, 137, 255));
         }
       }
     }
@@ -102,16 +128,32 @@ class Generator {
     if (imgRatio > targetRatio) {
       int newW = (imgH * targetRatio).toInt();
       int left = ((imgW - newW) / 2).toInt();
-      croppedImage = img.copyCrop(bgImage, x: left, y: 0, width: newW, height: imgH);
+      croppedImage = img.copyCrop(
+        bgImage,
+        x: left,
+        y: 0,
+        width: newW,
+        height: imgH,
+      );
     } else if (imgRatio < targetRatio) {
       int newH = (imgW / targetRatio).toInt();
       int top = ((imgH - newH) / 2).toInt();
-      croppedImage = img.copyCrop(bgImage, x: 0, y: top, width: imgW, height: newH);
+      croppedImage = img.copyCrop(
+        bgImage,
+        x: 0,
+        y: top,
+        width: imgW,
+        height: newH,
+      );
     } else {
       croppedImage = bgImage;
     }
 
-    img.Image resizedImage = img.copyResize(croppedImage, width: targetWidth, height: targetHeight);
+    img.Image resizedImage = img.copyResize(
+      croppedImage,
+      width: targetWidth,
+      height: targetHeight,
+    );
 
     // Overlay
     img.Image overlay = img.Image(width: targetWidth, height: targetHeight);
