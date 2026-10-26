@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -108,7 +109,9 @@ class _MyHomePageState extends State<MyHomePage> {
       if (backgrounds.isEmpty) backgrounds = ["default.png"];
       selectedBackground = backgrounds.first;
     } catch (e) {
-      print("Error loading backgrounds: \$e");
+      if (kDebugMode) {
+        debugPrint("Error loading backgrounds: $e");
+      }
     }
   }
 
@@ -267,7 +270,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
       await Share.shareXFiles(filesToShare, text: "$altText\n\n$caption");
     } catch (e) {
-      print("Error capturing image: $e");
+      if (kDebugMode) {
+        debugPrint("Error capturing image: $e");
+      }
     }
   }
 
