@@ -47,7 +47,7 @@ class GetBibleAPI {
     Map<String, int> mapping = bookMapping[langPrefix] ?? bookMapping["en"]!;
 
     RegExp regExp = RegExp(
-      r'^((?:\d\s+)?[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ\s]+?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
+      r'^((?:\d\s+)?[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
     );
     Match? match = regExp.firstMatch(reference.trim());
 
