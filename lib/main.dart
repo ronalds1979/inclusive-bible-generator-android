@@ -92,6 +92,8 @@ class _MyHomePageState extends State<MyHomePage> {
   String statusMessage = "";
 
   bool isLoading = true;
+  bool isFetching = false;
+  bool isGenerating = false;
 
   @override
   void initState() {
@@ -176,6 +178,7 @@ class _MyHomePageState extends State<MyHomePage> {
     if (bibleId == null) return;
 
     setState(() {
+      isFetching = true;
       statusMessage = "Fetching verse...";
     });
 
@@ -186,11 +189,13 @@ class _MyHomePageState extends State<MyHomePage> {
     );
     if (content != null) {
       setState(() {
+        isFetching = false;
         verseController.text = content;
         statusMessage = "Verse fetched successfully.";
       });
     } else {
       setState(() {
+        isFetching = false;
         statusMessage = "Error fetching verse. Check reference format.";
       });
     }
@@ -213,6 +218,7 @@ class _MyHomePageState extends State<MyHomePage> {
     if (verse.isEmpty || reference.isEmpty) return;
 
     setState(() {
+      isGenerating = true;
       statusMessage = "Generating content...";
     });
 
@@ -231,6 +237,7 @@ class _MyHomePageState extends State<MyHomePage> {
     await _captureSaveAndShareImage(audioPath: audioPath);
 
     setState(() {
+      isGenerating = false;
       statusMessage = generator.getLocaleString(lang, "success_msg");
     });
   }
@@ -448,10 +455,19 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     const SizedBox(width: 10),
                     ElevatedButton(
-                      onPressed: _fetchVerse,
-                      child: Text(
-                        generator.getLocaleString(lang, "fetch_verse_btn"),
-                      ),
+                      onPressed: isFetching ? null : _fetchVerse,
+                      child: isFetching
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              generator.getLocaleString(
+                                lang,
+                                "fetch_verse_btn",
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -616,8 +632,14 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: _generateContent,
-                  child: Text(generator.getLocaleString(lang, "generate_btn")),
+                  onPressed: isGenerating ? null : _generateContent,
+                  child: isGenerating
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(generator.getLocaleString(lang, "generate_btn")),
                 ),
                 if (statusMessage.isNotEmpty)
                   Padding(
