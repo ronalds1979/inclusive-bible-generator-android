@@ -29,13 +29,19 @@ class Generator {
     String key, {
     Map<String, String>? kwargs,
   }) {
-    lang = lang
-        .replaceAll(" (Brasil)", "")
-        .replaceAll("English (US/UK)", "en")
-        .replaceAll("Español (España)", "es")
-        .replaceAll("Português", "pt-BR");
+    // ⚡ Bolt: Fast-path optimization to skip expensive string replacements
+    // if the provided language string is already pre-normalized. This reduces
+    // unnecessary allocations since this method is called frequently during builds.
     if (!locales.containsKey(lang)) {
-      lang = "pt-BR";
+      lang = lang
+          .replaceAll(" (Brasil)", "")
+          .replaceAll("English (US/UK)", "en")
+          .replaceAll("Español (España)", "es")
+          .replaceAll("Português", "pt-BR");
+
+      if (!locales.containsKey(lang)) {
+        lang = "pt-BR";
+      }
     }
 
     String template = locales[lang]?[key] ?? "";
