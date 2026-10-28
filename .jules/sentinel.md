@@ -5,3 +5,7 @@
 **Vulnerability:** Regular Expression Denial of Service (ReDoS) in `GetBibleAPI._parseReference`.
 **Learning:** The overlapping character classes `[... \s]+?` followed by `\s+` allowed catastrophic backtracking when parsing malformed spaces or long texts.
 **Prevention:** Avoid overlapping characters sets, and match alternating sequences instead, e.g., `[a-z]+(?:\s+[a-z]+)*`.
+## 2024-10-26 - Add Input Length Limits
+**Vulnerability:** Unbounded inputs in `TextField` widgets could lead to a Denial of Service (DoS) vulnerability via memory exhaustion if a user pasted extremely large strings.
+**Learning:** Adding `maxLength` enforces reasonable limits at the UI level.
+**Prevention:** Always add `maxLength` limits to user-facing inputs like `TextField` widgets when appropriate.
