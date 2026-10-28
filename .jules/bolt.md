@@ -5,3 +5,7 @@
 ## 2024-05-18 - Optimized String Formatting in Generator
 **Learning:** Using `replaceAll` inside a `.forEach` loop over `kwargs` creates multiple intermediate strings, leading to performance bottlenecks during template formatting.
 **Action:** Always prefer pre-compiling a static `RegExp` and using `replaceAllMapped` in Dart to perform multi-key string replacements in a single pass without unnecessary allocations.
+
+## 2024-10-28 - [Fast-path optimization for String replacements before Map Lookups]
+**Learning:** Performing expensive string normalizations (e.g., multiple `.replaceAll()` calls) before dictionary/map lookups creates unnecessary allocations when the provided string is already correctly normalized (e.g., passing "en" instead of "English (US/UK)"). This is especially problematic in hot paths like localization lookups during UI rebuilds.
+**Action:** Implement a "fast-path" pattern: check if the map `containsKey()` the raw input first. Only run the expensive normalization logic and fallback if the initial check fails.
