@@ -557,9 +557,9 @@ class _MyHomePageState extends State<MyHomePage> {
                           },
                         );
                       },
-                      child: const Text(
+                      child: Text(
                         "Select Color",
-                        style: TextStyle(color: Colors.black),
+                        style: TextStyle(color: fontColor.computeLuminance() > 0.5 ? Colors.black : Colors.white),
                       ),
                     ),
                   ],
