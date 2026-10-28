@@ -79,9 +79,7 @@ void main() {
 
     test('generateTexts missing locale keys', () async {
       generator.locales = {
-        "en": {
-          "other_key": "some value"
-        }
+        "en": {"other_key": "some value"},
       };
       final result = await generator.generateTexts("en", "verse", "ref");
       expect(result["altText"], "");
@@ -108,14 +106,8 @@ void main() {
     setUp(() {
       generator = Generator();
       generator.locales = {
-        "en": {
-          "greeting": "Hello",
-          "greeting_name": "Hello, {name}!"
-        },
-        "pt-BR": {
-          "greeting": "Olá",
-          "greeting_name": "Olá, {name}!"
-        },
+        "en": {"greeting": "Hello", "greeting_name": "Hello, {name}!"},
+        "pt-BR": {"greeting": "Olá", "greeting_name": "Olá, {name}!"},
       };
     });
 
@@ -125,7 +117,11 @@ void main() {
     });
 
     test('getLocaleString string interpolation using kwargs', () {
-      final result = generator.getLocaleString("en", "greeting_name", kwargs: {"name": "World"});
+      final result = generator.getLocaleString(
+        "en",
+        "greeting_name",
+        kwargs: {"name": "World"},
+      );
       expect(result, "Hello, World!");
     });
 

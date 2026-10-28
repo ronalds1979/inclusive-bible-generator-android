@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 
 class Generator {
   Map<String, Map<String, dynamic>> locales = {};
+  static final RegExp _templateRegex = RegExp(r'\{([^}]+)\}');
 
   Future<void> loadLocales() async {
     List<String> langCodes = ["pt-BR", "en", "es"];
@@ -38,9 +39,10 @@ class Generator {
     }
 
     String template = locales[lang]?[key] ?? "";
-    if (kwargs != null) {
-      kwargs.forEach((k, v) {
-        template = template.replaceAll("{$k}", v);
+    if (kwargs != null && kwargs.isNotEmpty) {
+      template = template.replaceAllMapped(_templateRegex, (match) {
+        final key = match.group(1);
+        return kwargs[key] ?? match.group(0)!;
       });
     }
     return template;
