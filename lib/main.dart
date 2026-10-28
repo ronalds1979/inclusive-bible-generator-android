@@ -474,6 +474,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: referenceController,
+                  maxLength: 50,
                   decoration: InputDecoration(
                     labelText: generator.getLocaleString(
                       lang,
@@ -485,6 +486,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: verseController,
+                  maxLength: 2000,
                   maxLines: 4,
                   decoration: InputDecoration(
                     labelText: generator.getLocaleString(lang, "verse_label"),
