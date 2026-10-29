@@ -646,9 +646,37 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (statusMessage.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      statusMessage,
-                      style: const TextStyle(color: Colors.green),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Row(
+                        children: [
+                          Icon(
+                            statusMessage.toLowerCase().contains("error")
+                                ? Icons.error
+                                : (statusMessage.toLowerCase().contains("success")
+                                    ? Icons.check_circle
+                                    : Icons.info),
+                            color: statusMessage.toLowerCase().contains("error")
+                                ? Theme.of(context).colorScheme.error
+                                : (statusMessage.toLowerCase().contains("success")
+                                    ? Colors.green
+                                    : Theme.of(context).colorScheme.primary),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              statusMessage,
+                              style: TextStyle(
+                                color: statusMessage.toLowerCase().contains("error")
+                                    ? Theme.of(context).colorScheme.error
+                                    : (statusMessage.toLowerCase().contains("success")
+                                        ? Colors.green
+                                        : Theme.of(context).colorScheme.primary),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 if (altText.isNotEmpty) ...[
