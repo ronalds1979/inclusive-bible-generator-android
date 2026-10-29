@@ -101,8 +101,10 @@ class Generator {
     }
 
     img.Image? bgImage;
-    if (customImagePath != null && File(customImagePath).existsSync()) {
-      bgImage = img.decodeImage(File(customImagePath).readAsBytesSync());
+    // ⚡ Bolt: Use asynchronous file I/O to prevent blocking the main event loop
+    // during large custom image reads, avoiding UI jank.
+    if (customImagePath != null && await File(customImagePath).exists()) {
+      bgImage = img.decodeImage(await File(customImagePath).readAsBytes());
     } else {
       try {
         ByteData data = await rootBundle.load(
