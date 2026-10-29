@@ -11,6 +11,7 @@ class GetBibleAPI {
     String lang = "en",
   }) async {
     try {
+      if (lang.length < 2) return [];
       String langPrefix = lang.substring(0, 2).toLowerCase();
       if (langPrefix == "pt") {
         return [
@@ -43,7 +44,7 @@ class GetBibleAPI {
     String reference, {
     String lang = "en",
   }) {
-    String langPrefix = lang.substring(0, 2).toLowerCase();
+    String langPrefix = lang.length >= 2 ? lang.substring(0, 2).toLowerCase() : "en";
     Map<String, int> mapping = bookMapping[langPrefix] ?? bookMapping["en"]!;
 
     RegExp regExp = RegExp(
@@ -98,7 +99,10 @@ class GetBibleAPI {
       return null;
     }
 
-    String url = "$baseUrl/$bibleId/$bookNr/$chapter.json";
+    String safeBibleId = Uri.encodeComponent(bibleId);
+    String safeBookNr = Uri.encodeComponent(bookNr);
+    String safeChapter = Uri.encodeComponent(chapter);
+    String url = "$baseUrl/$safeBibleId/$safeBookNr/$safeChapter.json";
 
     try {
       final response = await http
