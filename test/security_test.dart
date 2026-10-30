@@ -16,4 +16,16 @@ void main() {
       expect(result, []); // Returns empty list on error
     },
   );
+
+  test(
+    'GetBibleAPI does not crash on invalid verse range (start > end)',
+    () async {
+      final result = await GetBibleAPI.getPassage(
+        "web",
+        "Genesis 1:5-3",
+        lang: "en",
+      );
+      expect(result, isNull);
+    },
+  );
 }
