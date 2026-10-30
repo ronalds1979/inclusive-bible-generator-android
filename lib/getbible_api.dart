@@ -44,7 +44,9 @@ class GetBibleAPI {
     String reference, {
     String lang = "en",
   }) {
-    String langPrefix = lang.length >= 2 ? lang.substring(0, 2).toLowerCase() : "en";
+    String langPrefix = lang.length >= 2
+        ? lang.substring(0, 2).toLowerCase()
+        : "en";
     Map<String, int> mapping = bookMapping[langPrefix] ?? bookMapping["en"]!;
 
     RegExp regExp = RegExp(
@@ -67,12 +69,18 @@ class GetBibleAPI {
     String? endVerse = match.group(4);
 
     int? bookNr;
-    // Cache the lowercased bookName to avoid redundant string operations in the loop
-    String lowerBookName = bookName.toLowerCase();
-    for (var entry in mapping.entries) {
-      if (entry.key.toLowerCase() == lowerBookName) {
-        bookNr = entry.value;
-        break;
+    // ⚡ Bolt: Fast-path optimization to avoid O(N) loop and repeated
+    // string allocations by checking for an exact match first.
+    if (mapping.containsKey(bookName)) {
+      bookNr = mapping[bookName];
+    } else {
+      // Cache the lowercased bookName to avoid redundant string operations in the loop
+      String lowerBookName = bookName.toLowerCase();
+      for (var entry in mapping.entries) {
+        if (entry.key.toLowerCase() == lowerBookName) {
+          bookNr = entry.value;
+          break;
+        }
       }
     }
 

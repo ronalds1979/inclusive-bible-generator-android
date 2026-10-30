@@ -559,7 +559,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       child: Text(
                         "Select Color",
-                        style: TextStyle(color: fontColor.computeLuminance() > 0.5 ? Colors.black : Colors.white),
+                        style: TextStyle(
+                          color: fontColor.computeLuminance() > 0.5
+                              ? Colors.black
+                              : Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -653,25 +657,36 @@ class _MyHomePageState extends State<MyHomePage> {
                           Icon(
                             statusMessage.toLowerCase().contains("error")
                                 ? Icons.error
-                                : (statusMessage.toLowerCase().contains("success")
-                                    ? Icons.check_circle
-                                    : Icons.info),
+                                : (statusMessage.toLowerCase().contains(
+                                        "success",
+                                      )
+                                      ? Icons.check_circle
+                                      : Icons.info),
                             color: statusMessage.toLowerCase().contains("error")
                                 ? Theme.of(context).colorScheme.error
-                                : (statusMessage.toLowerCase().contains("success")
-                                    ? Colors.green
-                                    : Theme.of(context).colorScheme.primary),
+                                : (statusMessage.toLowerCase().contains(
+                                        "success",
+                                      )
+                                      ? Colors.green
+                                      : Theme.of(context).colorScheme.primary),
                           ),
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
                               statusMessage,
                               style: TextStyle(
-                                color: statusMessage.toLowerCase().contains("error")
+                                color:
+                                    statusMessage.toLowerCase().contains(
+                                      "error",
+                                    )
                                     ? Theme.of(context).colorScheme.error
-                                    : (statusMessage.toLowerCase().contains("success")
-                                        ? Colors.green
-                                        : Theme.of(context).colorScheme.primary),
+                                    : (statusMessage.toLowerCase().contains(
+                                            "success",
+                                          )
+                                          ? Colors.green
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.primary),
                               ),
                             ),
                           ),
