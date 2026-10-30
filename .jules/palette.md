@@ -11,3 +11,6 @@
 ## 2024-05-24 - [Accessible Status Messages]
 **Learning:** In Flutter, dynamically updated text elements (like status or error messages) aren't automatically announced by screen readers, and hardcoded colors (like `Colors.green`) for all statuses (including errors) create severe cognitive and visual accessibility barriers.
 **Action:** Wrap dynamic status text in `Semantics(liveRegion: true)` for screen reader announcements, and dynamically assign context-aware theme colors (e.g., `Theme.of(context).colorScheme.error` for errors) to ensure WCAG color contrast compliance and logical feedback.
+## 2024-05-13 - Clear Inputs on TextFields
+**Learning:** For forms where users might paste or input long blocks of text (like verses), manual deletion is tedious and error-prone. Providing a "clear" suffix icon button dramatically improves the flow for corrections or new inputs.
+**Action:** Always consider adding `suffixIcon` clear buttons to `TextField` widgets that handle multi-line or long content to improve keyboard efficiency and accessibility for screen readers.
