@@ -480,6 +480,17 @@ class _MyHomePageState extends State<MyHomePage> {
                       lang,
                       "reference_label",
                     ),
+                    suffixIcon: referenceController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            tooltip: generator.getLocaleString(lang, "clear_btn") != "" ? generator.getLocaleString(lang, "clear_btn") : 'Clear',
+                            onPressed: () {
+                              setState(() {
+                                referenceController.clear();
+                              });
+                            },
+                          )
+                        : null,
                   ),
                   onChanged: (v) => setState(() {}),
                 ),
@@ -490,6 +501,17 @@ class _MyHomePageState extends State<MyHomePage> {
                   maxLines: 4,
                   decoration: InputDecoration(
                     labelText: generator.getLocaleString(lang, "verse_label"),
+                    suffixIcon: verseController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            tooltip: generator.getLocaleString(lang, "clear_btn") != "" ? generator.getLocaleString(lang, "clear_btn") : 'Clear',
+                            onPressed: () {
+                              setState(() {
+                                verseController.clear();
+                              });
+                            },
+                          )
+                        : null,
                   ),
                   onChanged: (v) => setState(() {}),
                 ),
