@@ -13,3 +13,6 @@
 ## 2024-11-20 - [Avoid Synchronous File I/O in Async Contexts]
 **Learning:** Using synchronous file I/O operations (like `existsSync` and `readAsBytesSync`) inside an asynchronous function blocks the Dart main event loop and can cause UI jank, especially when reading large custom background images.
 **Action:** Always prefer asynchronous file I/O equivalents (`await exists()`, `await readAsBytes()`) within async methods in Flutter to keep the main thread free.
+## 2024-05-24 - Avoid O(N) lowercase lookup loops
+**Learning:** Checking for an exact dictionary match first (O(1) fast-path) can skip O(N) iterative `toLowerCase()` evaluations for well-formatted user inputs.
+**Action:** Always verify if a map exact lookup `containsKey()` can be used as a fast-path before performing iterative string normalizations in fallback loops.
