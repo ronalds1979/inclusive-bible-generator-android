@@ -16,3 +16,7 @@
 ## 2024-05-24 - Avoid O(N) lowercase lookup loops
 **Learning:** Checking for an exact dictionary match first (O(1) fast-path) can skip O(N) iterative `toLowerCase()` evaluations for well-formatted user inputs.
 **Action:** Always verify if a map exact lookup `containsKey()` can be used as a fast-path before performing iterative string normalizations in fallback loops.
+
+## 2024-05-18 - Offload Heavy Image Processing
+**Learning:** Performing heavy operations such as image decoding, scaling, drawing, and encoding on the main thread in Flutter blocks the event loop and can cause severe UI jank, especially for large assets or images.
+**Action:** Use `compute()` from `package:flutter/foundation.dart` to offload these heavy synchronous tasks (like `img.decodeImage`, `img.encodePng` from the `image` package) to a background isolate.
