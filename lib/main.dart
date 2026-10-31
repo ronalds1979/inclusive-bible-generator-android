@@ -483,7 +483,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     suffixIcon: referenceController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
-                            tooltip: generator.getLocaleString(lang, "clear_btn") != "" ? generator.getLocaleString(lang, "clear_btn") : 'Clear',
+                            tooltip:
+                                generator.getLocaleString(lang, "clear_btn") !=
+                                    ""
+                                ? generator.getLocaleString(lang, "clear_btn")
+                                : 'Clear',
                             onPressed: () {
                               setState(() {
                                 referenceController.clear();
@@ -504,7 +508,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     suffixIcon: verseController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
-                            tooltip: generator.getLocaleString(lang, "clear_btn") != "" ? generator.getLocaleString(lang, "clear_btn") : 'Clear',
+                            tooltip:
+                                generator.getLocaleString(lang, "clear_btn") !=
+                                    ""
+                                ? generator.getLocaleString(lang, "clear_btn")
+                                : 'Clear',
                             onPressed: () {
                               setState(() {
                                 verseController.clear();
@@ -593,12 +601,14 @@ class _MyHomePageState extends State<MyHomePage> {
                 const SizedBox(height: 10),
                 Text(
                   generator.getLocaleString(lang, "font_size_label") +
-                      ": $fontSize",
+                      ": ${fontSize.round()}",
                 ),
                 Slider(
                   value: fontSize,
                   min: 20,
                   max: 120,
+                  divisions: 100,
+                  label: fontSize.round().toString(),
                   onChanged: (v) => setState(() => fontSize = v),
                 ),
                 const SizedBox(height: 10),
@@ -623,12 +633,14 @@ class _MyHomePageState extends State<MyHomePage> {
                 const SizedBox(height: 10),
                 Text(
                   generator.getLocaleString(lang, "y_offset_label") +
-                      ": $yOffset",
+                      ": ${yOffset.round()}",
                 ),
                 Slider(
                   value: yOffset,
                   min: -400,
                   max: 400,
+                  divisions: 800,
+                  label: yOffset.round().toString(),
                   onChanged: (v) => setState(() => yOffset = v),
                 ),
                 const SizedBox(height: 10),
@@ -637,11 +649,19 @@ class _MyHomePageState extends State<MyHomePage> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    Checkbox(
-                      value: generateAudio,
-                      onChanged: (v) => setState(() => generateAudio = v!),
+                    InkWell(
+                      onTap: () => setState(() => generateAudio = !generateAudio),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: generateAudio,
+                            onChanged: (v) => setState(() => generateAudio = v!),
+                          ),
+                          Text(generator.getLocaleString(lang, "audio_label")),
+                        ],
+                      ),
                     ),
-                    Text(generator.getLocaleString(lang, "audio_label")),
                     const SizedBox(width: 20),
                     if (generateAudio) ...[
                       Text(generator.getLocaleString(lang, "gender_label")),
