@@ -483,7 +483,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     suffixIcon: referenceController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
-                            tooltip: generator.getLocaleString(lang, "clear_btn") != "" ? generator.getLocaleString(lang, "clear_btn") : 'Clear',
+                            tooltip:
+                                generator.getLocaleString(lang, "clear_btn") !=
+                                    ""
+                                ? generator.getLocaleString(lang, "clear_btn")
+                                : 'Clear',
                             onPressed: () {
                               setState(() {
                                 referenceController.clear();
@@ -504,7 +508,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     suffixIcon: verseController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
-                            tooltip: generator.getLocaleString(lang, "clear_btn") != "" ? generator.getLocaleString(lang, "clear_btn") : 'Clear',
+                            tooltip:
+                                generator.getLocaleString(lang, "clear_btn") !=
+                                    ""
+                                ? generator.getLocaleString(lang, "clear_btn")
+                                : 'Clear',
                             onPressed: () {
                               setState(() {
                                 verseController.clear();

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'book_mapping.dart';
-import 'package:flutter/foundation.dart'; // added for kDebugMode and debugPrint
 
 class GetBibleAPI {
   static const String baseUrl = "https://api.getbible.net/v2";
