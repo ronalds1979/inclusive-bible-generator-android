@@ -14,3 +14,7 @@
 ## 2024-05-13 - Clear Inputs on TextFields
 **Learning:** For forms where users might paste or input long blocks of text (like verses), manual deletion is tedious and error-prone. Providing a "clear" suffix icon button dramatically improves the flow for corrections or new inputs.
 **Action:** Always consider adding `suffixIcon` clear buttons to `TextField` widgets that handle multi-line or long content to improve keyboard efficiency and accessibility for screen readers.
+
+## 2024-05-24 - Checkbox Accessibility & Tap Targets
+**Learning:** In Flutter, the default `Checkbox` widget has a very small tap target (just the icon itself), which makes it difficult for users to interact with, especially on mobile devices or for those with motor impairments.
+**Action:** When using a `Checkbox` next to a label (`Text`), wrap both inside an `InkWell` (and a `Row`) to massively expand the touch target, ensuring the entire label area can be tapped to toggle the checkbox.
