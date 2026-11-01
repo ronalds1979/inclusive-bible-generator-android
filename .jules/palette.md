@@ -18,3 +18,7 @@
 ## 2024-05-24 - Checkbox Accessibility & Tap Targets
 **Learning:** In Flutter, the default `Checkbox` widget has a very small tap target (just the icon itself), which makes it difficult for users to interact with, especially on mobile devices or for those with motor impairments.
 **Action:** When using a `Checkbox` next to a label (`Text`), wrap both inside an `InkWell` (and a `Row`) to massively expand the touch target, ensuring the entire label area can be tapped to toggle the checkbox.
+
+## 2024-05-24 - Dynamic Loading States for `ElevatedButton.icon`
+**Learning:** When using `ElevatedButton.icon`, completely replacing the button's content with a `CircularProgressIndicator` during async loading removes the label text, causing the button's width to violently collapse (layout jank) and creating a disorienting UX.
+**Action:** When implementing loading states on `ElevatedButton.icon`, maintain the `label` text consistently, and conditionally swap only the `icon` parameter with a `SizedBox` (matching the icon size, e.g., 16x16) containing the `CircularProgressIndicator`.
