@@ -300,7 +300,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // Share image (and audio if generated)
       List<XFile> filesToShare = [XFile(imgFile.path)];
-      if (audioPath != null && File(audioPath).existsSync()) {
+      // ⚡ Bolt: Avoid synchronous I/O on main thread
+      if (audioPath != null && await File(audioPath).exists()) {
         filesToShare.add(XFile(audioPath));
       }
 
