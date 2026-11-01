@@ -454,20 +454,18 @@ class _MyHomePageState extends State<MyHomePage> {
                           setState(() => selectedBibleVersion = v!),
                     ),
                     const SizedBox(width: 10),
-                    ElevatedButton(
+                    ElevatedButton.icon(
                       onPressed: isFetching ? null : _fetchVerse,
-                      child: isFetching
+                      icon: isFetching
                           ? const SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(
-                              generator.getLocaleString(
-                                lang,
-                                "fetch_verse_btn",
-                              ),
-                            ),
+                          : const Icon(Icons.download),
+                      label: Text(
+                        generator.getLocaleString(lang, "fetch_verse_btn"),
+                      ),
                     ),
                   ],
                 ),
@@ -679,15 +677,16 @@ class _MyHomePageState extends State<MyHomePage> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: isGenerating ? null : _generateContent,
-                  child: isGenerating
+                  icon: isGenerating
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(generator.getLocaleString(lang, "generate_btn")),
+                      : const Icon(Icons.auto_awesome),
+                  label: Text(generator.getLocaleString(lang, "generate_btn")),
                 ),
                 if (statusMessage.isNotEmpty)
                   Padding(
@@ -743,9 +742,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   SelectableText(altText),
-                  ElevatedButton(
+                  ElevatedButton.icon(
                     onPressed: () => _copyToClipboard(altText),
-                    child: Text(
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: Text(
                       generator.getLocaleString(lang, "copy_alt_text_btn"),
                     ),
                   ),
@@ -757,9 +757,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   SelectableText(caption),
-                  ElevatedButton(
+                  ElevatedButton.icon(
                     onPressed: () => _copyToClipboard(caption),
-                    child: Text(
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: Text(
                       generator.getLocaleString(lang, "copy_caption_btn"),
                     ),
                   ),
