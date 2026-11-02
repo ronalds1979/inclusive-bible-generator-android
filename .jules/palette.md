@@ -22,3 +22,6 @@
 ## 2024-05-24 - Dynamic Loading States for `ElevatedButton.icon`
 **Learning:** When using `ElevatedButton.icon`, completely replacing the button's content with a `CircularProgressIndicator` during async loading removes the label text, causing the button's width to violently collapse (layout jank) and creating a disorienting UX.
 **Action:** When implementing loading states on `ElevatedButton.icon`, maintain the `label` text consistently, and conditionally swap only the `icon` parameter with a `SizedBox` (matching the icon size, e.g., 16x16) containing the `CircularProgressIndicator`.
+## 2024-05-24 - Dynamic Disabled States with Listenables
+**Learning:** Relying on post-click validation errors for obvious required fields creates a frustrating UX, and reading `TextEditingController.text` directly in the `build` method does not automatically rebuild the UI to disable buttons as the user types.
+**Action:** Always wrap primary action buttons in a `ValueListenableBuilder` or `AnimatedBuilder` (with `Listenable.merge`) listening to their required input controllers. This ensures the button is dynamically and correctly disabled when required fields are empty, providing immediate visual feedback and preventing invalid submissions.
