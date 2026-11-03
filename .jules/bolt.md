@@ -20,3 +20,6 @@
 ## 2024-05-18 - Offload Heavy Image Processing
 **Learning:** Performing heavy operations such as image decoding, scaling, drawing, and encoding on the main thread in Flutter blocks the event loop and can cause severe UI jank, especially for large assets or images.
 **Action:** Use `compute()` from `package:flutter/foundation.dart` to offload these heavy synchronous tasks (like `img.decodeImage`, `img.encodePng` from the `image` package) to a background isolate.
+## 2026-11-03 - Optimize statusMessage
+**Learning:** Repeated string operations (toLowerCase, contains) in a build method triggered frequently by typing cause unnecessary memory allocations and jank.
+**Action:** Cache these string operations inside a Builder widget or at the top of the build method.

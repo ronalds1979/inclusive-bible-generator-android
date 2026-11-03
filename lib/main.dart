@@ -649,13 +649,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   runSpacing: 10,
                   children: [
                     InkWell(
-                      onTap: () => setState(() => generateAudio = !generateAudio),
+                      onTap: () =>
+                          setState(() => generateAudio = !generateAudio),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Checkbox(
                             value: generateAudio,
-                            onChanged: (v) => setState(() => generateAudio = v!),
+                            onChanged: (v) =>
+                                setState(() => generateAudio = v!),
                           ),
                           Text(generator.getLocaleString(lang, "audio_label")),
                         ],
@@ -690,51 +692,55 @@ class _MyHomePageState extends State<MyHomePage> {
                   label: Text(generator.getLocaleString(lang, "generate_btn")),
                 ),
                 if (statusMessage.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Row(
-                        children: [
-                          Icon(
-                            statusMessage.toLowerCase().contains("error")
-                                ? Icons.error
-                                : (statusMessage.toLowerCase().contains(
-                                        "success",
-                                      )
-                                      ? Icons.check_circle
-                                      : Icons.info),
-                            color: statusMessage.toLowerCase().contains("error")
-                                ? Theme.of(context).colorScheme.error
-                                : (statusMessage.toLowerCase().contains(
-                                        "success",
-                                      )
-                                      ? Colors.green
-                                      : Theme.of(context).colorScheme.primary),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              statusMessage,
-                              style: TextStyle(
-                                color:
-                                    statusMessage.toLowerCase().contains(
-                                      "error",
-                                    )
+                  Builder(
+                    builder: (context) {
+                      // ⚡ Bolt: Cache lowercased string and boolean flags to prevent
+                      // multiple redundant string allocations and `.contains()`
+                      // evaluations per widget rebuild, reducing GC pressure.
+                      final lowerStatus = statusMessage.toLowerCase();
+                      final isError = lowerStatus.contains("error");
+                      final isSuccess = lowerStatus.contains("success");
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Row(
+                            children: [
+                              Icon(
+                                isError
+                                    ? Icons.error
+                                    : (isSuccess
+                                          ? Icons.check_circle
+                                          : Icons.info),
+                                color: isError
                                     ? Theme.of(context).colorScheme.error
-                                    : (statusMessage.toLowerCase().contains(
-                                            "success",
-                                          )
+                                    : (isSuccess
                                           ? Colors.green
                                           : Theme.of(
                                               context,
                                             ).colorScheme.primary),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  statusMessage,
+                                  style: TextStyle(
+                                    color: isError
+                                        ? Theme.of(context).colorScheme.error
+                                        : (isSuccess
+                                              ? Colors.green
+                                              : Theme.of(
+                                                  context,
+                                                ).colorScheme.primary),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 if (altText.isNotEmpty) ...[
                   const SizedBox(height: 20),
