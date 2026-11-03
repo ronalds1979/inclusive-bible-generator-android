@@ -13,3 +13,7 @@
 **Vulnerability:** Application crashed with `RangeError` when slicing a `lang` parameter of length < 2, leading to localized DoS. Additionally, `bibleId`, `bookNr`, and `chapter` variables were not properly URL-encoded during API URL construction in `getPassage`, creating an SSRF / Path Traversal vulnerability (URL Injection).
 **Learning:** String indices must always be checked before slicing to prevent unhandled runtime errors. Any user-influenced parameters appended to URLs must be URL-encoded.
 **Prevention:** Use `lang.length >= 2` prior to substring operations. Always apply `Uri.encodeComponent` on any URL variables constructed dynamically.
+## 2024-11-03 - Prevent Path Traversal in rootBundle.load
+**Vulnerability:** Path traversal risk when passing unsanitized user or external input as a filename to Flutter's `rootBundle.load`.
+**Learning:** `rootBundle.load` resolves paths directly, so providing something like `../secrets.txt` could theoretically attempt to load arbitrary assets if not restricted.
+**Prevention:** Sanitize the input filename using `.split('/').last.split('\\').last` before appending it to the directory path in `rootBundle.load`.
