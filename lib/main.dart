@@ -622,7 +622,25 @@ class _MyHomePageState extends State<MyHomePage> {
                       value: aspectRatioStr,
                       items: ["1:1", "3:4", "4:3"]
                           .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
+                            (v) => DropdownMenuItem(
+                              value: v,
+                              child: Text(
+                                v == "1:1"
+                                    ? generator.getLocaleString(
+                                        lang,
+                                        "ratio_square",
+                                      )
+                                    : (v == "3:4"
+                                          ? generator.getLocaleString(
+                                              lang,
+                                              "ratio_portrait",
+                                            )
+                                          : generator.getLocaleString(
+                                              lang,
+                                              "ratio_landscape",
+                                            )),
+                              ),
+                            ),
                           )
                           .toList(),
                       onChanged: (v) => setState(() => aspectRatioStr = v!),
@@ -649,13 +667,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   runSpacing: 10,
                   children: [
                     InkWell(
-                      onTap: () => setState(() => generateAudio = !generateAudio),
+                      onTap: () =>
+                          setState(() => generateAudio = !generateAudio),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Checkbox(
                             value: generateAudio,
-                            onChanged: (v) => setState(() => generateAudio = v!),
+                            onChanged: (v) =>
+                                setState(() => generateAudio = v!),
                           ),
                           Text(generator.getLocaleString(lang, "audio_label")),
                         ],
@@ -669,7 +689,20 @@ class _MyHomePageState extends State<MyHomePage> {
                         value: gender,
                         items: genders
                             .map(
-                              (v) => DropdownMenuItem(value: v, child: Text(v)),
+                              (v) => DropdownMenuItem(
+                                value: v,
+                                child: Text(
+                                  v == "Female"
+                                      ? generator.getLocaleString(
+                                          lang,
+                                          "gender_female",
+                                        )
+                                      : generator.getLocaleString(
+                                          lang,
+                                          "gender_male",
+                                        ),
+                                ),
+                              ),
                             )
                             .toList(),
                         onChanged: (v) => setState(() => gender = v!),

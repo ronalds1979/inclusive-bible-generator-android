@@ -22,3 +22,11 @@
 ## 2024-05-24 - Dynamic Loading States for `ElevatedButton.icon`
 **Learning:** When using `ElevatedButton.icon`, completely replacing the button's content with a `CircularProgressIndicator` during async loading removes the label text, causing the button's width to violently collapse (layout jank) and creating a disorienting UX.
 **Action:** When implementing loading states on `ElevatedButton.icon`, maintain the `label` text consistently, and conditionally swap only the `icon` parameter with a `SizedBox` (matching the icon size, e.g., 16x16) containing the `CircularProgressIndicator`.
+
+## 2024-05-24 - Translate Technical Dropdown Values
+**Learning:** Dropdowns for configuration (like Aspect Ratio or Gender) often map raw technical values (like "1:1" or "Female") directly to the UI, bypassing localization completely. This makes the UI un-localized and confusing for users of other languages.
+**Action:** Always map technical dropdown  strings to localized display text using  for the  parameter of .
+
+## 2024-05-24 - Translate Technical Dropdown Values
+**Learning:** Dropdowns for configuration (like Aspect Ratio or Gender) often map raw technical values (like "1:1" or "Female") directly to the UI, bypassing localization completely. This makes the UI un-localized and confusing for users of other languages.
+**Action:** Always map technical dropdown `value` strings to localized display text using `generator.getLocaleString` for the `child: Text()` parameter of `DropdownMenuItem`.
