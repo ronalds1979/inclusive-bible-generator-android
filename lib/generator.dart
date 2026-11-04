@@ -165,8 +165,14 @@ class Generator {
       imageBytes = await File(customImagePath).readAsBytes();
     } else {
       try {
+        // Prevent Path Traversal
+        String safeBackgroundFilename = backgroundFilename
+            .split('/')
+            .last
+            .split('\\')
+            .last;
         ByteData data = await rootBundle.load(
-          "assets/backgrounds/\$backgroundFilename",
+          "assets/backgrounds/$safeBackgroundFilename",
         );
         imageBytes = data.buffer.asUint8List();
       } catch (e) {

@@ -649,13 +649,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   runSpacing: 10,
                   children: [
                     InkWell(
-                      onTap: () => setState(() => generateAudio = !generateAudio),
+                      onTap: () =>
+                          setState(() => generateAudio = !generateAudio),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Checkbox(
                             value: generateAudio,
-                            onChanged: (v) => setState(() => generateAudio = v!),
+                            onChanged: (v) =>
+                                setState(() => generateAudio = v!),
                           ),
                           Text(generator.getLocaleString(lang, "audio_label")),
                         ],

@@ -125,6 +125,8 @@ class GetBibleAPI {
               ? int.parse(endVerse)
               : int.parse(startVerse);
 
+          if (endIdx < startIdx) return null;
+
           if (startIdx >= 0 && startIdx < verses.length) {
             int endIndex = endIdx > verses.length ? verses.length : endIdx;
             List selectedVerses = verses.sublist(startIdx, endIndex);
