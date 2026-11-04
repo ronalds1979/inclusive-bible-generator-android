@@ -534,7 +534,18 @@ class _MyHomePageState extends State<MyHomePage> {
                       value: selectedBackground,
                       items: backgrounds
                           .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
+                            (v) => DropdownMenuItem(
+                              value: v,
+                              child: Text(
+                                v
+                                    .replaceAll('.png', '')
+                                    .replaceAll('_', ' ')
+                                    .replaceFirstMapped(
+                                      RegExp(r'^[a-z]'),
+                                      (m) => m.group(0)!.toUpperCase(),
+                                    ),
+                              ),
+                            ),
                           )
                           .toList(),
                       onChanged: (v) => setState(() {
@@ -620,11 +631,17 @@ class _MyHomePageState extends State<MyHomePage> {
                     const SizedBox(width: 10),
                     DropdownButton<String>(
                       value: aspectRatioStr,
-                      items: ["1:1", "3:4", "4:3"]
-                          .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
-                          )
-                          .toList(),
+                      items: ["1:1", "3:4", "4:3"].map((v) {
+                        String key = v == "1:1"
+                            ? "ratio_square"
+                            : (v == "3:4"
+                                  ? "ratio_portrait"
+                                  : "ratio_landscape");
+                        return DropdownMenuItem(
+                          value: v,
+                          child: Text(generator.getLocaleString(lang, key)),
+                        );
+                      }).toList(),
                       onChanged: (v) => setState(() => aspectRatioStr = v!),
                     ),
                   ],
@@ -649,13 +666,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   runSpacing: 10,
                   children: [
                     InkWell(
-                      onTap: () => setState(() => generateAudio = !generateAudio),
+                      onTap: () =>
+                          setState(() => generateAudio = !generateAudio),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Checkbox(
                             value: generateAudio,
-                            onChanged: (v) => setState(() => generateAudio = v!),
+                            onChanged: (v) =>
+                                setState(() => generateAudio = v!),
                           ),
                           Text(generator.getLocaleString(lang, "audio_label")),
                         ],
@@ -667,11 +686,15 @@ class _MyHomePageState extends State<MyHomePage> {
                       const SizedBox(width: 10),
                       DropdownButton<String>(
                         value: gender,
-                        items: genders
-                            .map(
-                              (v) => DropdownMenuItem(value: v, child: Text(v)),
-                            )
-                            .toList(),
+                        items: genders.map((v) {
+                          String key = v == "Female"
+                              ? "gender_female"
+                              : "gender_male";
+                          return DropdownMenuItem(
+                            value: v,
+                            child: Text(generator.getLocaleString(lang, key)),
+                          );
+                        }).toList(),
                         onChanged: (v) => setState(() => gender = v!),
                       ),
                     ],

@@ -22,3 +22,7 @@
 ## 2024-05-24 - Dynamic Loading States for `ElevatedButton.icon`
 **Learning:** When using `ElevatedButton.icon`, completely replacing the button's content with a `CircularProgressIndicator` during async loading removes the label text, causing the button's width to violently collapse (layout jank) and creating a disorienting UX.
 **Action:** When implementing loading states on `ElevatedButton.icon`, maintain the `label` text consistently, and conditionally swap only the `icon` parameter with a `SizedBox` (matching the icon size, e.g., 16x16) containing the `CircularProgressIndicator`.
+
+## 2026-11-04 - Dropdown Value Mapping for Localization
+**Learning:** Displaying raw technical values (like '1:1' or 'default.png') in dropdowns degrades UX, especially in a localized app where users expect text in their own language.
+**Action:** When implementing `DropdownButton` widgets, always map the underlying technical values to human-readable, localized strings for the `Text` widget child, while maintaining the technical string in the `value` property for logic.
