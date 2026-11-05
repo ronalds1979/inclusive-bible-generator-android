@@ -13,3 +13,7 @@
 **Vulnerability:** Application crashed with `RangeError` when slicing a `lang` parameter of length < 2, leading to localized DoS. Additionally, `bibleId`, `bookNr`, and `chapter` variables were not properly URL-encoded during API URL construction in `getPassage`, creating an SSRF / Path Traversal vulnerability (URL Injection).
 **Learning:** String indices must always be checked before slicing to prevent unhandled runtime errors. Any user-influenced parameters appended to URLs must be URL-encoded.
 **Prevention:** Use `lang.length >= 2` prior to substring operations. Always apply `Uri.encodeComponent` on any URL variables constructed dynamically.
+## 2024-11-05 - Fix RangeError DoS in Sublist Operations
+**Vulnerability:** A Denial of Service (DoS) vulnerability existed in `GetBibleAPI.getPassage` where `verses.sublist(startIdx, endIndex)` was called without explicitly verifying that `endIndex >= startIdx`. If a user provided an invalid range where the start index was greater than the end index, it would throw an unhandled `RangeError`, potentially crashing the application or the background isolate.
+**Learning:** Dart's `List.sublist` and string slicing methods will throw runtime exceptions if index boundaries are invalid or crossed.
+**Prevention:** Always explicitly validate that `endIndex >= startIndex` before performing list or string slicing operations to ensure the application fails securely and gracefully.

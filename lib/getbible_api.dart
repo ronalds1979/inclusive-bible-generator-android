@@ -127,6 +127,8 @@ class GetBibleAPI {
 
           if (startIdx >= 0 && startIdx < verses.length) {
             int endIndex = endIdx > verses.length ? verses.length : endIdx;
+            // 🛡️ Sentinel: Validate index boundaries to prevent RangeError DoS vulnerability
+            if (endIndex < startIdx) return null;
             List selectedVerses = verses.sublist(startIdx, endIndex);
             return selectedVerses.map((v) => v["text"] ?? "").join(" ").trim();
           }
