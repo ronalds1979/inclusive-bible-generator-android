@@ -22,3 +22,7 @@
 ## 2024-05-24 - Dynamic Loading States for `ElevatedButton.icon`
 **Learning:** When using `ElevatedButton.icon`, completely replacing the button's content with a `CircularProgressIndicator` during async loading removes the label text, causing the button's width to violently collapse (layout jank) and creating a disorienting UX.
 **Action:** When implementing loading states on `ElevatedButton.icon`, maintain the `label` text consistently, and conditionally swap only the `icon` parameter with a `SizedBox` (matching the icon size, e.g., 16x16) containing the `CircularProgressIndicator`.
+
+## 2024-05-24 - Dynamic Disabled States to Prevent "Dead Clicks"
+**Learning:** In forms where required data is missing (e.g., empty text fields or unselected dropdowns), leaving action buttons enabled results in "dead clicks"—where the user clicks and either nothing happens, or an unhelpful error is shown. This breaks the flow and increases user frustration.
+**Action:** Always dynamically disable primary action buttons (like submit, fetch, or generate) when required input fields are empty or invalid, providing immediate visual feedback on the state of the form.
