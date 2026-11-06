@@ -20,3 +20,7 @@
 ## 2024-05-18 - Offload Heavy Image Processing
 **Learning:** Performing heavy operations such as image decoding, scaling, drawing, and encoding on the main thread in Flutter blocks the event loop and can cause severe UI jank, especially for large assets or images.
 **Action:** Use `compute()` from `package:flutter/foundation.dart` to offload these heavy synchronous tasks (like `img.decodeImage`, `img.encodePng` from the `image` package) to a background isolate.
+
+## 2025-02-12 - [Avoid Repetitive String Operations in Widget Build Methods]
+**Learning:** Performing multiple expensive string operations (like `.toLowerCase().contains()`) directly inline within a Flutter `build()` method creates redundant computations and object allocations every time the widget rebuilds. This is especially problematic in forms where `setState` runs frequently (e.g., on every keystroke).
+**Action:** Extract repetitive string computations into cached local variables at the top of the `build()` method, or wrap the specific UI component in a `Builder` widget to cache the values locally and prevent redundant operations across the widget tree.
