@@ -24,3 +24,6 @@
 ## 2025-02-12 - [Avoid Repetitive String Operations in Widget Build Methods]
 **Learning:** Performing multiple expensive string operations (like `.toLowerCase().contains()`) directly inline within a Flutter `build()` method creates redundant computations and object allocations every time the widget rebuilds. This is especially problematic in forms where `setState` runs frequently (e.g., on every keystroke).
 **Action:** Extract repetitive string computations into cached local variables at the top of the `build()` method, or wrap the specific UI component in a `Builder` widget to cache the values locally and prevent redundant operations across the widget tree.
+## 2024-05-20 - Prevent Full-Page Rebuilds
+**Learning:** Rebuilding the entire page via setState inside onChanged for TextFields is a major performance bottleneck in Flutter forms.
+**Action:** Use ValueListenableBuilder for single controllers (like conditional suffix icons) and AnimatedBuilder with Listenable.merge for dependent UI components (like live previews) to localize rebuilds to only the necessary widgets.
