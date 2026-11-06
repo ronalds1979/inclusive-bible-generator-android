@@ -351,44 +351,49 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
         ),
-        child: Stack(
-          children: [
-            Align(
-              alignment: Alignment.center,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Transform.translate(
-                  offset: Offset(0, yOffset - 20),
-                  child: Text(
-                    verseController.text.isEmpty
-                        ? "Preview Verse"
-                        : verseController.text,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.roboto(
-                      color: fontColor,
-                      fontSize: fontSize / 2, // Scale down for preview
-                      fontWeight: FontWeight.bold,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([referenceController, verseController]),
+          builder: (context, child) {
+            return Stack(
+              children: [
+                Align(
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Transform.translate(
+                      offset: Offset(0, yOffset - 20),
+                      child: Text(
+                        verseController.text.isEmpty
+                            ? "Preview Verse"
+                            : verseController.text,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.roboto(
+                          color: fontColor,
+                          fontSize: fontSize / 2, // Scale down for preview
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.center,
-              child: Transform.translate(
-                offset: Offset(0, yOffset + (fontSize / 2) + 40),
-                child: Text(
-                  referenceController.text.isEmpty
-                      ? "Reference"
-                      : referenceController.text,
-                  style: GoogleFonts.roboto(
-                    color: fontColor,
-                    fontSize: (fontSize * 0.66) / 2,
+                Align(
+                  alignment: Alignment.center,
+                  child: Transform.translate(
+                    offset: Offset(0, yOffset + (fontSize / 2) + 40),
+                    child: Text(
+                      referenceController.text.isEmpty
+                          ? "Reference"
+                          : referenceController.text,
+                      style: GoogleFonts.roboto(
+                        color: fontColor,
+                        fontSize: (fontSize * 0.66) / 2,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -471,56 +476,75 @@ class _MyHomePageState extends State<MyHomePage> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: referenceController,
-                  maxLength: 50,
-                  decoration: InputDecoration(
-                    labelText: generator.getLocaleString(
-                      lang,
-                      "reference_label",
-                    ),
-                    suffixIcon: referenceController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            tooltip:
-                                generator.getLocaleString(lang, "clear_btn") !=
-                                    ""
-                                ? generator.getLocaleString(lang, "clear_btn")
-                                : 'Clear',
-                            onPressed: () {
-                              setState(() {
-                                referenceController.clear();
-                              });
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (v) => setState(() {}),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: referenceController,
+                  builder: (context, value, child) {
+                    return TextField(
+                      controller: referenceController,
+                      maxLength: 50,
+                      decoration: InputDecoration(
+                        labelText: generator.getLocaleString(
+                          lang,
+                          "reference_label",
+                        ),
+                        suffixIcon: value.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                tooltip:
+                                    generator.getLocaleString(
+                                          lang,
+                                          "clear_btn",
+                                        ) !=
+                                        ""
+                                    ? generator.getLocaleString(
+                                        lang,
+                                        "clear_btn",
+                                      )
+                                    : 'Clear',
+                                onPressed: () {
+                                  referenceController.clear();
+                                },
+                              )
+                            : null,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: verseController,
-                  maxLength: 2000,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    labelText: generator.getLocaleString(lang, "verse_label"),
-                    suffixIcon: verseController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            tooltip:
-                                generator.getLocaleString(lang, "clear_btn") !=
-                                    ""
-                                ? generator.getLocaleString(lang, "clear_btn")
-                                : 'Clear',
-                            onPressed: () {
-                              setState(() {
-                                verseController.clear();
-                              });
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (v) => setState(() {}),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: verseController,
+                  builder: (context, value, child) {
+                    return TextField(
+                      controller: verseController,
+                      maxLength: 2000,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        labelText: generator.getLocaleString(
+                          lang,
+                          "verse_label",
+                        ),
+                        suffixIcon: value.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                tooltip:
+                                    generator.getLocaleString(
+                                          lang,
+                                          "clear_btn",
+                                        ) !=
+                                        ""
+                                    ? generator.getLocaleString(
+                                        lang,
+                                        "clear_btn",
+                                      )
+                                    : 'Clear',
+                                onPressed: () {
+                                  verseController.clear();
+                                },
+                              )
+                            : null,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 Wrap(
