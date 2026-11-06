@@ -456,7 +456,12 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     const SizedBox(width: 10),
                     ElevatedButton.icon(
-                      onPressed: isFetching ? null : _fetchVerse,
+                      onPressed:
+                          isFetching ||
+                              selectedBibleVersion == "-" ||
+                              referenceController.text.trim().isEmpty
+                          ? null
+                          : _fetchVerse,
                       icon: isFetching
                           ? const SizedBox(
                               width: 16,
@@ -696,7 +701,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  onPressed: isGenerating ? null : _generateContent,
+                  onPressed:
+                      isGenerating ||
+                          verseController.text.trim().isEmpty ||
+                          referenceController.text.trim().isEmpty
+                      ? null
+                      : _generateContent,
                   icon: isGenerating
                       ? const SizedBox(
                           width: 16,
@@ -756,7 +766,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (altText.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text(
-                    "Alt-Text:",
+                    generator.getLocaleString(lang, "alt_text_label"),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   SelectableText(altText),
@@ -771,7 +781,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (caption.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
-                    "Caption:",
+                    generator.getLocaleString(lang, "caption_label"),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   SelectableText(caption),
