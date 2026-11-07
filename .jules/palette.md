@@ -26,3 +26,7 @@
 ## 2024-05-24 - Dynamic Disabled States to Prevent "Dead Clicks"
 **Learning:** In forms where required data is missing (e.g., empty text fields or unselected dropdowns), leaving action buttons enabled results in "dead clicks"—where the user clicks and either nothing happens, or an unhelpful error is shown. This breaks the flow and increases user frustration.
 **Action:** Always dynamically disable primary action buttons (like submit, fetch, or generate) when required input fields are empty or invalid, providing immediate visual feedback on the state of the form.
+
+## 2026-11-07 - Dynamic Contrast in ElevatedButtons
+**Learning:** When styling an `ElevatedButton.icon` with a dynamic `backgroundColor`, applying dynamic contrast logic (like `computeLuminance() > 0.5 ? Colors.black : Colors.white`) directly to the `foregroundColor` inside `ElevatedButton.styleFrom()` ensures both the icon and the text remain accessible and readable. Hardcoding the text color directly on the `Text` widget fails to update the `Icon` color to match.
+**Action:** Use `foregroundColor` within `ElevatedButton.styleFrom()` for consistent and accessible styling across both icons and text when the button has a dynamic or user-selected background color.
