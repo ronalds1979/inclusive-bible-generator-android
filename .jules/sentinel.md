@@ -17,3 +17,7 @@
 **Vulnerability:** A Denial of Service (DoS) vulnerability existed in `GetBibleAPI.getPassage` where `verses.sublist(startIdx, endIndex)` was called without explicitly verifying that `endIndex >= startIdx`. If a user provided an invalid range where the start index was greater than the end index, it would throw an unhandled `RangeError`, potentially crashing the application or the background isolate.
 **Learning:** Dart's `List.sublist` and string slicing methods will throw runtime exceptions if index boundaries are invalid or crossed.
 **Prevention:** Always explicitly validate that `endIndex >= startIndex` before performing list or string slicing operations to ensure the application fails securely and gracefully.
+## 2024-11-08 - Prevent Path Traversal in Flutter Asset Loading
+**Vulnerability:** Path traversal vulnerability in `Generator.generateImageBytes` due to unsanitized `backgroundFilename` being passed to `rootBundle.load`.
+**Learning:** Loading assets via `rootBundle.load` with dynamically constructed paths without input validation allows path traversal.
+**Prevention:** Sanitize filenames (e.g., `.split('/').last.split('\\').last`) before using them to construct asset paths for `rootBundle.load`.
