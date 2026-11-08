@@ -164,9 +164,11 @@ class Generator {
     if (customImagePath != null && await File(customImagePath).exists()) {
       imageBytes = await File(customImagePath).readAsBytes();
     } else {
+      // 🛡️ Sentinel: Sanitize filename to prevent path traversal
+      final safeFilename = backgroundFilename.split('/').last.split('\\').last;
       try {
         ByteData data = await rootBundle.load(
-          "assets/backgrounds/\$backgroundFilename",
+          "assets/backgrounds/$safeFilename",
         );
         imageBytes = data.buffer.asUint8List();
       } catch (e) {
