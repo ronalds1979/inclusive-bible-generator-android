@@ -5,6 +5,9 @@ import 'book_mapping.dart';
 
 class GetBibleAPI {
   static const String baseUrl = "https://api.getbible.net/v2";
+  static final RegExp _referenceRegExp = RegExp(
+    r'^((?:\d\s+)?[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
+  );
 
   static Future<List<Map<String, String>>> getVersions({
     String lang = "en",
@@ -48,10 +51,7 @@ class GetBibleAPI {
         : "en";
     Map<String, int> mapping = bookMapping[langPrefix] ?? bookMapping["en"]!;
 
-    RegExp regExp = RegExp(
-      r'^((?:\d\s+)?[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
-    );
-    Match? match = regExp.firstMatch(reference.trim());
+    Match? match = _referenceRegExp.firstMatch(reference.trim());
 
     if (match == null) {
       return {
