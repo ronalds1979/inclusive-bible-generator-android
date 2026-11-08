@@ -487,6 +487,8 @@ class _MyHomePageState extends State<MyHomePage> {
                     return TextField(
                       controller: referenceController,
                       maxLength: 50,
+                      textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
                       decoration: InputDecoration(
                         labelText: generator.getLocaleString(
                           lang,
@@ -523,6 +525,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       controller: verseController,
                       maxLength: 2000,
                       maxLines: 4,
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         labelText: generator.getLocaleString(
                           lang,
@@ -572,9 +575,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       }),
                     ),
                     const SizedBox(width: 10),
-                    ElevatedButton(
+                    ElevatedButton.icon(
                       onPressed: _selectCustomImage,
-                      child: Text(
+                      icon: const Icon(Icons.image),
+                      label: Text(
                         generator.getLocaleString(lang, "custom_image_btn"),
                       ),
                     ),
@@ -588,9 +592,12 @@ class _MyHomePageState extends State<MyHomePage> {
                   children: [
                     Text(generator.getLocaleString(lang, "font_color_label")),
                     const SizedBox(width: 10),
-                    ElevatedButton(
+                    ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: fontColor,
+                        foregroundColor: fontColor.computeLuminance() > 0.5
+                            ? Colors.black
+                            : Colors.white,
                       ),
                       onPressed: () {
                         showDialog(
@@ -615,14 +622,8 @@ class _MyHomePageState extends State<MyHomePage> {
                           },
                         );
                       },
-                      child: Text(
-                        "Select Color",
-                        style: TextStyle(
-                          color: fontColor.computeLuminance() > 0.5
-                              ? Colors.black
-                              : Colors.white,
-                        ),
-                      ),
+                      icon: const Icon(Icons.color_lens),
+                      label: const Text("Select Color"),
                     ),
                   ],
                 ),
