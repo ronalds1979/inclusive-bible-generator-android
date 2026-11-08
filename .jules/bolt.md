@@ -27,3 +27,7 @@
 ## 2024-05-20 - Prevent Full-Page Rebuilds
 **Learning:** Rebuilding the entire page via setState inside onChanged for TextFields is a major performance bottleneck in Flutter forms.
 **Action:** Use ValueListenableBuilder for single controllers (like conditional suffix icons) and AnimatedBuilder with Listenable.merge for dependent UI components (like live previews) to localize rebuilds to only the necessary widgets.
+
+## 2025-02-13 - [Pre-compile RegExp and Cache Listenable.merge]
+**Learning:** Re-instantiating `RegExp` patterns inside methods called frequently and passing inline `Listenable.merge` inside `build` blocks in Flutter (which instantiates a new listener proxy each time) causes unnecessary object allocations and GC churn, affecting runtime performance.
+**Action:** Extract `RegExp` patterns to `static final` fields so they compile only once. Cache dynamic Listeners (like `Listenable.merge`) inside a `State`'s `initState` to reuse the instance during widget rebuilds.

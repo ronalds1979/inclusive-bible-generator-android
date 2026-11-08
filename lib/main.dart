@@ -94,10 +94,15 @@ class _MyHomePageState extends State<MyHomePage> {
   bool isLoading = true;
   bool isFetching = false;
   bool isGenerating = false;
+  late final Listenable _previewListenable;
 
   @override
   void initState() {
     super.initState();
+    _previewListenable = Listenable.merge([
+      referenceController,
+      verseController,
+    ]);
     _initApp();
   }
 
@@ -352,7 +357,7 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         child: AnimatedBuilder(
-          animation: Listenable.merge([referenceController, verseController]),
+          animation: _previewListenable,
           builder: (context, child) {
             return Stack(
               children: [
