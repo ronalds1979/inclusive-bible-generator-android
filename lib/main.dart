@@ -487,6 +487,8 @@ class _MyHomePageState extends State<MyHomePage> {
                     return TextField(
                       controller: referenceController,
                       maxLength: 50,
+                      textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
                       decoration: InputDecoration(
                         labelText: generator.getLocaleString(
                           lang,
@@ -523,6 +525,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       controller: verseController,
                       maxLength: 2000,
                       maxLines: 4,
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         labelText: generator.getLocaleString(
                           lang,

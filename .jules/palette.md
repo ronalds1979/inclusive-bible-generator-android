@@ -26,3 +26,7 @@
 ## 2024-05-24 - Dynamic Disabled States to Prevent "Dead Clicks"
 **Learning:** In forms where required data is missing (e.g., empty text fields or unselected dropdowns), leaving action buttons enabled results in "dead clicks"—where the user clicks and either nothing happens, or an unhelpful error is shown. This breaks the flow and increases user frustration.
 **Action:** Always dynamically disable primary action buttons (like submit, fetch, or generate) when required input fields are empty or invalid, providing immediate visual feedback on the state of the form.
+
+## 2024-11-08 - TextField Mobile Keyboard Optimization
+**Learning:** By default, Flutter `TextField` widgets do not automatically handle mobile keyboard optimizations like moving to the next field or capitalizing words/sentences properly for user inputs, which makes data entry less efficient and more tedious.
+**Action:** Always set `textInputAction: TextInputAction.next` for single-line fields that lead to another input, and set an appropriate `textCapitalization` (`TextCapitalization.words` for names/titles/references, `TextCapitalization.sentences` for multiline descriptions or bodies of text) on `TextField` widgets to significantly improve mobile keyboard usability.
