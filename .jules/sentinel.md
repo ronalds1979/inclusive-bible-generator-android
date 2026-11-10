@@ -21,3 +21,7 @@
 **Vulnerability:** Path traversal vulnerability in `Generator.generateImageBytes` due to unsanitized `backgroundFilename` being passed to `rootBundle.load`.
 **Learning:** Loading assets via `rootBundle.load` with dynamically constructed paths without input validation allows path traversal.
 **Prevention:** Sanitize filenames (e.g., `.split('/').last.split('\\').last`) before using them to construct asset paths for `rootBundle.load`.
+## 2024-11-10 - Prevent Memory Exhaustion via Unbounded File Reads
+**Vulnerability:** A Denial of Service (DoS) vulnerability existed in `Generator.generateImageBytes` where `File.readAsBytes()` was called on user-selected custom images without a size limit, which could cause memory exhaustion if excessively large files were provided.
+**Learning:** Reading unbounded local files entirely into memory using `readAsBytes` can cause application crashes (OOM) and DoS on devices with constrained memory.
+**Prevention:** Always check `await File(path).length()` against a reasonable limit (e.g., 20MB) before calling `readAsBytes()`.

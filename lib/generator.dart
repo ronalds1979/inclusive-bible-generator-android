@@ -168,8 +168,18 @@ class Generator {
     Uint8List? imageBytes;
 
     if (customImagePath != null && await File(customImagePath).exists()) {
-      imageBytes = await File(customImagePath).readAsBytes();
-    } else {
+      // 🛡️ Sentinel: Validate file size (e.g., max 20MB) to prevent Memory Exhaustion DoS
+      final int fileSize = await File(customImagePath).length();
+      if (fileSize > 20 * 1024 * 1024) {
+        if (kDebugMode)
+          debugPrint("Image file exceeds 20MB limit. Falling back.");
+        customImagePath = null; // Proceed to fallback
+      } else {
+        imageBytes = await File(customImagePath).readAsBytes();
+      }
+    }
+
+    if (imageBytes == null) {
       // 🛡️ Sentinel: Sanitize filename to prevent path traversal
       final safeFilename = backgroundFilename.split('/').last.split('\\').last;
       try {
