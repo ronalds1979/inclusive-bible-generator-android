@@ -536,6 +536,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           lang,
                           "verse_label",
                         ),
+                        alignLabelWithHint: true,
                         suffixIcon: value.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear),

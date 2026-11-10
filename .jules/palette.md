@@ -30,3 +30,7 @@
 ## 2026-11-07 - Dynamic Contrast in ElevatedButtons
 **Learning:** When styling an `ElevatedButton.icon` with a dynamic `backgroundColor`, applying dynamic contrast logic (like `computeLuminance() > 0.5 ? Colors.black : Colors.white`) directly to the `foregroundColor` inside `ElevatedButton.styleFrom()` ensures both the icon and the text remain accessible and readable. Hardcoding the text color directly on the `Text` widget fails to update the `Icon` color to match.
 **Action:** Use `foregroundColor` within `ElevatedButton.styleFrom()` for consistent and accessible styling across both icons and text when the button has a dynamic or user-selected background color.
+
+## 2024-05-24 - Multi-line TextField Label Alignment
+**Learning:** In Flutter, when a `TextField` has `maxLines` greater than 1 (multi-line), the default behavior is to vertically center the `labelText` across the entire height of the field. This causes the label to float awkwardly in the middle of a tall input box until the user focuses it, confusing users about where the text will begin.
+**Action:** Always set `alignLabelWithHint: true` in the `InputDecoration` for multi-line `TextField`s to ensure the label correctly aligns with the top line of the text input area.
