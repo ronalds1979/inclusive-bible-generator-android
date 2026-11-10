@@ -31,3 +31,7 @@
 ## 2025-02-13 - [Pre-compile RegExp and Cache Listenable.merge]
 **Learning:** Re-instantiating `RegExp` patterns inside methods called frequently and passing inline `Listenable.merge` inside `build` blocks in Flutter (which instantiates a new listener proxy each time) causes unnecessary object allocations and GC churn, affecting runtime performance.
 **Action:** Extract `RegExp` patterns to `static final` fields so they compile only once. Cache dynamic Listeners (like `Listenable.merge`) inside a `State`'s `initState` to reuse the instance during widget rebuilds.
+
+## 2024-05-24 - [Avoid `img.compositeImage` for simple static overlays]
+**Learning:** Using `img.compositeImage` for simple static color overlays (like a 50% opacity black mask) creates unnecessary memory allocations and CPU overhead because it computes full alpha blending on a new image instance.
+**Action:** Instead of allocating a new image and computing alpha blending, manually iterate over the original image pixels and perform simple arithmetic (e.g., divide the RGB values by 2 for a 50% black mask) to save memory and CPU cycles.

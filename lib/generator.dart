@@ -56,9 +56,14 @@ Uint8List _processImageTask(Map<String, dynamic> args) {
   );
 
   // Overlay
-  img.Image overlay = img.Image(width: targetWidth, height: targetHeight);
-  img.fill(overlay, color: img.ColorRgba8(0, 0, 0, 128));
-  img.compositeImage(resizedImage, overlay);
+  // ⚡ Bolt: Use manual pixel iteration instead of `img.compositeImage`
+  // for static color overlays to avoid unnecessary memory allocation and
+  // expensive alpha blending computations.
+  for (var p in resizedImage) {
+    p.r = p.r ~/ 2;
+    p.g = p.g ~/ 2;
+    p.b = p.b ~/ 2;
+  }
 
   return img.encodePng(resizedImage);
 }
