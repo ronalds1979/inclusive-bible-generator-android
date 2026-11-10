@@ -30,3 +30,6 @@
 ## 2026-11-07 - Dynamic Contrast in ElevatedButtons
 **Learning:** When styling an `ElevatedButton.icon` with a dynamic `backgroundColor`, applying dynamic contrast logic (like `computeLuminance() > 0.5 ? Colors.black : Colors.white`) directly to the `foregroundColor` inside `ElevatedButton.styleFrom()` ensures both the icon and the text remain accessible and readable. Hardcoding the text color directly on the `Text` widget fails to update the `Icon` color to match.
 **Action:** Use `foregroundColor` within `ElevatedButton.styleFrom()` for consistent and accessible styling across both icons and text when the button has a dynamic or user-selected background color.
+## 2024-11-09 - Fix dead button states for forms
+**Learning:** Primary action buttons that depend on text inputs (like form fields) often appear in a "dead" disabled state when implemented directly in a stateless-like context, such as a large `build` method where text field typing doesn't trigger state rebuilds.
+**Action:** Always wrap buttons that depend on dynamic input lengths in reactive builders (`ValueListenableBuilder` or `AnimatedBuilder` for multiple controllers) to ensure they instantly enable/disable and provide immediate, accurate visual feedback to the user.

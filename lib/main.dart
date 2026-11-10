@@ -465,23 +465,30 @@ class _MyHomePageState extends State<MyHomePage> {
                           setState(() => selectedBibleVersion = v!),
                     ),
                     const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed:
-                          isFetching ||
-                              selectedBibleVersion == "-" ||
-                              referenceController.text.trim().isEmpty
-                          ? null
-                          : _fetchVerse,
-                      icon: isFetching
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.download),
-                      label: Text(
-                        generator.getLocaleString(lang, "fetch_verse_btn"),
-                      ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: referenceController,
+                      builder: (context, value, child) {
+                        return ElevatedButton.icon(
+                          onPressed:
+                              isFetching ||
+                                  selectedBibleVersion == "-" ||
+                                  value.text.trim().isEmpty
+                              ? null
+                              : _fetchVerse,
+                          icon: isFetching
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download),
+                          label: Text(
+                            generator.getLocaleString(lang, "fetch_verse_btn"),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -730,21 +737,28 @@ class _MyHomePageState extends State<MyHomePage> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed:
-                      isGenerating ||
-                          verseController.text.trim().isEmpty ||
-                          referenceController.text.trim().isEmpty
-                      ? null
-                      : _generateContent,
-                  icon: isGenerating
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome),
-                  label: Text(generator.getLocaleString(lang, "generate_btn")),
+                AnimatedBuilder(
+                  animation: _previewListenable,
+                  builder: (context, child) {
+                    return ElevatedButton.icon(
+                      onPressed:
+                          isGenerating ||
+                              verseController.text.trim().isEmpty ||
+                              referenceController.text.trim().isEmpty
+                          ? null
+                          : _generateContent,
+                      icon: isGenerating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(
+                        generator.getLocaleString(lang, "generate_btn"),
+                      ),
+                    );
+                  },
                 ),
                 if (statusMessage.isNotEmpty)
                   Builder(
