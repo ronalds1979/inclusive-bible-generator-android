@@ -55,10 +55,16 @@ Uint8List _processImageTask(Map<String, dynamic> args) {
     height: targetHeight,
   );
 
-  // Overlay
-  img.Image overlay = img.Image(width: targetWidth, height: targetHeight);
-  img.fill(overlay, color: img.ColorRgba8(0, 0, 0, 128));
-  img.compositeImage(resizedImage, overlay);
+  // ⚡ Bolt: Fast path overlay calculation. Creating a new image for
+  // the overlay and running `compositeImage` allocates more memory and
+  // does expensive alpha blending.
+  // Since we are just overlaying black with 50% opacity, we can manually
+  // divide the RGB values in half in-place.
+  for (var p in resizedImage) {
+    p.r = p.r ~/ 2;
+    p.g = p.g ~/ 2;
+    p.b = p.b ~/ 2;
+  }
 
   return img.encodePng(resizedImage);
 }
