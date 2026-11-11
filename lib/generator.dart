@@ -1,89 +1,22 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'package:image/image.dart' as img;
-
-Uint8List _processImageTask(Map<String, dynamic> args) {
-  Uint8List? imageBytes = args['imageBytes'];
-  int targetWidth = args['targetWidth'];
-  int targetHeight = args['targetHeight'];
-
-  img.Image? bgImage;
-  if (imageBytes != null) {
-    bgImage = img.decodeImage(imageBytes);
-  }
-
-  if (bgImage == null) {
-    bgImage = img.Image(width: targetWidth, height: targetHeight);
-    img.fill(bgImage, color: img.ColorRgba8(73, 109, 137, 255));
-  }
-
-  int imgW = bgImage.width;
-  int imgH = bgImage.height;
-  double imgRatio = imgW / imgH;
-  double targetRatio = targetWidth / targetHeight;
-
-  img.Image croppedImage;
-  if (imgRatio > targetRatio) {
-    int newW = (imgH * targetRatio).toInt();
-    int left = ((imgW - newW) / 2).toInt();
-    croppedImage = img.copyCrop(
-      bgImage,
-      x: left,
-      y: 0,
-      width: newW,
-      height: imgH,
-    );
-  } else if (imgRatio < targetRatio) {
-    int newH = (imgW / targetRatio).toInt();
-    int top = ((imgH - newH) / 2).toInt();
-    croppedImage = img.copyCrop(
-      bgImage,
-      x: 0,
-      y: top,
-      width: imgW,
-      height: newH,
-    );
-  } else {
-    croppedImage = bgImage;
-  }
-
-  img.Image resizedImage = img.copyResize(
-    croppedImage,
-    width: targetWidth,
-    height: targetHeight,
-  );
-
-  // ⚡ Bolt: Fast path overlay calculation. Creating a new image for
-  // the overlay and running `compositeImage` allocates more memory and
-  // does expensive alpha blending.
-  // Since we are just overlaying black with 50% opacity, we can manually
-  // divide the RGB values in half in-place.
-  for (var p in resizedImage) {
-    p.r = p.r ~/ 2;
-    p.g = p.g ~/ 2;
-    p.b = p.b ~/ 2;
-  }
-
-  return img.encodePng(resizedImage);
-}
 
 class Generator {
   Map<String, Map<String, dynamic>> locales = {};
   static final RegExp _templateRegex = RegExp(r'\{([^}]+)\}');
 
   Future<void> loadLocales() async {
-    List<String> langCodes = ["pt-BR", "en", "es"];
-    for (String langCode in langCodes) {
+    const List<String> langCodes = ["pt-BR", "en", "es"];
+    for (final String langCode in langCodes) {
       try {
-        String jsonString = await rootBundle.loadString(
+        final String jsonString = await rootBundle.loadString(
           "locales/$langCode.json",
         );
         locales[langCode] = json.decode(jsonString);
       } catch (e) {
         if (kDebugMode) {
-          debugPrint("Error loading locale $langCode: \$e");
+          debugPrint("Error loading locale $langCode: $e");
         }
       }
     }
@@ -112,8 +45,8 @@ class Generator {
     String template = locales[lang]?[key] ?? "";
     if (kwargs != null && kwargs.isNotEmpty) {
       template = template.replaceAllMapped(_templateRegex, (match) {
-        final key = match.group(1);
-        return kwargs[key] ?? match.group(0)!;
+        final matchKey = match.group(1);
+        return kwargs[matchKey] ?? match.group(0)!;
       });
     }
     return template;
@@ -122,10 +55,14 @@ class Generator {
   Future<Map<String, String>> generateTexts(
     String lang,
     String verse,
-    String reference,
-  ) async {
-    String description = getLocaleString(lang, "default_description");
-    String altText = getLocaleString(
+    String reference, {
+    String? customDescription,
+  }) async {
+    final String description =
+        (customDescription != null && customDescription.trim().isNotEmpty)
+        ? customDescription.trim()
+        : getLocaleString(lang, "default_description");
+    final String altText = getLocaleString(
       lang,
       "alt_text_template",
       kwargs: {
@@ -134,77 +71,11 @@ class Generator {
         "reference": reference,
       },
     );
-    String caption = getLocaleString(
+    final String caption = getLocaleString(
       lang,
       "caption_template",
       kwargs: {"verse": verse, "reference": reference},
     );
     return {"altText": altText, "caption": caption};
-  }
-
-  Future<Uint8List> generateImageBytes(
-    String lang,
-    String verse,
-    String reference, {
-    String backgroundFilename = "default.png",
-    String? customImagePath,
-    String aspectRatio = "1:1",
-    String fontType = "Roboto-Regular.ttf",
-    String fontColor = "#FFFFFF",
-    int fontSize = 60,
-    int yOffset = 0,
-  }) async {
-    int targetWidth = 1080;
-    int targetHeight = 1080;
-
-    if (aspectRatio == "3:4") {
-      targetWidth = 1080;
-      targetHeight = 1440;
-    } else if (aspectRatio == "4:3") {
-      targetWidth = 1440;
-      targetHeight = 1080;
-    }
-
-    Uint8List? imageBytes;
-
-    if (customImagePath != null && await File(customImagePath).exists()) {
-      // 🛡️ Sentinel: Validate file size (e.g., max 20MB) to prevent Memory Exhaustion DoS
-      final int fileSize = await File(customImagePath).length();
-      if (fileSize > 20 * 1024 * 1024) {
-        if (kDebugMode)
-          debugPrint("Image file exceeds 20MB limit. Falling back.");
-        customImagePath = null; // Proceed to fallback
-      } else {
-        imageBytes = await File(customImagePath).readAsBytes();
-      }
-    }
-
-    if (imageBytes == null) {
-      // 🛡️ Sentinel: Sanitize filename to prevent path traversal
-      final safeFilename = backgroundFilename.split('/').last.split('\\').last;
-      try {
-        ByteData data = await rootBundle.load(
-          "assets/backgrounds/$safeFilename",
-        );
-        imageBytes = data.buffer.asUint8List();
-      } catch (e) {
-        try {
-          ByteData data = await rootBundle.load(
-            "assets/backgrounds/default.png",
-          );
-          imageBytes = data.buffer.asUint8List();
-        } catch (e) {
-          imageBytes = null;
-        }
-      }
-    }
-
-    // ⚡ Bolt: Offload heavy image manipulation (decoding, cropping, encoding)
-    // to a background isolate using compute() to prevent severe UI jank.
-    return await compute(_processImageTask, {
-      'imageBytes': imageBytes,
-      'targetWidth': targetWidth,
-      'targetHeight': targetHeight,
-    });
   }
 }

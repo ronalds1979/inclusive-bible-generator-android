@@ -8,6 +8,15 @@ class GetBibleAPI {
   static final RegExp _referenceRegExp = RegExp(
     r'^((?:\d\s+)?[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúãõçñÁÉÍÓÚÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
   );
+  // ⚡ Bolt: Pre-compute lowercase book mappings once so case-insensitive
+  // fallback lookups are O(1) instead of O(N) with per-entry .toLowerCase() allocations.
+  static final Map<String, Map<String, int>> _lowercaseBookMapping = {
+    for (final langEntry in bookMapping.entries)
+      langEntry.key: {
+        for (final bookEntry in langEntry.value.entries)
+          bookEntry.key.toLowerCase(): bookEntry.value,
+      },
+  };
 
   static Future<List<Map<String, String>>> getVersions({
     String lang = "en",
@@ -36,7 +45,7 @@ class GetBibleAPI {
       return [];
     } catch (e) {
       if (kDebugMode) {
-        debugPrint("Error fetching versions: \$e");
+        debugPrint("Error fetching versions: $e");
       }
       return [];
     }
@@ -67,20 +76,12 @@ class GetBibleAPI {
     String? startVerse = match.group(3);
     String? endVerse = match.group(4);
 
-    int? bookNr;
-    // ⚡ Bolt: Fast-path optimization to avoid O(N) loop and repeated
-    // string allocations by checking for an exact match first.
-    if (mapping.containsKey(bookName)) {
-      bookNr = mapping[bookName];
-    } else {
-      // Cache the lowercased bookName to avoid redundant string operations in the loop
-      String lowerBookName = bookName.toLowerCase();
-      for (var entry in mapping.entries) {
-        if (entry.key.toLowerCase() == lowerBookName) {
-          bookNr = entry.value;
-          break;
-        }
-      }
+    int? bookNr = mapping[bookName];
+    if (bookNr == null) {
+      // ⚡ Bolt: O(1) pre-computed lowercase dictionary lookup instead of O(N) entry scan
+      final Map<String, int> lowerMapping =
+          _lowercaseBookMapping[langPrefix] ?? _lowercaseBookMapping["en"]!;
+      bookNr = lowerMapping[bookName.toLowerCase()];
     }
 
     return {
@@ -141,7 +142,7 @@ class GetBibleAPI {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint("Error fetching passage: \$e");
+        debugPrint("Error fetching passage: $e");
       }
       return null;
     }

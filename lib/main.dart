@@ -3,18 +3,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:gal/gal.dart';
-import 'dart:ui' as ui;
-import 'package:flutter/rendering.dart';
 
+import 'gemini_service.dart';
 import 'generator.dart';
 import 'getbible_api.dart';
+import 'services/media_export_service.dart';
+import 'services/tts_service.dart';
+import 'widgets/gemini_auth_dialog.dart';
+import 'widgets/gemini_background_card.dart';
+import 'widgets/verse_preview_card.dart';
 
 void main() {
   runApp(const MyApp());
@@ -56,11 +56,13 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final Generator generator = Generator();
-  final FlutterTts flutterTts = FlutterTts();
+  final GeminiService geminiService = GeminiService();
+  final TtsService ttsService = TtsService();
+  final MediaExportService mediaExportService = MediaExportService();
   final GlobalKey _globalKey = GlobalKey();
 
   String currentLang = "Português (Brasil)";
-  List<String> languages = [
+  final List<String> languages = const [
     "Português (Brasil)",
     "English (US/UK)",
     "Español (España)",
@@ -70,14 +72,19 @@ class _MyHomePageState extends State<MyHomePage> {
   String selectedBibleVersion = "-";
   Map<String, String> bibleVersionsMap = {};
 
-  TextEditingController referenceController = TextEditingController();
-  TextEditingController verseController = TextEditingController();
+  final TextEditingController referenceController = TextEditingController();
+  final TextEditingController verseController = TextEditingController();
+  final TextEditingController geminiPromptController = TextEditingController();
 
   String selectedBackground = "default.png";
-  List<String> backgrounds = ["default.png"]; // Need to load from assets
+  List<String> backgrounds = ["default.png"];
   String? customImagePath;
 
-  String fontColorStr = "#FFFFFF";
+  String? geminiApiKey;
+  String selectedGeminiStyle = GeminiService.styleKeys.first;
+  bool isGeneratingGeminiBg = false;
+  bool isGeminiBackground = false;
+
   Color fontColor = Colors.white;
   double fontSize = 60.0;
   String aspectRatioStr = "1:1";
@@ -85,7 +92,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   bool generateAudio = false;
   String gender = "Female";
-  List<String> genders = ["Female", "Male"];
+  final List<String> genders = const ["Female", "Male"];
 
   String altText = "";
   String caption = "";
@@ -95,11 +102,16 @@ class _MyHomePageState extends State<MyHomePage> {
 
   // ⚡ Bolt: Cache status flags during state updates to avoid repeated
   // expensive string computations (.toLowerCase().contains()) on every UI rebuild.
-  void _updateStatus(String msg) {
+  void _updateStatus(String msg, {bool? forceError, bool? forceSuccess}) {
     statusMessage = msg;
     final lowerMsg = msg.toLowerCase();
-    isError = lowerMsg.contains("error");
-    isSuccess = lowerMsg.contains("success");
+    isError =
+        forceError ?? (lowerMsg.contains("error") || lowerMsg.contains("erro"));
+    isSuccess =
+        forceSuccess ??
+        (lowerMsg.contains("success") ||
+            lowerMsg.contains("sucesso") ||
+            lowerMsg.contains("éxito"));
   }
 
   bool isLoading = true;
@@ -117,8 +129,18 @@ class _MyHomePageState extends State<MyHomePage> {
     _initApp();
   }
 
+  @override
+  void dispose() {
+    referenceController.dispose();
+    verseController.dispose();
+    geminiPromptController.dispose();
+    ttsService.stop();
+    super.dispose();
+  }
+
   Future<void> _initApp() async {
     await generator.loadLocales();
+    geminiApiKey = await geminiService.loadApiKey();
     await _loadBackgrounds();
     await _loadBibleVersions();
     setState(() {
@@ -142,7 +164,7 @@ class _MyHomePageState extends State<MyHomePage> {
       selectedBackground = backgrounds.first;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint("Error loading backgrounds: \$e");
+        debugPrint("Error loading backgrounds: $e");
       }
     }
   }
@@ -164,7 +186,7 @@ class _MyHomePageState extends State<MyHomePage> {
       langCode = "es";
     }
 
-    var versions = await GetBibleAPI.getVersions(lang: langCode);
+    final versions = await GetBibleAPI.getVersions(lang: langCode);
     if (versions.isNotEmpty) {
       bibleVersionsMap = {for (var v in versions) v["name"]!: v["id"]!};
       bibleVersions = bibleVersionsMap.keys.toList();
@@ -176,13 +198,13 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         bibleVersions = ["-"];
         selectedBibleVersion = "-";
-        _updateStatus("Error loading versions.");
+        _updateStatus("Error loading versions.", forceError: true);
       });
     }
   }
 
   Future<void> _fetchVerse() async {
-    String reference = referenceController.text.trim();
+    final String reference = referenceController.text.trim();
     if (selectedBibleVersion == "-" || reference.isEmpty) {
       setState(() {
         _updateStatus("Please provide Version, and Reference.");
@@ -190,7 +212,7 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
-    String? bibleId = bibleVersionsMap[selectedBibleVersion];
+    final String? bibleId = bibleVersionsMap[selectedBibleVersion];
     if (bibleId == null) return;
 
     setState(() {
@@ -198,7 +220,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _updateStatus("Fetching verse...");
     });
 
-    String? content = await GetBibleAPI.getPassage(
+    final String? content = await GetBibleAPI.getPassage(
       bibleId,
       reference,
       lang: getLangKey(),
@@ -207,12 +229,15 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         isFetching = false;
         verseController.text = content;
-        _updateStatus("Verse fetched successfully.");
+        _updateStatus("Verse fetched successfully.", forceSuccess: true);
       });
     } else {
       setState(() {
         isFetching = false;
-        _updateStatus("Error fetching verse. Check reference format.");
+        _updateStatus(
+          "Error fetching verse. Check reference format.",
+          forceError: true,
+        );
       });
     }
   }
@@ -221,7 +246,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      // 🛡️ Sentinel: Validate file size (e.g., max 20MB) to prevent Memory Exhaustion DoS in UI rendering
+      // 🛡️ Sentinel: Validate file size (max 20MB) to prevent Memory Exhaustion DoS in UI rendering
       final int fileSize = await File(image.path).length();
       if (fileSize > 20 * 1024 * 1024) {
         if (!mounted) return;
@@ -233,13 +258,118 @@ class _MyHomePageState extends State<MyHomePage> {
 
       setState(() {
         customImagePath = image.path;
+        isGeminiBackground = false;
+      });
+    }
+  }
+
+  Future<bool> _showGeminiAuthDialog() async {
+    final String lang = getLangKey();
+    final bool? connected = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return GeminiAuthDialog(
+          lang: lang,
+          generator: generator,
+          initialApiKey: geminiApiKey,
+          onSave: (String entered) async {
+            await geminiService.saveApiKey(entered);
+            setState(() {
+              geminiApiKey = entered.isNotEmpty ? entered : null;
+              _updateStatus(
+                entered.isNotEmpty
+                    ? generator.getLocaleString(lang, "gemini_key_saved_msg")
+                    : generator.getLocaleString(lang, "gemini_key_removed_msg"),
+                forceSuccess: entered.isNotEmpty,
+              );
+            });
+          },
+          onDisconnect: () async {
+            await geminiService.saveApiKey("");
+            setState(() {
+              geminiApiKey = null;
+              _updateStatus(
+                generator.getLocaleString(lang, "gemini_key_removed_msg"),
+              );
+            });
+          },
+        );
+      },
+    );
+    return connected ?? false;
+  }
+
+  Future<void> _generateGeminiBackground() async {
+    final String verse = verseController.text.trim();
+    final String reference = referenceController.text.trim();
+    final String lang = getLangKey();
+
+    if (verse.isEmpty) return;
+
+    if (geminiApiKey == null || geminiApiKey!.isEmpty) {
+      final bool connected = await _showGeminiAuthDialog();
+      if (!connected || geminiApiKey == null || geminiApiKey!.isEmpty) {
+        return;
+      }
+    }
+
+    setState(() {
+      isGeneratingGeminiBg = true;
+      _updateStatus(generator.getLocaleString(lang, "gemini_generating_msg"));
+    });
+
+    final Uint8List? imageBytes = await geminiService.generateBackgroundImage(
+      apiKey: geminiApiKey!,
+      verse: verse,
+      reference: reference,
+      aspectRatio: aspectRatioStr,
+      styleKey: selectedGeminiStyle,
+      customPrompt: geminiPromptController.text.trim(),
+    );
+
+    if (imageBytes != null) {
+      try {
+        final directory = (await getApplicationDocumentsDirectory()).path;
+        final File bgFile = File(
+          '$directory/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
+        );
+        await bgFile.writeAsBytes(imageBytes, flush: true);
+
+        setState(() {
+          customImagePath = bgFile.path;
+          isGeminiBackground = true;
+          isGeneratingGeminiBg = false;
+          _updateStatus(
+            generator.getLocaleString(lang, "gemini_bg_success_msg"),
+            forceSuccess: true,
+          );
+        });
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint("Error saving Gemini background image: $e");
+        }
+        setState(() {
+          isGeneratingGeminiBg = false;
+          _updateStatus(
+            generator.getLocaleString(lang, "gemini_bg_error_msg"),
+            forceError: true,
+          );
+        });
+      }
+    } else {
+      setState(() {
+        isGeneratingGeminiBg = false;
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_bg_error_msg"),
+          forceError: true,
+        );
       });
     }
   }
 
   Future<void> _generateContent() async {
-    String verse = verseController.text.trim();
-    String reference = referenceController.text.trim();
+    final String verse = verseController.text.trim();
+    final String reference = referenceController.text.trim();
 
     if (verse.isEmpty || reference.isEmpty) return;
 
@@ -248,8 +378,24 @@ class _MyHomePageState extends State<MyHomePage> {
       _updateStatus("Generating content...");
     });
 
-    String lang = getLangKey();
-    var texts = await generator.generateTexts(lang, verse, reference);
+    final String lang = getLangKey();
+    String? customDescription;
+    if (isGeminiBackground && customImagePath != null) {
+      final String styleLabel = generator.getLocaleString(
+        lang,
+        selectedGeminiStyle,
+      );
+      final String extraDetails = geminiPromptController.text.trim();
+      customDescription = extraDetails.isNotEmpty
+          ? "AI-generated background ($styleLabel: $extraDetails)."
+          : "AI-generated background ($styleLabel).";
+    }
+    final Map<String, String> texts = await generator.generateTexts(
+      lang,
+      verse,
+      reference,
+      customDescription: customDescription,
+    );
     setState(() {
       altText = texts["altText"]!;
       caption = texts["caption"]!;
@@ -257,86 +403,28 @@ class _MyHomePageState extends State<MyHomePage> {
 
     String? audioPath;
     if (generateAudio) {
-      audioPath = await _generateAudio(verse, reference, lang);
+      audioPath = await ttsService.generateAudio(
+        verse: verse,
+        reference: reference,
+        lang: lang,
+        gender: gender,
+      );
     }
 
-    await _captureSaveAndShareImage(audioPath: audioPath);
+    await mediaExportService.captureSaveAndShareImage(
+      boundaryKey: _globalKey,
+      altText: altText,
+      caption: caption,
+      audioPath: audioPath,
+    );
 
     setState(() {
       isGenerating = false;
-      _updateStatus(generator.getLocaleString(lang, "success_msg"));
+      _updateStatus(
+        generator.getLocaleString(lang, "success_msg"),
+        forceSuccess: true,
+      );
     });
-  }
-
-  Future<String?> _generateAudio(
-    String verse,
-    String reference,
-    String lang,
-  ) async {
-    await flutterTts.setLanguage(lang);
-    if (gender == "Female") {
-      await flutterTts.setVoice({
-        "name": "pt-BR-FranciscaNeural",
-        "locale": "pt-BR",
-      });
-    }
-
-    String textToRead = "$reference. $verse";
-    if (Platform.isAndroid) {
-      String fileName =
-          "verse_audio_${DateTime.now().millisecondsSinceEpoch}.wav";
-      // flutter_tts synthesizeToFile saves to getExternalStorageDirectory on Android by default or getApplicationDocumentsDirectory
-      // The file is saved internally and we need the path.
-      final dir = await getExternalStorageDirectory();
-      if (dir != null) {
-        // synthesizeToFile only takes the filename, not the full path in older flutter_tts or takes the filename and prepends path.
-        // Actually, in flutter_tts for android, synthesizeToFile saves to the external storage directory.
-        await flutterTts.synthesizeToFile(textToRead, fileName);
-        // Wait for file to exist
-        await Future.delayed(const Duration(seconds: 2));
-        return "${dir.path}/$fileName";
-      }
-    }
-    return null;
-  }
-
-  Future<void> _captureSaveAndShareImage({String? audioPath}) async {
-    try {
-      RenderRepaintBoundary boundary =
-          _globalKey.currentContext!.findRenderObject()
-              as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-      final directory = (await getApplicationDocumentsDirectory()).path;
-      File imgFile = File(
-        '$directory/verse_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-      await imgFile.writeAsBytes(pngBytes);
-
-      // Save directly to the public gallery
-      bool hasAccess = await Gal.hasAccess();
-      if (!hasAccess) {
-        await Gal.requestAccess();
-      }
-      await Gal.putImage(imgFile.path, album: 'Inclusive Bible');
-
-      // Share image (and audio if generated)
-      List<XFile> filesToShare = [XFile(imgFile.path)];
-      // ⚡ Bolt: Avoid synchronous I/O on main thread
-      if (audioPath != null && await File(audioPath).exists()) {
-        filesToShare.add(XFile(audioPath));
-      }
-
-      await Share.shareXFiles(filesToShare, text: "$altText\n\n$caption");
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("Error capturing image: $e");
-      }
-    }
   }
 
   void _copyToClipboard(String text) {
@@ -350,99 +438,45 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildPreview() {
-    double width = 300;
-    double height = 300;
-    if (aspectRatioStr == "3:4") {
-      height = 400;
-    } else if (aspectRatioStr == "4:3") {
-      width = 400;
-      height = 300;
-    }
-
-    return RepaintBoundary(
-      key: _globalKey,
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: customImagePath != null
-                ? FileImage(File(customImagePath!)) as ImageProvider
-                : AssetImage("assets/backgrounds/$selectedBackground"),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.black.withAlpha(128),
-              BlendMode.darken,
-            ),
-          ),
-        ),
-        child: AnimatedBuilder(
-          animation: _previewListenable,
-          builder: (context, child) {
-            return Stack(
-              children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Transform.translate(
-                      offset: Offset(0, yOffset - 20),
-                      child: Text(
-                        verseController.text.isEmpty
-                            ? "Preview Verse"
-                            : verseController.text,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.roboto(
-                          color: fontColor,
-                          fontSize: fontSize / 2, // Scale down for preview
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.center,
-                  child: Transform.translate(
-                    offset: Offset(0, yOffset + (fontSize / 2) + 40),
-                    child: Text(
-                      referenceController.text.isEmpty
-                          ? "Reference"
-                          : referenceController.text,
-                      style: GoogleFonts.roboto(
-                        color: fontColor,
-                        fontSize: (fontSize * 0.66) / 2,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    String lang = getLangKey();
+    final String lang = getLangKey();
+    final bool isGeminiConnected =
+        geminiApiKey != null && geminiApiKey!.isNotEmpty;
+
+    final Widget previewWidget = VersePreviewCard(
+      repaintKey: _globalKey,
+      aspectRatioStr: aspectRatioStr,
+      customImagePath: customImagePath,
+      selectedBackground: selectedBackground,
+      previewListenable: _previewListenable,
+      verseController: verseController,
+      referenceController: referenceController,
+      fontColor: fontColor,
+      fontSize: fontSize,
+      yOffset: yOffset,
+      lang: lang,
+      generator: generator,
+    );
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          generator.getLocaleString(
-            lang,
-            "title",
-            kwargs: {'title': 'Inclusive Bible Generator'},
-          ),
-        ),
+        title: Text(generator.getLocaleString(lang, "title")),
         actions: [
+          IconButton(
+            tooltip: generator.getLocaleString(
+              lang,
+              isGeminiConnected ? "gemini_connected_btn" : "gemini_connect_btn",
+            ),
+            icon: Icon(
+              isGeminiConnected ? Icons.auto_awesome : Icons.key_outlined,
+            ),
+            onPressed: _showGeminiAuthDialog,
+          ),
           DropdownButton<String>(
             value: currentLang,
             onChanged: (String? newValue) {
@@ -459,7 +493,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          Widget formContent = Padding(
+          final Widget formContent = Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,20 +564,11 @@ class _MyHomePageState extends State<MyHomePage> {
                         suffixIcon: value.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear),
-                                tooltip:
-                                    generator.getLocaleString(
-                                          lang,
-                                          "clear_btn",
-                                        ) !=
-                                        ""
-                                    ? generator.getLocaleString(
-                                        lang,
-                                        "clear_btn",
-                                      )
-                                    : 'Clear',
-                                onPressed: () {
-                                  referenceController.clear();
-                                },
+                                tooltip: generator.getLocaleString(
+                                  lang,
+                                  "clear_btn",
+                                ),
+                                onPressed: referenceController.clear,
                               )
                             : null,
                       ),
@@ -568,20 +593,11 @@ class _MyHomePageState extends State<MyHomePage> {
                         suffixIcon: value.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear),
-                                tooltip:
-                                    generator.getLocaleString(
-                                          lang,
-                                          "clear_btn",
-                                        ) !=
-                                        ""
-                                    ? generator.getLocaleString(
-                                        lang,
-                                        "clear_btn",
-                                      )
-                                    : 'Clear',
-                                onPressed: () {
-                                  verseController.clear();
-                                },
+                                tooltip: generator.getLocaleString(
+                                  lang,
+                                  "clear_btn",
+                                ),
+                                onPressed: verseController.clear,
                               )
                             : null,
                       ),
@@ -606,6 +622,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       onChanged: (v) => setState(() {
                         selectedBackground = v!;
                         customImagePath = null;
+                        isGeminiBackground = false;
                       }),
                     ),
                     const SizedBox(width: 10),
@@ -617,6 +634,19 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                   ],
+                ),
+                GeminiBackgroundCard(
+                  lang: lang,
+                  generator: generator,
+                  isConnected: isGeminiConnected,
+                  selectedStyle: selectedGeminiStyle,
+                  onStyleChanged: (v) =>
+                      setState(() => selectedGeminiStyle = v),
+                  promptController: geminiPromptController,
+                  verseController: verseController,
+                  isGenerating: isGeneratingGeminiBg,
+                  onConnectPressed: _showGeminiAuthDialog,
+                  onGeneratePressed: _generateGeminiBackground,
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -638,7 +668,12 @@ class _MyHomePageState extends State<MyHomePage> {
                           context: context,
                           builder: (BuildContext context) {
                             return AlertDialog(
-                              title: const Text('Pick a color!'),
+                              title: Text(
+                                generator.getLocaleString(
+                                  lang,
+                                  "pick_color_title",
+                                ),
+                              ),
                               content: SingleChildScrollView(
                                 child: ColorPicker(
                                   pickerColor: fontColor,
@@ -648,7 +683,12 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                               actions: <Widget>[
                                 ElevatedButton(
-                                  child: const Text('Got it'),
+                                  child: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "got_it_btn",
+                                    ),
+                                  ),
                                   onPressed: () => Navigator.of(context).pop(),
                                 ),
                               ],
@@ -657,14 +697,15 @@ class _MyHomePageState extends State<MyHomePage> {
                         );
                       },
                       icon: const Icon(Icons.color_lens),
-                      label: const Text("Select Color"),
+                      label: Text(
+                        generator.getLocaleString(lang, "select_color_btn"),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  generator.getLocaleString(lang, "font_size_label") +
-                      ": ${fontSize.round()}",
+                  "${generator.getLocaleString(lang, "font_size_label")}: ${fontSize.round()}",
                 ),
                 Slider(
                   value: fontSize,
@@ -704,8 +745,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  generator.getLocaleString(lang, "y_offset_label") +
-                      ": ${yOffset.round()}",
+                  "${generator.getLocaleString(lang, "y_offset_label")}: ${yOffset.round()}",
                 ),
                 Slider(
                   value: yOffset,
@@ -743,7 +783,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       DropdownButton<String>(
                         value: gender,
                         items: genders.map((v) {
-                          String labelKey = v == "Female"
+                          final String labelKey = v == "Female"
                               ? "gender_female"
                               : "gender_male";
                           return DropdownMenuItem(
@@ -860,7 +900,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   flex: 1,
                   child: SingleChildScrollView(child: formContent),
                 ),
-                Expanded(flex: 1, child: Center(child: _buildPreview())),
+                Expanded(flex: 1, child: Center(child: previewWidget)),
               ],
             );
           } else {
@@ -869,7 +909,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   formContent,
                   const SizedBox(height: 20),
-                  Center(child: _buildPreview()),
+                  Center(child: previewWidget),
                   const SizedBox(height: 40),
                 ],
               ),
