@@ -33,3 +33,6 @@
 ## 2024-11-09 - Fix dead button states for forms
 **Learning:** Primary action buttons that depend on text inputs (like form fields) often appear in a "dead" disabled state when implemented directly in a stateless-like context, such as a large `build` method where text field typing doesn't trigger state rebuilds.
 **Action:** Always wrap buttons that depend on dynamic input lengths in reactive builders (`ValueListenableBuilder` or `AnimatedBuilder` for multiple controllers) to ensure they instantly enable/disable and provide immediate, accurate visual feedback to the user.
+## 2024-05-18 - Fix Multiline TextField Label Alignment
+**Learning:** By default in Flutter, `TextField` labels are vertically centered. For multiline text fields (`maxLines` > 1), this causes the label to float awkwardly in the middle of the input area. Setting `alignLabelWithHint: true` forces the label to align with the top of the input.
+**Action:** Always set `alignLabelWithHint: true` on `InputDecoration` when using multiline `TextField`s to ensure a proper visual hierarchy and a standard user experience.

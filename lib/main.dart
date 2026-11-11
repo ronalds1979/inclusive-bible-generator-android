@@ -539,6 +539,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       maxLines: 4,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
+                        alignLabelWithHint: true,
                         labelText: generator.getLocaleString(
                           lang,
                           "verse_label",
