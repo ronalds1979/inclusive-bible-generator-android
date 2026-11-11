@@ -106,7 +106,8 @@ class _MyHomePageState extends State<MyHomePage> {
   List<String> backgrounds = ["default.png"];
   String? customImagePath;
 
-  String? geminiApiKey;
+  String? geminiAccessToken;
+  String? geminiUserEmail;
   String selectedGeminiStyle = GeminiService.styleKeys.first;
   bool isGeneratingGeminiBg = false;
   bool isGeminiBackground = false;
@@ -132,7 +133,11 @@ class _MyHomePageState extends State<MyHomePage> {
     statusMessage = msg;
     final lowerMsg = msg.toLowerCase();
     isError =
-        forceError ?? (lowerMsg.contains("error") || lowerMsg.contains("erro"));
+        forceError ??
+        (lowerMsg.contains("error") ||
+            lowerMsg.contains("erro") ||
+            lowerMsg.contains("falha") ||
+            lowerMsg.contains("falló"));
     isSuccess =
         forceSuccess ??
         (lowerMsg.contains("success") ||
@@ -170,7 +175,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _initApp() async {
     await generator.loadLocales();
-    geminiApiKey = await geminiService.loadApiKey();
+    geminiAccessToken = await geminiService.signInSilently();
+    geminiUserEmail = geminiService.userEmail;
     await _loadBackgrounds();
     await _loadBibleVersions();
     setState(() {
@@ -296,33 +302,51 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<bool> _triggerGoogleSignIn() async {
+    final String lang = getLangKey();
+    final String? token = await geminiService.signInWithGoogle();
+    if (token != null && token.isNotEmpty) {
+      setState(() {
+        geminiAccessToken = token;
+        geminiUserEmail = geminiService.userEmail;
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_auth_success_msg"),
+          forceSuccess: true,
+        );
+      });
+      return true;
+    } else {
+      setState(() {
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_auth_error_msg"),
+          forceError: true,
+        );
+      });
+      return false;
+    }
+  }
+
   Future<bool> _showGeminiAuthDialog() async {
     final String lang = getLangKey();
+    final bool isSignedIn =
+        geminiAccessToken != null && geminiAccessToken!.isNotEmpty;
+
     final bool? connected = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return GeminiAuthDialog(
           lang: lang,
           generator: generator,
-          initialApiKey: geminiApiKey,
-          onSave: (String entered) async {
-            await geminiService.saveApiKey(entered);
+          userEmail: geminiUserEmail,
+          isSignedIn: isSignedIn,
+          onSignIn: _triggerGoogleSignIn,
+          onSignOut: () async {
+            await geminiService.signOut();
             setState(() {
-              geminiApiKey = entered.isNotEmpty ? entered : null;
+              geminiAccessToken = null;
+              geminiUserEmail = null;
               _updateStatus(
-                entered.isNotEmpty
-                    ? generator.getLocaleString(lang, "gemini_key_saved_msg")
-                    : generator.getLocaleString(lang, "gemini_key_removed_msg"),
-                forceSuccess: entered.isNotEmpty,
-              );
-            });
-          },
-          onDisconnect: () async {
-            await geminiService.saveApiKey("");
-            setState(() {
-              geminiApiKey = null;
-              _updateStatus(
-                generator.getLocaleString(lang, "gemini_key_removed_msg"),
+                generator.getLocaleString(lang, "gemini_signed_out_msg"),
               );
             });
           },
@@ -339,10 +363,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (verse.isEmpty) return;
 
-    if (geminiApiKey == null || geminiApiKey!.isEmpty) {
-      final bool connected = await _showGeminiAuthDialog();
-      if (!connected || geminiApiKey == null || geminiApiKey!.isEmpty) {
+    if (geminiAccessToken == null || geminiAccessToken!.isEmpty) {
+      final bool signedIn = await _triggerGoogleSignIn();
+      if (!signedIn ||
+          geminiAccessToken == null ||
+          geminiAccessToken!.isEmpty) {
         return;
+      }
+    } else {
+      final String? refreshedToken = await geminiService.getAccessToken();
+      if (refreshedToken != null && refreshedToken.isNotEmpty) {
+        geminiAccessToken = refreshedToken;
       }
     }
 
@@ -352,7 +383,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     final Uint8List? imageBytes = await geminiService.generateBackgroundImage(
-      apiKey: geminiApiKey!,
+      accessToken: geminiAccessToken!,
       verse: verse,
       reference: reference,
       aspectRatio: aspectRatioStr,
@@ -479,7 +510,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     final String lang = getLangKey();
     final bool isGeminiConnected =
-        geminiApiKey != null && geminiApiKey!.isNotEmpty;
+        geminiAccessToken != null && geminiAccessToken!.isNotEmpty;
 
     final Widget previewWidget = VersePreviewCard(
       repaintKey: _globalKey,
@@ -506,7 +537,7 @@ class _MyHomePageState extends State<MyHomePage> {
               isGeminiConnected ? "gemini_connected_btn" : "gemini_connect_btn",
             ),
             icon: Icon(
-              isGeminiConnected ? Icons.auto_awesome : Icons.key_outlined,
+              isGeminiConnected ? Icons.account_circle : Icons.login,
             ),
             onPressed: _showGeminiAuthDialog,
           ),
@@ -672,13 +703,16 @@ class _MyHomePageState extends State<MyHomePage> {
                   lang: lang,
                   generator: generator,
                   isConnected: isGeminiConnected,
+                  userEmail: geminiUserEmail,
                   selectedStyle: selectedGeminiStyle,
                   onStyleChanged: (v) =>
                       setState(() => selectedGeminiStyle = v),
                   promptController: geminiPromptController,
                   verseController: verseController,
                   isGenerating: isGeneratingGeminiBg,
-                  onConnectPressed: _showGeminiAuthDialog,
+                  onConnectPressed: isGeminiConnected
+                      ? _showGeminiAuthDialog
+                      : _triggerGoogleSignIn,
                   onGeneratePressed: _generateGeminiBackground,
                 ),
                 const SizedBox(height: 10),

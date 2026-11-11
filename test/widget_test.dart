@@ -19,93 +19,92 @@ void main() {
     expect((await GetBibleAPI.getVersions(lang: "es")).isNotEmpty, isTrue);
   });
 
-  testWidgets('GeminiBackgroundCard enables generate button only when verse is non-empty', (
-    WidgetTester tester,
-  ) async {
-    final generator = Generator();
-    generator.locales = {
-      "en": {
-        "gemini_section_title": "AI Background (Gemini)",
-        "gemini_connect_btn": "Connect Gemini",
-        "gemini_connected_btn": "Gemini Connected",
-        "gemini_style_label": "Visual Style:",
-        "style_nature": "Serene Nature",
-        "style_watercolor": "Watercolor",
-        "style_cinematic": "Cinematic Light",
-        "style_oil_painting": "Oil Painting",
-        "style_minimalist": "Minimalist",
-        "gemini_prompt_label": "Extra Scene Details (Optional)",
-        "gemini_generate_bg_btn": "Generate Background with Gemini",
-        "clear_btn": "Clear",
-      },
-    };
+  testWidgets(
+    'GeminiBackgroundCard enables generate button only when verse is non-empty',
+    (WidgetTester tester) async {
+      final generator = Generator();
+      generator.locales = {
+        "en": {
+          "gemini_section_title": "AI Background (Gemini)",
+          "gemini_connect_btn": "Sign in with Google",
+          "gemini_connected_btn": "Google Connected",
+          "gemini_style_label": "Visual Style:",
+          "style_nature": "Serene Nature",
+          "style_watercolor": "Watercolor",
+          "style_cinematic": "Cinematic Light",
+          "style_oil_painting": "Oil Painting",
+          "style_minimalist": "Minimalist",
+          "gemini_prompt_label": "Extra Scene Details (Optional)",
+          "gemini_generate_bg_btn": "Generate Background with Gemini",
+          "clear_btn": "Clear",
+        },
+      };
 
-    final promptController = TextEditingController();
-    final verseController = TextEditingController();
-    bool generateTapped = false;
+      final promptController = TextEditingController();
+      final verseController = TextEditingController();
+      bool generateTapped = false;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: GeminiBackgroundCard(
-            lang: "en",
-            generator: generator,
-            isConnected: false,
-            selectedStyle: "style_nature",
-            onStyleChanged: (_) {},
-            promptController: promptController,
-            verseController: verseController,
-            isGenerating: false,
-            onConnectPressed: () {},
-            onGeneratePressed: () {
-              generateTapped = true;
-            },
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GeminiBackgroundCard(
+              lang: "en",
+              generator: generator,
+              isConnected: false,
+              selectedStyle: "style_nature",
+              onStyleChanged: (_) {},
+              promptController: promptController,
+              verseController: verseController,
+              isGenerating: false,
+              onConnectPressed: () {},
+              onGeneratePressed: () {
+                generateTapped = true;
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final generateBtnFinder = find.widgetWithText(
-      ElevatedButton,
-      "Generate Background with Gemini",
-    );
-    expect(generateBtnFinder, findsOneWidget);
+      final generateBtnFinder = find.widgetWithText(
+        ElevatedButton,
+        "Generate Background with Gemini",
+      );
+      expect(generateBtnFinder, findsOneWidget);
 
-    // Initially disabled when verseController is empty
-    await tester.tap(generateBtnFinder);
-    await tester.pump();
-    expect(generateTapped, isFalse);
+      // Initially disabled when verseController is empty
+      await tester.tap(generateBtnFinder);
+      await tester.pump();
+      expect(generateTapped, isFalse);
 
-    // Entering a verse enables the button
-    verseController.text = "The Lord is my shepherd.";
-    await tester.pump();
+      // Entering a verse enables the button
+      verseController.text = "The Lord is my shepherd.";
+      await tester.pump();
 
-    await tester.tap(generateBtnFinder);
-    await tester.pump();
-    expect(generateTapped, isTrue);
+      await tester.tap(generateBtnFinder);
+      await tester.pump();
+      expect(generateTapped, isTrue);
 
-    promptController.dispose();
-    verseController.dispose();
-  });
+      promptController.dispose();
+      verseController.dispose();
+    },
+  );
 
-  testWidgets('GeminiAuthDialog saves and disconnects API key', (
+  testWidgets('GeminiAuthDialog triggers Google Sign-In and Sign-Out callbacks', (
     WidgetTester tester,
   ) async {
     final generator = Generator();
     generator.locales = {
       "en": {
-        "gemini_dialog_title": "Connect Gemini Account (API Key)",
-        "gemini_dialog_hint": "Enter your key",
-        "gemini_api_key_label": "Gemini API Key",
-        "gemini_show_key_tooltip": "Show API key",
-        "gemini_hide_key_tooltip": "Hide API key",
-        "gemini_save_btn": "Save Key",
-        "gemini_disconnect_btn": "Disconnect",
-        "gemini_cancel_btn": "Cancel",
+        "gemini_dialog_title": "Google Account (Gemini)",
+        "gemini_dialog_hint": "Sign in with your Google Account",
+        "gemini_signed_in_as": "Signed in as: {email}",
+        "gemini_sign_in_btn": "Sign in with Google",
+        "gemini_disconnect_btn": "Sign Out",
+        "gemini_cancel_btn": "Close",
       },
     };
 
-    String? savedKey;
+    bool signInCalled = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -113,26 +112,22 @@ void main() {
           body: GeminiAuthDialog(
             lang: "en",
             generator: generator,
-            initialApiKey: null,
-            onSave: (key) async {
-              savedKey = key;
+            userEmail: null,
+            isSignedIn: false,
+            onSignIn: () async {
+              signInCalled = true;
+              return true;
             },
-            onDisconnect: () async {},
+            onSignOut: () async {},
           ),
         ),
       ),
     );
 
-    expect(find.byTooltip("Show API key"), findsOneWidget);
-    await tester.tap(find.byTooltip("Show API key"));
-    await tester.pump();
-    expect(find.byTooltip("Hide API key"), findsOneWidget);
-
-    await tester.enterText(find.byType(TextField), "AIzaSyTestKey123");
-    await tester.tap(find.text("Save Key"));
+    await tester.tap(find.text("Sign in with Google"));
     await tester.pumpAndSettle();
 
-    expect(savedKey, "AIzaSyTestKey123");
+    expect(signInCalled, isTrue);
   });
 
   testWidgets('VersePreviewCard updates live when controllers change', (
@@ -193,7 +188,7 @@ void main() {
     (WidgetTester tester) async {
       await tester.runAsync(() async {
         await tester.pumpWidget(const MyApp());
-        // Allow async asset bundle and file initialization to complete
+        // Allow async asset bundle and initialization to complete
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();

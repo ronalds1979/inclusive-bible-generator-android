@@ -6,6 +6,7 @@ class GeminiBackgroundCard extends StatelessWidget {
   final String lang;
   final Generator generator;
   final bool isConnected;
+  final String? userEmail;
   final String selectedStyle;
   final ValueChanged<String> onStyleChanged;
   final TextEditingController promptController;
@@ -19,6 +20,7 @@ class GeminiBackgroundCard extends StatelessWidget {
     required this.lang,
     required this.generator,
     required this.isConnected,
+    this.userEmail,
     required this.selectedStyle,
     required this.onStyleChanged,
     required this.promptController,
@@ -30,6 +32,12 @@ class GeminiBackgroundCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String connectLabel = isConnected
+        ? (userEmail != null && userEmail!.isNotEmpty
+              ? userEmail!
+              : generator.getLocaleString(lang, "gemini_connected_btn"))
+        : generator.getLocaleString(lang, "gemini_connect_btn");
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       child: Padding(
@@ -50,17 +58,10 @@ class GeminiBackgroundCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onConnectPressed,
                   icon: Icon(
-                    isConnected ? Icons.verified_user : Icons.key,
+                    isConnected ? Icons.verified_user : Icons.login,
                     size: 16,
                   ),
-                  label: Text(
-                    generator.getLocaleString(
-                      lang,
-                      isConnected
-                          ? "gemini_connected_btn"
-                          : "gemini_connect_btn",
-                    ),
-                  ),
+                  label: Text(connectLabel),
                 ),
               ],
             ),

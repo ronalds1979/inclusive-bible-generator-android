@@ -107,7 +107,7 @@ void main() {
     );
 
     test(
-      'generateBackgroundImage sends correct Interactions API request and returns decoded image bytes',
+      'generateBackgroundImage sends OAuth Bearer token and Interactions API request and returns decoded image bytes',
       () async {
         final expectedBytes = Uint8List.fromList([10, 20, 30, 40]);
         late http.Request capturedRequest;
@@ -137,7 +137,7 @@ void main() {
 
         final service = GeminiService(httpClient: mockClient);
         final result = await service.generateBackgroundImage(
-          apiKey: 'test-api-key-123',
+          accessToken: 'ya29.test-oauth-token-123',
           verse: 'In the beginning God created the heavens and the earth.',
           reference: 'Genesis 1:1',
           aspectRatio: '3:4',
@@ -147,7 +147,10 @@ void main() {
 
         expect(result, equals(expectedBytes));
         expect(capturedRequest.url.toString(), GeminiService.endpoint);
-        expect(capturedRequest.headers['x-goog-api-key'], 'test-api-key-123');
+        expect(
+          capturedRequest.headers['Authorization'],
+          'Bearer ya29.test-oauth-token-123',
+        );
         expect(
           capturedRequest.headers['Api-Revision'],
           GeminiService.apiRevision,

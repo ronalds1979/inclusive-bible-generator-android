@@ -1,15 +1,19 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 
 class GeminiService {
   static const String endpoint =
       "https://generativelanguage.googleapis.com/v1beta/interactions";
   static const String apiRevision = "2026-05-20";
   static const String imageModel = "gemini-nano-banana-2.1";
-  static const String _keyFileName = ".gemini_api_key";
+
+  static const List<String> oauthScopes = <String>[
+    'email',
+    'https://www.googleapis.com/auth/generative-language',
+    'https://www.googleapis.com/auth/cloud-platform',
+  ];
 
   static const List<String> styleKeys = [
     "style_nature",
@@ -33,44 +37,86 @@ class GeminiService {
   };
 
   final http.Client _httpClient;
+  final GoogleSignIn _googleSignIn;
 
-  GeminiService({http.Client? httpClient})
-    : _httpClient = httpClient ?? http.Client();
+  String? _cachedAccessToken;
+  String? _userEmail;
 
-  Future<File> _getKeyFile() async {
-    final dir = await getApplicationSupportDirectory();
-    return File("${dir.path}/$_keyFileName");
-  }
+  GeminiService({http.Client? httpClient, GoogleSignIn? googleSignIn})
+    : _httpClient = httpClient ?? http.Client(),
+      _googleSignIn =
+          googleSignIn ?? GoogleSignIn(scopes: oauthScopes);
 
-  Future<String?> loadApiKey() async {
+  String? get userEmail => _userEmail ?? _googleSignIn.currentUser?.email;
+  bool get isSignedIn =>
+      (_cachedAccessToken != null && _cachedAccessToken!.isNotEmpty) ||
+      _googleSignIn.currentUser != null;
+
+  /// Attempts to silently restore a previous Google Sign-In session.
+  Future<String?> signInSilently() async {
     try {
-      final file = await _getKeyFile();
-      if (await file.exists()) {
-        final key = (await file.readAsString()).trim();
-        return key.isNotEmpty ? key : null;
+      final GoogleSignInAccount? account =
+          await _googleSignIn.signInSilently();
+      if (account != null) {
+        _userEmail = account.email;
+        final GoogleSignInAuthentication auth = await account.authentication;
+        _cachedAccessToken = auth.accessToken;
+        return _cachedAccessToken;
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint("Error loading Gemini API key: $e");
+        debugPrint("Silent Google Sign-In error: $e");
       }
     }
     return null;
   }
 
-  Future<void> saveApiKey(String apiKey) async {
+  /// Triggers the interactive Google Sign-In flow (account picker / username & password).
+  Future<String?> signInWithGoogle() async {
     try {
-      final file = await _getKeyFile();
-      final trimmed = apiKey.trim();
-      if (trimmed.isEmpty) {
-        if (await file.exists()) {
-          await file.delete();
+      final GoogleSignInAccount? account = await _googleSignIn.signIn();
+      if (account == null) {
+        return null;
+      }
+      _userEmail = account.email;
+      final GoogleSignInAuthentication auth = await account.authentication;
+      _cachedAccessToken = auth.accessToken;
+      return _cachedAccessToken;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Interactive Google Sign-In error: $e");
+      }
+      return null;
+    }
+  }
+
+  /// Retrieves a fresh OAuth access token from the active Google account.
+  Future<String?> getAccessToken() async {
+    try {
+      final GoogleSignInAccount? account = _googleSignIn.currentUser;
+      if (account != null) {
+        final GoogleSignInAuthentication auth = await account.authentication;
+        if (auth.accessToken != null && auth.accessToken!.isNotEmpty) {
+          _cachedAccessToken = auth.accessToken;
         }
-      } else {
-        await file.writeAsString(trimmed, flush: true);
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint("Error saving Gemini API key: $e");
+        debugPrint("Error refreshing Google OAuth token: $e");
+      }
+    }
+    return _cachedAccessToken;
+  }
+
+  /// Signs out from the connected Google Account.
+  Future<void> signOut() async {
+    _cachedAccessToken = null;
+    _userEmail = null;
+    try {
+      await _googleSignIn.signOut();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error signing out of Google: $e");
       }
     }
   }
@@ -81,28 +127,19 @@ class GeminiService {
     String styleKey = "style_nature",
     String customPrompt = "",
   }) {
-    // 🛡️ Sentinel: Enforce length limits on user-controlled prompt inputs to prevent DoS
-    final String safeVerse =
-        verse.length > 5000 ? verse.substring(0, 5000) : verse;
-    final String safeReference =
-        reference.length > 500 ? reference.substring(0, 500) : reference;
-    final String safeCustomPrompt = customPrompt.length > 1000
-        ? customPrompt.substring(0, 1000)
-        : customPrompt;
-
     final String styleDescription =
         _stylePrompts[styleKey] ?? _stylePrompts["style_nature"]!;
     final StringBuffer buffer = StringBuffer();
     buffer.write(
       "Create an inspiring, respectful background illustration symbolically aligned with the Bible passage ",
     );
-    if (safeReference.trim().isNotEmpty) {
-      buffer.write('"${safeReference.trim()}": ');
+    if (reference.trim().isNotEmpty) {
+      buffer.write('"$reference": ');
     }
-    buffer.write('"$safeVerse". ');
+    buffer.write('"$verse". ');
     buffer.write("Visual style: $styleDescription. ");
-    if (safeCustomPrompt.trim().isNotEmpty) {
-      buffer.write("Additional visual details: ${safeCustomPrompt.trim()}. ");
+    if (customPrompt.trim().isNotEmpty) {
+      buffer.write("Additional visual details: ${customPrompt.trim()}. ");
     }
     buffer.write(
       "Important: Do NOT include any text, letters, words, numbers, typography, or watermarks in the image, as text will be overlaid later.",
@@ -111,22 +148,11 @@ class GeminiService {
   }
 
   static Uint8List? extractImageBytesFromResponse(Map<String, dynamic> data) {
-    // 🛡️ Sentinel: Guard base64Decode against malformed payloads or oversized strings (> 28MB base64 ~ 20MB binary)
-    Uint8List? tryDecodeBase64(String b64) {
-      if (b64.isEmpty || b64.length > 28 * 1024 * 1024) return null;
-      try {
-        return base64Decode(b64);
-      } on FormatException {
-        return null;
-      }
-    }
-
     final outputImage = data["output_image"];
     if (outputImage is Map<String, dynamic>) {
       final b64 = outputImage["data"];
-      if (b64 is String) {
-        final decoded = tryDecodeBase64(b64);
-        if (decoded != null) return decoded;
+      if (b64 is String && b64.isNotEmpty) {
+        return base64Decode(b64);
       }
     }
 
@@ -141,9 +167,8 @@ class GeminiService {
               final block = content[j];
               if (block is Map<String, dynamic> && block["type"] == "image") {
                 final b64 = block["data"];
-                if (b64 is String) {
-                  final decoded = tryDecodeBase64(b64);
-                  if (decoded != null) return decoded;
+                if (b64 is String && b64.isNotEmpty) {
+                  return base64Decode(b64);
                 }
               }
             }
@@ -155,15 +180,15 @@ class GeminiService {
   }
 
   Future<Uint8List?> generateBackgroundImage({
-    required String apiKey,
+    required String accessToken,
     required String verse,
     required String reference,
     String aspectRatio = "1:1",
     String styleKey = "style_nature",
     String customPrompt = "",
   }) async {
-    final trimmedKey = apiKey.trim();
-    if (trimmedKey.isEmpty || verse.trim().isEmpty) {
+    final trimmedToken = accessToken.trim();
+    if (trimmedToken.isEmpty || verse.trim().isEmpty) {
       return null;
     }
 
@@ -194,7 +219,7 @@ class GeminiService {
           .post(
             Uri.parse(endpoint),
             headers: {
-              "x-goog-api-key": trimmedKey,
+              "Authorization": "Bearer $trimmedToken",
               "Content-Type": "application/json",
               "Api-Revision": apiRevision,
             },
