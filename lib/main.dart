@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,7 +20,18 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final Generator? generator;
+  final GeminiService? geminiService;
+  final TtsService? ttsService;
+  final MediaExportService? mediaExportService;
+
+  const MyApp({
+    super.key,
+    this.generator,
+    this.geminiService,
+    this.ttsService,
+    this.mediaExportService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -42,23 +52,39 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: const MyHomePage(),
+      home: MyHomePage(
+        generator: generator,
+        geminiService: geminiService,
+        ttsService: ttsService,
+        mediaExportService: mediaExportService,
+      ),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+  final Generator? generator;
+  final GeminiService? geminiService;
+  final TtsService? ttsService;
+  final MediaExportService? mediaExportService;
+
+  const MyHomePage({
+    super.key,
+    this.generator,
+    this.geminiService,
+    this.ttsService,
+    this.mediaExportService,
+  });
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final Generator generator = Generator();
-  final GeminiService geminiService = GeminiService();
-  final TtsService ttsService = TtsService();
-  final MediaExportService mediaExportService = MediaExportService();
+  late final Generator generator;
+  late final GeminiService geminiService;
+  late final TtsService ttsService;
+  late final MediaExportService mediaExportService;
   final GlobalKey _globalKey = GlobalKey();
 
   String currentLang = "Português (Brasil)";
@@ -122,6 +148,10 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+    generator = widget.generator ?? Generator();
+    geminiService = widget.geminiService ?? GeminiService();
+    ttsService = widget.ttsService ?? TtsService();
+    mediaExportService = widget.mediaExportService ?? MediaExportService();
     _previewListenable = Listenable.merge([
       referenceController,
       verseController,
@@ -150,9 +180,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _loadBackgrounds() async {
     try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = json.decode(manifestContent);
-      backgrounds = manifestMap.keys
+      final AssetManifest assetManifest =
+          await AssetManifest.loadFromAssetBundle(rootBundle);
+      backgrounds = assetManifest
+          .listAssets()
           .where(
             (String key) =>
                 key.contains('assets/backgrounds/') &&
@@ -166,6 +197,8 @@ class _MyHomePageState extends State<MyHomePage> {
       if (kDebugMode) {
         debugPrint("Error loading backgrounds: $e");
       }
+      backgrounds = ["default.png"];
+      selectedBackground = "default.png";
     }
   }
 

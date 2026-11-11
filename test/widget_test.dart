@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:app/main.dart';
 import 'package:app/getbible_api.dart';
 import 'package:app/generator.dart';
 import 'package:app/widgets/gemini_auth_dialog.dart';
@@ -186,4 +187,38 @@ void main() {
     verseController.dispose();
     referenceController.dispose();
   });
+
+  testWidgets(
+    'Full MyApp end-to-end initialization, language switch, and form interaction',
+    (WidgetTester tester) async {
+      await tester.runAsync(() async {
+        await tester.pumpWidget(const MyApp());
+        // Allow async asset bundle and file initialization to complete
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      // Verify Portuguese default UI loaded along with default.png from AssetManifest
+      expect(find.text("Inclusive Bible Generator"), findsOneWidget);
+      expect(find.text("default.png"), findsOneWidget);
+
+      // Switch language to English (US/UK)
+      await tester.tap(find.text("Português (Brasil)"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("English (US/UK)").last);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Fetch Verse"), findsOneWidget);
+      expect(find.text("World English Bible"), findsOneWidget);
+
+      // Enter reference and verse in the form
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), "John 3:16");
+      await tester.enterText(textFields.at(1), "For God so loved the world.");
+      await tester.pump();
+
+      expect(find.text("John 3:16"), findsWidgets);
+      expect(find.text("For God so loved the world."), findsWidgets);
+    },
+  );
 }
