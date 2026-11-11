@@ -90,6 +90,17 @@ class _MyHomePageState extends State<MyHomePage> {
   String altText = "";
   String caption = "";
   String statusMessage = "";
+  bool isError = false;
+  bool isSuccess = false;
+
+  // ⚡ Bolt: Cache status flags during state updates to avoid repeated
+  // expensive string computations (.toLowerCase().contains()) on every UI rebuild.
+  void _updateStatus(String msg) {
+    statusMessage = msg;
+    final lowerMsg = msg.toLowerCase();
+    isError = lowerMsg.contains("error");
+    isSuccess = lowerMsg.contains("success");
+  }
 
   bool isLoading = true;
   bool isFetching = false;
@@ -144,7 +155,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _loadBibleVersions() async {
     setState(() {
-      statusMessage = "Loading Bible versions...";
+      _updateStatus("Loading Bible versions...");
     });
     String langCode = "pt";
     if (getLangKey() == "en") {
@@ -159,13 +170,13 @@ class _MyHomePageState extends State<MyHomePage> {
       bibleVersions = bibleVersionsMap.keys.toList();
       selectedBibleVersion = bibleVersions.first;
       setState(() {
-        statusMessage = "";
+        _updateStatus("");
       });
     } else {
       setState(() {
         bibleVersions = ["-"];
         selectedBibleVersion = "-";
-        statusMessage = "Error loading versions.";
+        _updateStatus("Error loading versions.");
       });
     }
   }
@@ -174,7 +185,7 @@ class _MyHomePageState extends State<MyHomePage> {
     String reference = referenceController.text.trim();
     if (selectedBibleVersion == "-" || reference.isEmpty) {
       setState(() {
-        statusMessage = "Please provide Version, and Reference.";
+        _updateStatus("Please provide Version, and Reference.");
       });
       return;
     }
@@ -184,7 +195,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     setState(() {
       isFetching = true;
-      statusMessage = "Fetching verse...";
+      _updateStatus("Fetching verse...");
     });
 
     String? content = await GetBibleAPI.getPassage(
@@ -196,12 +207,12 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         isFetching = false;
         verseController.text = content;
-        statusMessage = "Verse fetched successfully.";
+        _updateStatus("Verse fetched successfully.");
       });
     } else {
       setState(() {
         isFetching = false;
-        statusMessage = "Error fetching verse. Check reference format.";
+        _updateStatus("Error fetching verse. Check reference format.");
       });
     }
   }
@@ -224,7 +235,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     setState(() {
       isGenerating = true;
-      statusMessage = "Generating content...";
+      _updateStatus("Generating content...");
     });
 
     String lang = getLangKey();
@@ -243,7 +254,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     setState(() {
       isGenerating = false;
-      statusMessage = generator.getLocaleString(lang, "success_msg");
+      _updateStatus(generator.getLocaleString(lang, "success_msg"));
     });
   }
 
@@ -761,23 +772,27 @@ class _MyHomePageState extends State<MyHomePage> {
                   },
                 ),
                 if (statusMessage.isNotEmpty)
-                  Builder(
-                    builder: (context) {
-                      final lowerMsg = statusMessage.toLowerCase();
-                      final isError = lowerMsg.contains("error");
-                      final isSuccess = lowerMsg.contains("success");
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Semantics(
-                          liveRegion: true,
-                          child: Row(
-                            children: [
-                              Icon(
-                                isError
-                                    ? Icons.error
-                                    : (isSuccess
-                                          ? Icons.check_circle
-                                          : Icons.info),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Row(
+                        children: [
+                          Icon(
+                            isError
+                                ? Icons.error
+                                : (isSuccess ? Icons.check_circle : Icons.info),
+                            color: isError
+                                ? Theme.of(context).colorScheme.error
+                                : (isSuccess
+                                      ? Colors.green
+                                      : Theme.of(context).colorScheme.primary),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              statusMessage,
+                              style: TextStyle(
                                 color: isError
                                     ? Theme.of(context).colorScheme.error
                                     : (isSuccess
@@ -786,26 +801,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                               context,
                                             ).colorScheme.primary),
                               ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  statusMessage,
-                                  style: TextStyle(
-                                    color: isError
-                                        ? Theme.of(context).colorScheme.error
-                                        : (isSuccess
-                                              ? Colors.green
-                                              : Theme.of(
-                                                  context,
-                                                ).colorScheme.primary),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        ],
+                      ),
+                    ),
                   ),
                 if (altText.isNotEmpty) ...[
                   const SizedBox(height: 20),

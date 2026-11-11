@@ -35,3 +35,7 @@
 ## 2025-02-14 - [Avoid `compositeImage` for simple static masks]
 **Learning:** Creating a new `img.Image` object just to act as an overlay (like a 50% opacity black mask) and applying it using `img.compositeImage` is extremely slow and memory intensive, as it performs full alpha blending computations across two large byte buffers.
 **Action:** For simple overlays (like darkening an image by 50%), use an in-place manual iteration (e.g., `p.r = p.r ~/ 2`) to divide the pixel values directly. This avoids unnecessary allocations and skips the heavy alpha math, improving performance by >5x.
+
+## 2024-05-18 - [Avoid Multiple Inline Widget Builders for Static Checks]
+**Learning:** In Flutter, wrapping components in multiple inline `Builder` widgets to compute derived state flags (like `.contains("error")`) based on a single `setState` variable creates unnecessary widget tree depth and redundant string allocations on every single frame rebuild. This pattern scales poorly as the UI complexity increases.
+**Action:** Extract the derived boolean states directly to the State class, calculate them once during `setState`, and use them natively without intermediate `Builder` widgets to keep the widget tree shallow and fast.
