@@ -210,6 +210,16 @@ class _MyHomePageState extends State<MyHomePage> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
+      // 🛡️ Sentinel: Validate file size (e.g., max 20MB) to prevent Memory Exhaustion DoS in UI rendering
+      final int fileSize = await File(image.path).length();
+      if (fileSize > 20 * 1024 * 1024) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image file exceeds 20MB limit.')),
+        );
+        return;
+      }
+
       setState(() {
         customImagePath = image.path;
       });

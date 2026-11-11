@@ -25,3 +25,7 @@
 **Vulnerability:** A Denial of Service (DoS) vulnerability existed in `Generator.generateImageBytes` where `File.readAsBytes()` was called on user-selected custom images without a size limit, which could cause memory exhaustion if excessively large files were provided.
 **Learning:** Reading unbounded local files entirely into memory using `readAsBytes` can cause application crashes (OOM) and DoS on devices with constrained memory.
 **Prevention:** Always check `await File(path).length()` against a reasonable limit (e.g., 20MB) before calling `readAsBytes()`.
+## 2024-11-12 - Prevent Memory Exhaustion via Unbounded File Reads in UI
+**Vulnerability:** A Denial of Service (DoS) vulnerability existed in `_selectCustomImage` where user-selected custom images were loaded into memory via `FileImage` without validating their size, potentially leading to Out-Of-Memory (OOM) crashes if a user selected an excessively large file.
+**Learning:** File size validation must occur immediately at the UI layer when files are selected, before passing file paths to frontend rendering components like `FileImage` which will attempt to decode the entire file into memory.
+**Prevention:** Always check `await File(path).length()` against a reasonable limit (e.g., 20MB) upon file selection and before initiating file rendering or processing in the UI.
