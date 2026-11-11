@@ -44,7 +44,9 @@ class MediaExportService {
         filesToShare.add(XFile(audioPath));
       }
 
-      await Share.shareXFiles(filesToShare, text: "$altText\n\n$caption");
+      await SharePlus.instance.share(
+        ShareParams(files: filesToShare, text: "$altText\n\n$caption"),
+      );
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error capturing image: $e");
