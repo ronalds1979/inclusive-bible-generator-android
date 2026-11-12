@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -83,14 +84,17 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  static const List<Color> _presetColors = [
-    Colors.white,
-    Color(0xFFFFD54F), // Warm Gold
-    Color(0xFFFFF8E1), // Soft Cream
-    Color(0xFF81D4FA), // Sky Blue
-    Color(0xFFFFAB91), // Soft Coral
-    Colors.black,
+  static const List<MapEntry<Color, String>> _presetColors = [
+    MapEntry(Colors.white, "color_white"),
+    MapEntry(Color(0xFFFFD54F), "color_gold"),
+    MapEntry(Color(0xFFFFF8E1), "color_cream"),
+    MapEntry(Color(0xFF81D4FA), "color_sky_blue"),
+    MapEntry(Color(0xFFFFAB91), "color_coral"),
+    MapEntry(Colors.black, "color_black"),
   ];
+
+  String? _copiedField;
+  Timer? _copyFeedbackTimer;
 
   late final Generator generator;
   late final GeminiService geminiService;
@@ -187,6 +191,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void dispose() {
+    _copyFeedbackTimer?.cancel();
     referenceController.dispose();
     verseController.dispose();
     geminiPromptController.dispose();
@@ -649,8 +654,17 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _copyToClipboard(String text) {
+  void _copyToClipboard(String text, {String? fieldKey}) {
     Clipboard.setData(ClipboardData(text: text));
+    if (fieldKey != null) {
+      _copyFeedbackTimer?.cancel();
+      setState(() => _copiedField = fieldKey);
+      _copyFeedbackTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _copiedField = null);
+        }
+      });
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -1080,26 +1094,61 @@ class _MyHomePageState extends State<MyHomePage> {
         const SizedBox(height: 8),
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 10,
-          runSpacing: 10,
+          spacing: 4,
+          runSpacing: 4,
           children: [
-            for (final Color preset in _presetColors)
-              GestureDetector(
-                onTap: () => setState(() => fontColor = preset),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: preset,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: fontColor.toARGB32() == preset.toARGB32()
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.grey.shade400,
-                      width: fontColor.toARGB32() == preset.toARGB32() ? 3 : 1,
+            for (final entry in _presetColors)
+              Builder(
+                builder: (context) {
+                  final Color preset = entry.key;
+                  final bool isSelected =
+                      fontColor.toARGB32() == preset.toARGB32();
+                  final String colorName = generator.getLocaleString(
+                    lang,
+                    entry.value,
+                  );
+                  return Semantics(
+                    button: true,
+                    selected: isSelected,
+                    label: colorName,
+                    child: Tooltip(
+                      message: colorName,
+                      child: InkResponse(
+                        onTap: () => setState(() => fontColor = preset),
+                        radius: 24,
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: preset,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.grey.shade400,
+                                  width: isSelected ? 3 : 1,
+                                ),
+                              ),
+                              child: isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      size: 18,
+                                      color: preset.computeLuminance() > 0.5
+                                          ? Colors.black
+                                          : Colors.white,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -1152,9 +1201,24 @@ class _MyHomePageState extends State<MyHomePage> {
           label: fontSize.round().toString(),
           onChanged: (v) => setState(() => fontSize = v),
         ),
-        Text(
-          "${generator.getLocaleString(lang, "y_offset_label")}: ${yOffset.round()}",
-          style: const TextStyle(fontWeight: FontWeight.w600),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                "${generator.getLocaleString(lang, "y_offset_label")}: ${yOffset.round()}",
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (yOffset.round() != 0)
+              TextButton.icon(
+                onPressed: () => setState(() => yOffset = 0.0),
+                icon: const Icon(Icons.vertical_align_center, size: 16),
+                label: Text(
+                  generator.getLocaleString(lang, "reset_position_btn"),
+                ),
+              ),
+          ],
         ),
         Slider(
           value: yOffset,
@@ -1248,6 +1312,32 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
         ),
+        if (altText.isEmpty && caption.isEmpty) ...[
+          const SizedBox(height: 16),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14.0),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.accessibility_new,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      generator.getLocaleString(lang, "text_empty_state"),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         if (altText.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text(
@@ -1258,8 +1348,12 @@ class _MyHomePageState extends State<MyHomePage> {
           SelectableText(altText),
           const SizedBox(height: 4),
           OutlinedButton.icon(
-            onPressed: () => _copyToClipboard(altText),
-            icon: const Icon(Icons.copy, size: 16),
+            onPressed: () => _copyToClipboard(altText, fieldKey: "alt"),
+            icon: Icon(
+              _copiedField == "alt" ? Icons.check : Icons.copy,
+              size: 16,
+              color: _copiedField == "alt" ? Colors.green : null,
+            ),
             label: Text(generator.getLocaleString(lang, "copy_alt_text_btn")),
           ),
         ],
@@ -1273,8 +1367,12 @@ class _MyHomePageState extends State<MyHomePage> {
           SelectableText(caption),
           const SizedBox(height: 4),
           OutlinedButton.icon(
-            onPressed: () => _copyToClipboard(caption),
-            icon: const Icon(Icons.copy, size: 16),
+            onPressed: () => _copyToClipboard(caption, fieldKey: "caption"),
+            icon: Icon(
+              _copiedField == "caption" ? Icons.check : Icons.copy,
+              size: 16,
+              color: _copiedField == "caption" ? Colors.green : null,
+            ),
             label: Text(generator.getLocaleString(lang, "copy_caption_btn")),
           ),
         ],

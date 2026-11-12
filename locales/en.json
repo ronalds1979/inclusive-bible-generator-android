@@ -77,5 +77,13 @@
   "yv_dialog_title": "YouVersion Platform API",
   "yv_dialog_hint": "Enter your YouVersion Platform App Key (X-YVP-App-Key) to unlock official YouVersion Bible versions and live Verse of the Day.",
   "yv_open_portal_btn": "Open YouVersion Developer Portal",
-  "yv_api_key_label": "YouVersion App Key (X-YVP-App-Key)"
+  "yv_api_key_label": "YouVersion App Key (X-YVP-App-Key)",
+  "color_white": "White",
+  "color_gold": "Warm Gold",
+  "color_cream": "Soft Cream",
+  "color_sky_blue": "Sky Blue",
+  "color_coral": "Soft Coral",
+  "color_black": "Black",
+  "reset_position_btn": "Center",
+  "text_empty_state": "Tap \"Generate & Share\" to create Alt-Text and a Social Media Caption ready to copy."
 }

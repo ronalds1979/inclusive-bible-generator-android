@@ -77,5 +77,13 @@
   "yv_dialog_title": "API YouVersion Platform",
   "yv_dialog_hint": "Insira sua chave da plataforma YouVersion (X-YVP-App-Key) para desbloquear traduções oficiais do YouVersion e o Versículo do Dia ao vivo.",
   "yv_open_portal_btn": "Abrir Portal YouVersion Developers",
-  "yv_api_key_label": "Chave do App YouVersion (X-YVP-App-Key)"
+  "yv_api_key_label": "Chave do App YouVersion (X-YVP-App-Key)",
+  "color_white": "Branco",
+  "color_gold": "Dourado Suave",
+  "color_cream": "Creme Suave",
+  "color_sky_blue": "Azul Celeste",
+  "color_coral": "Coral Suave",
+  "color_black": "Preto",
+  "reset_position_btn": "Centralizar",
+  "text_empty_state": "Toque em \"Gerar e Compartilhar\" para criar o Alt-Text e a Legenda prontos para copiar."
 }
