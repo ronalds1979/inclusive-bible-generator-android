@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 class GeminiService {
   static const String endpoint =
       "https://generativelanguage.googleapis.com/v1beta/interactions";
+  static final Uri _endpointUri = Uri.parse(endpoint);
   static const String apiRevision = "2026-05-20";
   static const String imageModel = "gemini-nano-banana-2.1";
   static const List<String> _fallbackImageModels = [
@@ -29,6 +30,10 @@ class GeminiService {
   static const String _legacyKeyFileName = ".gemini_api_key";
 
   static final RegExp _apiKeyRegExp = RegExp(r'AIza[0-9A-Za-z\-_]{30,45}');
+  static final http.Client _sharedHttpClient = http.Client();
+  // ⚡ Bolt: Remember keys whose raster image models returned Free-Tier 0-quota (limit: 0)
+  // so subsequent generations skip 3 dead 429 round-trips and go straight to Flash scene synthesis.
+  static final Set<String> _zeroQuotaImageKeys = <String>{};
 
   static const List<String> styleKeys = [
     "style_nature",
@@ -58,7 +63,7 @@ class GeminiService {
   GeminiService({
     http.Client? httpClient,
     FlutterSecureStorage? secureStorage,
-  }) : _httpClient = httpClient ?? http.Client(),
+  }) : _httpClient = httpClient ?? _sharedHttpClient,
        _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Extracts a Google AI Studio Gemini API key (`AIza...`) from arbitrary text,
@@ -321,6 +326,24 @@ class GeminiService {
     final validRatios = {"1:1", "3:4", "4:3", "16:9", "9:16"};
     final targetRatio = validRatios.contains(aspectRatio) ? aspectRatio : "1:1";
 
+    // ⚡ Bolt: If this key already hit Free-Tier 0-quota on raster image models,
+    // skip the 3 guaranteed-429 round-trips and go straight to Free-Tier scene synthesis.
+    if (_zeroQuotaImageKeys.contains(trimmedKey)) {
+      final sceneBytes = await _tryFreeTierScene(
+        apiKey: trimmedKey,
+        verse: verse.trim(),
+        reference: reference.trim(),
+        styleKey: styleKey,
+        customPrompt: customPrompt.trim(),
+        targetRatio: targetRatio,
+      );
+      if (sceneBytes != null) {
+        lastError = null;
+        return sceneBytes;
+      }
+      return null;
+    }
+
     // Attempt 1: Current Interactions API (`2026-05-20`) with `gemini-nano-banana-2.1`
     final primaryBody = jsonEncode({
       "model": imageModel,
@@ -337,7 +360,7 @@ class GeminiService {
     try {
       final response = await _httpClient
           .post(
-            Uri.parse(endpoint),
+            _endpointUri,
             headers: {
               "x-goog-api-key": trimmedKey,
               "Content-Type": "application/json",
@@ -404,6 +427,7 @@ class GeminiService {
     required String customPrompt,
     required String targetRatio,
   }) async {
+    bool allZeroQuota = true;
     // 1. Try lighter Nano Banana image models first in case they have Free Tier quota
     for (final model in _fallbackImageModels) {
       final body = jsonEncode({
@@ -421,7 +445,7 @@ class GeminiService {
       try {
         final response = await _httpClient
             .post(
-              Uri.parse(endpoint),
+              _endpointUri,
               headers: {
                 "x-goog-api-key": apiKey,
                 "Content-Type": "application/json",
@@ -435,7 +459,17 @@ class GeminiService {
           final Map<String, dynamic> decoded = jsonDecode(response.body);
           final Uint8List? bytes = extractImageBytesFromResponse(decoded);
           if (bytes != null) return bytes;
+          allZeroQuota = false;
         } else {
+          if (response.statusCode == 401 ||
+              response.statusCode == 403 ||
+              response.body.contains("API_KEY_INVALID")) {
+            lastError = extractErrorMessage(response.statusCode, response.body);
+            return null;
+          }
+          if (!(response.statusCode == 429 && response.body.contains("limit: 0"))) {
+            allZeroQuota = false;
+          }
           if (kDebugMode) {
             debugPrint(
               "Gemini image fallback ($model) status (${response.statusCode}): ${response.body}",
@@ -443,12 +477,35 @@ class GeminiService {
           }
         }
       } catch (e) {
+        allZeroQuota = false;
         if (kDebugMode) {
           debugPrint("Gemini image fallback ($model) exception: $e");
         }
       }
     }
 
+    if (allZeroQuota) {
+      _zeroQuotaImageKeys.add(apiKey);
+    }
+
+    return _tryFreeTierScene(
+      apiKey: apiKey,
+      verse: verse,
+      reference: reference,
+      styleKey: styleKey,
+      customPrompt: customPrompt,
+      targetRatio: targetRatio,
+    );
+  }
+
+  Future<Uint8List?> _tryFreeTierScene({
+    required String apiKey,
+    required String verse,
+    required String reference,
+    required String styleKey,
+    required String customPrompt,
+    required String targetRatio,
+  }) async {
     // 2. Free-Tier Gemini Scene Designer (`gemini-3.8-flash` / `gemini-3.5-flash-lite`)
     // Google AI Studio Free Tier sets `limit: 0 requests per day on Free Tier` on raster
     // Nano Banana models in many regions unless billing is attached, whereas Gemini Flash
@@ -491,7 +548,7 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
       try {
         final response = await _httpClient
             .post(
-              Uri.parse(endpoint),
+              _endpointUri,
               headers: {
                 "x-goog-api-key": apiKey,
                 "Content-Type": "application/json",
@@ -519,6 +576,11 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
           }
         } else {
           lastError = extractErrorMessage(response.statusCode, response.body);
+          if (response.statusCode == 401 ||
+              response.statusCode == 403 ||
+              response.body.contains("API_KEY_INVALID")) {
+            return null;
+          }
           if (kDebugMode) {
             debugPrint(
               "Gemini Free-Tier Scene ($textModel) error (${response.statusCode}): ${response.body}",
@@ -926,11 +988,20 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
       }
 
       final ui.Picture picture = recorder.endRecording();
-      final ui.Image img = await picture.toImage(width, height);
-      final ByteData? byteData = await img.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      return byteData?.buffer.asUint8List();
+      try {
+        final ui.Image img = await picture.toImage(width, height);
+        try {
+          final ByteData? byteData = await img.toByteData(
+            format: ui.ImageByteFormat.png,
+          );
+          return byteData?.buffer.asUint8List();
+        } finally {
+          // ⚡ Bolt: Free native GPU/Skia image buffer immediately after PNG encoding
+          img.dispose();
+        }
+      } finally {
+        picture.dispose();
+      }
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error rendering Gemini scene to PNG: $e");

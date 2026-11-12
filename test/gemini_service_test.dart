@@ -259,5 +259,100 @@ void main() {
         expect(requestedModels, contains('gemini-3.8-flash'));
       },
     );
+
+    test(
+      'caches zero-quota image keys and skips raster image models on subsequent calls',
+      () async {
+        final requestedModels = <String>[];
+        final mockClient = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final model = body['model'] as String;
+          requestedModels.add(model);
+
+          if (model != 'gemini-3.8-flash') {
+            return http.Response(
+              jsonEncode({
+                'error': {'message': 'Quota exceeded, limit: 0'}
+              }),
+              429,
+            );
+          }
+
+          return http.Response(
+            jsonEncode({
+              'outputs': [
+                {
+                  'type': 'text',
+                  'text': jsonEncode({
+                    'skyTop': '#102030',
+                    'skyBottom': '#405060',
+                    'accent': '#F0D080',
+                    'mood': 'dawn',
+                    'elements': ['hills', 'rays'],
+                  }),
+                }
+              ]
+            }),
+            200,
+          );
+        });
+
+        final service = GeminiService(httpClient: mockClient);
+        const testKey = 'mock-zero-quota-key-123';
+
+        final firstBytes = await service.generateBackgroundImage(
+          apiKey: testKey,
+          verse: 'Be still',
+          reference: 'Psalm 46:10',
+        );
+        expect(firstBytes, isNotNull);
+        expect(requestedModels, contains('gemini-nano-banana-2.1'));
+        expect(requestedModels, contains('gemini-3.8-flash'));
+
+        requestedModels.clear();
+
+        final secondBytes = await service.generateBackgroundImage(
+          apiKey: testKey,
+          verse: 'The Lord is my shepherd',
+          reference: 'Psalm 23:1',
+        );
+        expect(secondBytes, isNotNull);
+        expect(requestedModels, equals(['gemini-3.8-flash']));
+      },
+    );
+
+    test(
+      'aborts fallback immediately on 401 without trying remaining models',
+      () async {
+        final requestedModels = <String>[];
+        final mockClient = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final model = body['model'] as String;
+          requestedModels.add(model);
+
+          if (model == 'gemini-nano-banana-2.1') {
+            return http.Response('Model unavailable', 404);
+          }
+
+          return http.Response(
+            jsonEncode({
+              'error': {'message': 'API_KEY_INVALID'}
+            }),
+            401,
+          );
+        });
+
+        final service = GeminiService(httpClient: mockClient);
+        final result = await service.generateBackgroundImage(
+          apiKey: 'mock-invalid-key-401',
+          verse: 'In the beginning',
+          reference: 'Genesis 1:1',
+        );
+        expect(result, isNull);
+        // Should have tried primary, then first fallback, and stopped immediately on 401
+        expect(requestedModels.length, equals(2));
+        expect(requestedModels, isNot(contains('gemini-3.8-flash')));
+      },
+    );
   });
 }
