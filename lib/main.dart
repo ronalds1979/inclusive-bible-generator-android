@@ -747,37 +747,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 onChanged: (v) => setState(() => selectedBibleVersion = v!),
               ),
             ),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: referenceController,
-              builder: (context, value, child) {
-                return FilledButton.tonalIcon(
-                  onPressed:
-                      isFetching ||
-                          selectedBibleVersion == "-" ||
-                          (value.text.trim().isEmpty && selectedBook == null)
-                      ? null
-                      : _fetchVerse,
-                  icon: isFetching
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download, size: 18),
-                  label: Text(
-                    generator.getLocaleString(lang, "fetch_verse_btn"),
-                  ),
-                );
-              },
-            ),
-            OutlinedButton.icon(
-              onPressed:
-                  isFetching || selectedBibleVersion == "-"
-                      ? null
-                      : _fetchVerseOfTheDay,
-              icon: const Icon(Icons.wb_sunny_outlined, size: 18),
-              label: Text(generator.getLocaleString(lang, "votd_btn")),
-            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -838,6 +807,46 @@ class _MyHomePageState extends State<MyHomePage> {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 10),
+        // Fetch Verse + Verse of the Day action row right after Book/Chapter/Verse
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: referenceController,
+              builder: (context, value, child) {
+                return FilledButton.tonalIcon(
+                  onPressed:
+                      isFetching ||
+                          selectedBibleVersion == "-" ||
+                          (value.text.trim().isEmpty && selectedBook == null)
+                      ? null
+                      : _fetchVerse,
+                  icon: isFetching
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download, size: 18),
+                  label: Text(
+                    generator.getLocaleString(lang, "fetch_verse_btn"),
+                  ),
+                );
+              },
+            ),
+            OutlinedButton.icon(
+              onPressed:
+                  isFetching || selectedBibleVersion == "-"
+                      ? null
+                      : _fetchVerseOfTheDay,
+              icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+              label: Text(generator.getLocaleString(lang, "votd_btn")),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         ValueListenableBuilder<TextEditingValue>(
