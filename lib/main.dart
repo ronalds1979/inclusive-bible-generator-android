@@ -280,6 +280,12 @@ class _MyHomePageState extends State<MyHomePage> {
     return "pt-BR";
   }
 
+  String getAudioLangKey() {
+    if (bibleLang == "en") return "en";
+    if (bibleLang == "es") return "es";
+    return "pt-BR";
+  }
+
   Future<void> _loadBibleVersions() async {
     setState(() {
       _updateStatus("Loading Bible versions...");
@@ -569,7 +575,7 @@ class _MyHomePageState extends State<MyHomePage> {
     await ttsService.speakPreview(
       verse: verse,
       reference: referenceController.text.trim(),
-      lang: getLangKey(),
+      lang: getAudioLangKey(),
       gender: gender,
     );
     if (mounted) {
@@ -618,7 +624,7 @@ class _MyHomePageState extends State<MyHomePage> {
       audioPath = await ttsService.generateAudio(
         verse: verse,
         reference: reference,
-        lang: lang,
+        lang: getAudioLangKey(),
         gender: gender,
       );
     }
