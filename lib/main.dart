@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
+import 'book_mapping.dart';
 import 'gemini_service.dart';
 import 'generator.dart';
 import 'getbible_api.dart';
@@ -37,16 +38,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Inclusive Bible Generator',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
+          seedColor: Colors.indigo,
           brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
+          seedColor: Colors.indigo,
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
@@ -81,11 +83,22 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  static const List<Color> _presetColors = [
+    Colors.white,
+    Color(0xFFFFD54F), // Warm Gold
+    Color(0xFFFFF8E1), // Soft Cream
+    Color(0xFF81D4FA), // Sky Blue
+    Color(0xFFFFAB91), // Soft Coral
+    Colors.black,
+  ];
+
   late final Generator generator;
   late final GeminiService geminiService;
   late final TtsService ttsService;
   late final MediaExportService mediaExportService;
   final GlobalKey _globalKey = GlobalKey();
+
+  int _selectedTabIndex = 0;
 
   String currentLang = "Português (Brasil)";
   final List<String> languages = const [
@@ -94,10 +107,20 @@ class _MyHomePageState extends State<MyHomePage> {
     "Español (España)",
   ];
 
+  String bibleLang = "pt";
+  String youVersionApiKey = GetBibleAPI.defaultYouVersionApiKey;
+
   List<String> bibleVersions = ["-"];
   String selectedBibleVersion = "-";
   Map<String, String> bibleVersionsMap = {};
 
+  String? selectedBook;
+  final TextEditingController chapterController = TextEditingController(
+    text: "119",
+  );
+  final TextEditingController verseNumController = TextEditingController(
+    text: "105",
+  );
   final TextEditingController referenceController = TextEditingController();
   final TextEditingController verseController = TextEditingController();
   final TextEditingController geminiPromptController = TextEditingController();
@@ -106,8 +129,7 @@ class _MyHomePageState extends State<MyHomePage> {
   List<String> backgrounds = ["default.png"];
   String? customImagePath;
 
-  String? geminiAccessToken;
-  String? geminiUserEmail;
+  String? geminiApiKey;
   String selectedGeminiStyle = GeminiService.styleKeys.first;
   bool isGeneratingGeminiBg = false;
   bool isGeminiBackground = false;
@@ -118,6 +140,7 @@ class _MyHomePageState extends State<MyHomePage> {
   double yOffset = 0.0;
 
   bool generateAudio = false;
+  bool isPlayingAudioPreview = false;
   String gender = "Female";
   final List<String> genders = const ["Female", "Male"];
 
@@ -142,6 +165,8 @@ class _MyHomePageState extends State<MyHomePage> {
         forceSuccess ??
         (lowerMsg.contains("success") ||
             lowerMsg.contains("sucesso") ||
+            lowerMsg.contains("conectada") ||
+            lowerMsg.contains("connected") ||
             lowerMsg.contains("éxito"));
   }
 
@@ -166,6 +191,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void dispose() {
+    chapterController.dispose();
+    verseNumController.dispose();
     referenceController.dispose();
     verseController.dispose();
     geminiPromptController.dispose();
@@ -175,13 +202,52 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _initApp() async {
     await generator.loadLocales();
-    geminiAccessToken = await geminiService.signInSilently();
-    geminiUserEmail = geminiService.userEmail;
+    geminiApiKey = await geminiService.loadApiKey();
+    youVersionApiKey =
+        (await GetBibleAPI.loadYouVersionApiKey()) ??
+        GetBibleAPI.defaultYouVersionApiKey;
     await _loadBackgrounds();
+    _syncDefaultBookForLanguage();
     await _loadBibleVersions();
     setState(() {
       isLoading = false;
     });
+  }
+
+  void _syncDefaultBookForLanguage() {
+    final List<String> books = getCanonicalBooks(bibleLang);
+    if (books.isNotEmpty) {
+      // Translate current selectedBook's canonical number if possible
+      int targetIndex = 18; // Default to Psalms (book 19, index 18)
+      if (selectedBook != null) {
+        for (final prefix in ["pt", "en", "es"]) {
+          final int? nr = bookMapping[prefix]?[selectedBook!];
+          if (nr != null && nr >= 1 && nr <= books.length) {
+            targetIndex = nr - 1;
+            break;
+          }
+        }
+      }
+      selectedBook = books.length > targetIndex
+          ? books[targetIndex]
+          : books.first;
+      if (referenceController.text.trim().isNotEmpty) {
+        _applyQuickReferenceSelector();
+      }
+    }
+  }
+
+  void _applyQuickReferenceSelector() {
+    if (selectedBook == null || selectedBook!.isEmpty) return;
+    final String ch = chapterController.text.trim();
+    final String v = verseNumController.text.trim();
+    if (ch.isEmpty) {
+      referenceController.text = selectedBook!;
+    } else if (v.isEmpty) {
+      referenceController.text = "$selectedBook $ch";
+    } else {
+      referenceController.text = "$selectedBook $ch:$v";
+    }
   }
 
   Future<void> _loadBackgrounds() async {
@@ -218,14 +284,11 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _updateStatus("Loading Bible versions...");
     });
-    String langCode = "pt";
-    if (getLangKey() == "en") {
-      langCode = "en";
-    } else if (getLangKey() == "es") {
-      langCode = "es";
-    }
 
-    final versions = await GetBibleAPI.getVersions(lang: langCode);
+    final versions = await GetBibleAPI.getVersions(
+      lang: bibleLang,
+      youVersionApiKey: youVersionApiKey,
+    );
     if (versions.isNotEmpty) {
       bibleVersionsMap = {for (var v in versions) v["name"]!: v["id"]!};
       bibleVersions = bibleVersionsMap.keys.toList();
@@ -243,6 +306,9 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _fetchVerse() async {
+    if (referenceController.text.trim().isEmpty) {
+      _applyQuickReferenceSelector();
+    }
     final String reference = referenceController.text.trim();
     if (selectedBibleVersion == "-" || reference.isEmpty) {
       setState(() {
@@ -262,12 +328,20 @@ class _MyHomePageState extends State<MyHomePage> {
     final String? content = await GetBibleAPI.getPassage(
       bibleId,
       reference,
-      lang: getLangKey(),
+      lang: bibleLang,
+      youVersionApiKey: youVersionApiKey,
     );
     if (content != null) {
+      final Map<String, String> previewTexts = await generator.generateTexts(
+        getLangKey(),
+        content,
+        reference,
+      );
       setState(() {
         isFetching = false;
         verseController.text = content;
+        altText = previewTexts["altText"]!;
+        caption = previewTexts["caption"]!;
         _updateStatus("Verse fetched successfully.", forceSuccess: true);
       });
     } else {
@@ -277,6 +351,48 @@ class _MyHomePageState extends State<MyHomePage> {
           "Error fetching verse. Check reference format.",
           forceError: true,
         );
+      });
+    }
+  }
+
+  Future<void> _fetchVerseOfTheDay() async {
+    final String? bibleId = bibleVersionsMap[selectedBibleVersion];
+    if (bibleId == null || selectedBibleVersion == "-") return;
+
+    setState(() {
+      isFetching = true;
+      _updateStatus("Fetching Verse of the Day...");
+    });
+
+    final Map<String, String>? votd = await GetBibleAPI.getVerseOfTheDay(
+      lang: bibleLang,
+      bibleId: bibleId,
+      youVersionApiKey: youVersionApiKey,
+    );
+
+    if (votd != null) {
+      final String content = votd["text"]!;
+      final String reference = votd["reference"]!;
+      final Map<String, String> previewTexts = await generator.generateTexts(
+        getLangKey(),
+        content,
+        reference,
+      );
+      setState(() {
+        isFetching = false;
+        selectedBook = votd["book"];
+        chapterController.text = votd["chapter"] ?? "1";
+        verseNumController.text = votd["verse"] ?? "1";
+        referenceController.text = reference;
+        verseController.text = content;
+        altText = previewTexts["altText"]!;
+        caption = previewTexts["caption"]!;
+        _updateStatus("Verse of the Day loaded!", forceSuccess: true);
+      });
+    } else {
+      setState(() {
+        isFetching = false;
+        _updateStatus("Error loading Verse of the Day.", forceError: true);
       });
     }
   }
@@ -302,51 +418,33 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<bool> _triggerGoogleSignIn() async {
-    final String lang = getLangKey();
-    final String? token = await geminiService.signInWithGoogle();
-    if (token != null && token.isNotEmpty) {
-      setState(() {
-        geminiAccessToken = token;
-        geminiUserEmail = geminiService.userEmail;
-        _updateStatus(
-          generator.getLocaleString(lang, "gemini_auth_success_msg"),
-          forceSuccess: true,
-        );
-      });
-      return true;
-    } else {
-      setState(() {
-        _updateStatus(
-          generator.getLocaleString(lang, "gemini_auth_error_msg"),
-          forceError: true,
-        );
-      });
-      return false;
-    }
-  }
-
   Future<bool> _showGeminiAuthDialog() async {
     final String lang = getLangKey();
-    final bool isSignedIn =
-        geminiAccessToken != null && geminiAccessToken!.isNotEmpty;
-
     final bool? connected = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return GeminiAuthDialog(
           lang: lang,
           generator: generator,
-          userEmail: geminiUserEmail,
-          isSignedIn: isSignedIn,
-          onSignIn: _triggerGoogleSignIn,
-          onSignOut: () async {
-            await geminiService.signOut();
+          initialApiKey: geminiApiKey,
+          onSave: (String entered) async {
+            await geminiService.saveApiKey(entered);
             setState(() {
-              geminiAccessToken = null;
-              geminiUserEmail = null;
+              geminiApiKey = entered.isNotEmpty ? entered : null;
               _updateStatus(
-                generator.getLocaleString(lang, "gemini_signed_out_msg"),
+                entered.isNotEmpty
+                    ? generator.getLocaleString(lang, "gemini_key_saved_msg")
+                    : generator.getLocaleString(lang, "gemini_key_removed_msg"),
+                forceSuccess: entered.isNotEmpty,
+              );
+            });
+          },
+          onDisconnect: () async {
+            await geminiService.saveApiKey("");
+            setState(() {
+              geminiApiKey = null;
+              _updateStatus(
+                generator.getLocaleString(lang, "gemini_key_removed_msg"),
               );
             });
           },
@@ -363,17 +461,23 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (verse.isEmpty) return;
 
-    if (geminiAccessToken == null || geminiAccessToken!.isEmpty) {
-      final bool signedIn = await _triggerGoogleSignIn();
-      if (!signedIn ||
-          geminiAccessToken == null ||
-          geminiAccessToken!.isEmpty) {
-        return;
-      }
-    } else {
-      final String? refreshedToken = await geminiService.getAccessToken();
-      if (refreshedToken != null && refreshedToken.isNotEmpty) {
-        geminiAccessToken = refreshedToken;
+    // Auto-detect from clipboard first if not connected yet
+    if (geminiApiKey == null || geminiApiKey!.isEmpty) {
+      final String? clipKey = await geminiService.detectApiKeyFromClipboard();
+      if (clipKey != null && clipKey.isNotEmpty) {
+        await geminiService.saveApiKey(clipKey);
+        setState(() {
+          geminiApiKey = clipKey;
+          _updateStatus(
+            generator.getLocaleString(lang, "gemini_clipboard_detected_msg"),
+            forceSuccess: true,
+          );
+        });
+      } else {
+        final bool connected = await _showGeminiAuthDialog();
+        if (!connected || geminiApiKey == null || geminiApiKey!.isEmpty) {
+          return;
+        }
       }
     }
 
@@ -383,7 +487,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     final Uint8List? imageBytes = await geminiService.generateBackgroundImage(
-      accessToken: geminiAccessToken!,
+      apiKey: geminiApiKey!,
       verse: verse,
       reference: reference,
       aspectRatio: aspectRatioStr,
@@ -421,12 +525,56 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     } else {
+      final String baseErr = generator.getLocaleString(
+        lang,
+        "gemini_bg_error_msg",
+      );
+      final String detail = geminiService.lastError != null
+          ? " (${geminiService.lastError})"
+          : "";
+      final bool isInvalidKey =
+          geminiService.lastError != null &&
+          (geminiService.lastError!.contains("API key not valid") ||
+              geminiService.lastError!.contains("API_KEY_INVALID") ||
+              geminiService.lastError!.contains("HTTP 401") ||
+              geminiService.lastError!.contains("HTTP 403"));
+      if (isInvalidKey) {
+        await geminiService.saveApiKey("");
+      }
       setState(() {
+        if (isInvalidKey) {
+          geminiApiKey = null;
+        }
         isGeneratingGeminiBg = false;
-        _updateStatus(
-          generator.getLocaleString(lang, "gemini_bg_error_msg"),
-          forceError: true,
-        );
+        _updateStatus("$baseErr$detail", forceError: true);
+      });
+    }
+  }
+
+  Future<void> _toggleAudioPreview() async {
+    if (isPlayingAudioPreview) {
+      await ttsService.stop();
+      setState(() {
+        isPlayingAudioPreview = false;
+      });
+      return;
+    }
+
+    final String verse = verseController.text.trim();
+    if (verse.isEmpty) return;
+
+    setState(() {
+      isPlayingAudioPreview = true;
+    });
+    await ttsService.speakPreview(
+      verse: verse,
+      reference: referenceController.text.trim(),
+      lang: getLangKey(),
+      gender: gender,
+    );
+    if (mounted) {
+      setState(() {
+        isPlayingAudioPreview = false;
       });
     }
   }
@@ -502,6 +650,651 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Widget _buildVerseTab(String lang) {
+    final List<String> canonicalBooks = getCanonicalBooks(bibleLang);
+    if (selectedBook == null || !canonicalBooks.contains(selectedBook)) {
+      selectedBook = canonicalBooks.length > 18
+          ? canonicalBooks[18]
+          : canonicalBooks.first;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Bible Text Language selector
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text(
+              generator.getLocaleString(lang, "bible_lang_label"),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            ChoiceChip(
+              label: const Text("Português"),
+              selected: bibleLang == "pt",
+              visualDensity: VisualDensity.compact,
+              onSelected: (selected) {
+                if (selected && bibleLang != "pt") {
+                  setState(() {
+                    bibleLang = "pt";
+                    _syncDefaultBookForLanguage();
+                    _loadBibleVersions();
+                  });
+                }
+              },
+            ),
+            ChoiceChip(
+              label: const Text("English"),
+              selected: bibleLang == "en",
+              visualDensity: VisualDensity.compact,
+              onSelected: (selected) {
+                if (selected && bibleLang != "en") {
+                  setState(() {
+                    bibleLang = "en";
+                    _syncDefaultBookForLanguage();
+                    _loadBibleVersions();
+                  });
+                }
+              },
+            ),
+            ChoiceChip(
+              label: const Text("Español"),
+              selected: bibleLang == "es",
+              visualDensity: VisualDensity.compact,
+              onSelected: (selected) {
+                if (selected && bibleLang != "es") {
+                  setState(() {
+                    bibleLang = "es";
+                    _syncDefaultBookForLanguage();
+                    _loadBibleVersions();
+                  });
+                }
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            Text(
+              generator.getLocaleString(lang, "bible_version_label"),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: selectedBibleVersion,
+                items: bibleVersions
+                    .map(
+                      (v) => DropdownMenuItem(
+                        value: v,
+                        child: Text(v, overflow: TextOverflow.ellipsis),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => selectedBibleVersion = v!),
+              ),
+            ),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: referenceController,
+              builder: (context, value, child) {
+                return FilledButton.tonalIcon(
+                  onPressed:
+                      isFetching ||
+                          selectedBibleVersion == "-" ||
+                          (value.text.trim().isEmpty && selectedBook == null)
+                      ? null
+                      : _fetchVerse,
+                  icon: isFetching
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download, size: 18),
+                  label: Text(
+                    generator.getLocaleString(lang, "fetch_verse_btn"),
+                  ),
+                );
+              },
+            ),
+            OutlinedButton.icon(
+              onPressed:
+                  isFetching || selectedBibleVersion == "-"
+                      ? null
+                      : _fetchVerseOfTheDay,
+              icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+              label: Text(generator.getLocaleString(lang, "votd_btn")),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Interactive Book -> Chapter -> Verse selector row
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 8.0,
+            ),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                DropdownButton<String>(
+                  value: selectedBook,
+                  items: canonicalBooks
+                      .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                      .toList(),
+                  onChanged: (b) {
+                    setState(() {
+                      selectedBook = b;
+                      _applyQuickReferenceSelector();
+                    });
+                  },
+                ),
+                SizedBox(
+                  width: 70,
+                  child: TextField(
+                    controller: chapterController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: generator.getLocaleString(
+                        lang,
+                        "chapter_label",
+                      ),
+                    ),
+                    onChanged: (_) => _applyQuickReferenceSelector(),
+                  ),
+                ),
+                SizedBox(
+                  width: 90,
+                  child: TextField(
+                    controller: verseNumController,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: generator.getLocaleString(
+                        lang,
+                        "verse_num_label",
+                      ),
+                    ),
+                    onChanged: (_) => _applyQuickReferenceSelector(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: referenceController,
+          builder: (context, value, child) {
+            return TextField(
+              controller: referenceController,
+              maxLength: 50,
+              textInputAction: TextInputAction.next,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                isDense: true,
+                border: const OutlineInputBorder(),
+                labelText: generator.getLocaleString(lang, "reference_label"),
+                suffixIcon: value.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: generator.getLocaleString(lang, "clear_btn"),
+                        onPressed: referenceController.clear,
+                      )
+                    : null,
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: verseController,
+          builder: (context, value, child) {
+            return TextField(
+              controller: verseController,
+              maxLength: 2000,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                isDense: true,
+                border: const OutlineInputBorder(),
+                alignLabelWithHint: true,
+                labelText: generator.getLocaleString(lang, "verse_label"),
+                suffixIcon: value.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: generator.getLocaleString(lang, "clear_btn"),
+                        onPressed: verseController.clear,
+                      )
+                    : null,
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBackgroundTab(String lang, bool isGeminiConnected) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            Text(
+              generator.getLocaleString(lang, "background_label"),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            DropdownButton<String>(
+              value: selectedBackground,
+              items: backgrounds
+                  .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                  .toList(),
+              onChanged: (v) => setState(() {
+                selectedBackground = v!;
+                customImagePath = null;
+                isGeminiBackground = false;
+              }),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: _selectCustomImage,
+              icon: const Icon(Icons.photo_library, size: 18),
+              label: Text(generator.getLocaleString(lang, "custom_image_btn")),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 68,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: backgrounds.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final String bgName = backgrounds[index];
+              final bool isSelected =
+                  customImagePath == null && selectedBackground == bgName;
+              return GestureDetector(
+                onTap: () => setState(() {
+                  selectedBackground = bgName;
+                  customImagePath = null;
+                  isGeminiBackground = false;
+                }),
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                    image: DecorationImage(
+                      image: AssetImage("assets/backgrounds/$bgName"),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        GeminiBackgroundCard(
+          lang: lang,
+          generator: generator,
+          isConnected: isGeminiConnected,
+          selectedStyle: selectedGeminiStyle,
+          onStyleChanged: (v) => setState(() => selectedGeminiStyle = v),
+          promptController: geminiPromptController,
+          verseController: verseController,
+          isGenerating: isGeneratingGeminiBg,
+          onConnectPressed: _showGeminiAuthDialog,
+          onGeneratePressed: _generateGeminiBackground,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStyleTab(String lang) {
+    final List<Map<String, String>> ratios = [
+      {"value": "1:1", "key": "ratio_square"},
+      {"value": "3:4", "key": "ratio_portrait"},
+      {"value": "9:16", "key": "ratio_story"},
+      {"value": "4:3", "key": "ratio_landscape"},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          generator.getLocaleString(lang, "aspect_ratio_label"),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: ratios.map((r) {
+            final String val = r["value"]!;
+            final String label = generator.getLocaleString(lang, r["key"]!);
+            return ChoiceChip(
+              label: Text(label.isNotEmpty ? label : val),
+              selected: aspectRatioStr == val,
+              onSelected: (_) => setState(() => aspectRatioStr = val),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          generator.getLocaleString(lang, "font_color_label"),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final Color preset in _presetColors)
+              GestureDetector(
+                onTap: () => setState(() => fontColor = preset),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: preset,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: fontColor.toARGB32() == preset.toARGB32()
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey.shade400,
+                      width: fontColor.toARGB32() == preset.toARGB32() ? 3 : 1,
+                    ),
+                  ),
+                ),
+              ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: fontColor,
+                foregroundColor: fontColor.computeLuminance() > 0.5
+                    ? Colors.black
+                    : Colors.white,
+              ),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: Text(
+                        generator.getLocaleString(lang, "pick_color_title"),
+                      ),
+                      content: SingleChildScrollView(
+                        child: ColorPicker(
+                          pickerColor: fontColor,
+                          onColorChanged: (c) => setState(() => fontColor = c),
+                        ),
+                      ),
+                      actions: <Widget>[
+                        ElevatedButton(
+                          child: Text(
+                            generator.getLocaleString(lang, "got_it_btn"),
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+              icon: const Icon(Icons.color_lens, size: 18),
+              label: Text(generator.getLocaleString(lang, "select_color_btn")),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          "${generator.getLocaleString(lang, "font_size_label")}: ${fontSize.round()}",
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        Slider(
+          value: fontSize,
+          min: 20,
+          max: 120,
+          divisions: 100,
+          label: fontSize.round().toString(),
+          onChanged: (v) => setState(() => fontSize = v),
+        ),
+        Text(
+          "${generator.getLocaleString(lang, "y_offset_label")}: ${yOffset.round()}",
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        Slider(
+          value: yOffset,
+          min: -400,
+          max: 400,
+          divisions: 800,
+          label: yOffset.round().toString(),
+          onChanged: (v) => setState(() => yOffset = v),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAudioAndTextTab(String lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: () => setState(() => generateAudio = !generateAudio),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: generateAudio,
+                        onChanged: (v) => setState(() => generateAudio = v!),
+                      ),
+                      Expanded(
+                        child: Text(
+                          generator.getLocaleString(lang, "audio_label"),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Text(generator.getLocaleString(lang, "gender_label")),
+                    DropdownButton<String>(
+                      value: gender,
+                      items: genders.map((v) {
+                        final String labelKey = v == "Female"
+                            ? "gender_female"
+                            : "gender_male";
+                        return DropdownMenuItem(
+                          value: v,
+                          child: Text(
+                            generator.getLocaleString(lang, labelKey),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (v) => setState(() => gender = v!),
+                    ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: verseController,
+                      builder: (context, value, child) {
+                        return OutlinedButton.icon(
+                          onPressed: value.text.trim().isEmpty
+                              ? null
+                              : _toggleAudioPreview,
+                          icon: Icon(
+                            isPlayingAudioPreview
+                                ? Icons.stop
+                                : Icons.volume_up,
+                            size: 18,
+                          ),
+                          label: Text(
+                            generator.getLocaleString(
+                              lang,
+                              isPlayingAudioPreview
+                                  ? "stop_audio_btn"
+                                  : "preview_audio_btn",
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (altText.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            generator.getLocaleString(lang, "alt_text_label"),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          SelectableText(altText),
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: () => _copyToClipboard(altText),
+            icon: const Icon(Icons.copy, size: 16),
+            label: Text(generator.getLocaleString(lang, "copy_alt_text_btn")),
+          ),
+        ],
+        if (caption.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            generator.getLocaleString(lang, "caption_label"),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          SelectableText(caption),
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: () => _copyToClipboard(caption),
+            icon: const Icon(Icons.copy, size: 16),
+            label: Text(generator.getLocaleString(lang, "copy_caption_btn")),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBottomActionBar(String lang) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (statusMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Row(
+                    children: [
+                      Icon(
+                        isError
+                            ? Icons.error
+                            : (isSuccess ? Icons.check_circle : Icons.info),
+                        size: 18,
+                        color: isError
+                            ? Theme.of(context).colorScheme.error
+                            : (isSuccess
+                                  ? Colors.green
+                                  : Theme.of(context).colorScheme.primary),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          statusMessage,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isError
+                                ? Theme.of(context).colorScheme.error
+                                : (isSuccess
+                                      ? Colors.green
+                                      : Theme.of(context).colorScheme.primary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            SizedBox(
+              width: double.infinity,
+              child: AnimatedBuilder(
+                animation: _previewListenable,
+                builder: (context, child) {
+                  return FilledButton.icon(
+                    onPressed:
+                        isGenerating ||
+                            verseController.text.trim().isEmpty ||
+                            referenceController.text.trim().isEmpty
+                        ? null
+                        : _generateContent,
+                    icon: isGenerating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.share),
+                    label: Text(
+                      generator.getLocaleString(lang, "generate_btn"),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -510,21 +1303,76 @@ class _MyHomePageState extends State<MyHomePage> {
 
     final String lang = getLangKey();
     final bool isGeminiConnected =
-        geminiAccessToken != null && geminiAccessToken!.isNotEmpty;
+        geminiApiKey != null && geminiApiKey!.isNotEmpty;
 
-    final Widget previewWidget = VersePreviewCard(
-      repaintKey: _globalKey,
-      aspectRatioStr: aspectRatioStr,
-      customImagePath: customImagePath,
-      selectedBackground: selectedBackground,
-      previewListenable: _previewListenable,
-      verseController: verseController,
-      referenceController: referenceController,
-      fontColor: fontColor,
-      fontSize: fontSize,
-      yOffset: yOffset,
-      lang: lang,
-      generator: generator,
+    final Widget previewWidget = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: VersePreviewCard(
+              repaintKey: _globalKey,
+              aspectRatioStr: aspectRatioStr,
+              customImagePath: customImagePath,
+              selectedBackground: selectedBackground,
+              previewListenable: _previewListenable,
+              verseController: verseController,
+              referenceController: referenceController,
+              fontColor: fontColor,
+              fontSize: fontSize,
+              yOffset: yOffset,
+              onYOffsetChanged: (updated) => setState(() => yOffset = updated),
+              lang: lang,
+              generator: generator,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          generator.getLocaleString(lang, "drag_hint"),
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+      ],
+    );
+
+    final Widget tabNavigation = NavigationBar(
+      height: 60,
+      selectedIndex: _selectedTabIndex,
+      onDestinationSelected: (index) =>
+          setState(() => _selectedTabIndex = index),
+      destinations: [
+        NavigationDestination(
+          icon: const Icon(Icons.menu_book_outlined),
+          selectedIcon: const Icon(Icons.menu_book),
+          label: generator.getLocaleString(lang, "tab_verse"),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.wallpaper_outlined),
+          selectedIcon: const Icon(Icons.wallpaper),
+          label: generator.getLocaleString(lang, "tab_background"),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.text_fields_outlined),
+          selectedIcon: const Icon(Icons.text_fields),
+          label: generator.getLocaleString(lang, "tab_style"),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.record_voice_over_outlined),
+          selectedIcon: const Icon(Icons.record_voice_over),
+          label: generator.getLocaleString(lang, "tab_audio"),
+        ),
+      ],
+    );
+
+    final Widget tabbedWorkspace = IndexedStack(
+      index: _selectedTabIndex,
+      children: [
+        _buildVerseTab(lang),
+        _buildBackgroundTab(lang, isGeminiConnected),
+        _buildStyleTab(lang),
+        _buildAudioAndTextTab(lang),
+      ],
     );
 
     return Scaffold(
@@ -537,7 +1385,8 @@ class _MyHomePageState extends State<MyHomePage> {
               isGeminiConnected ? "gemini_connected_btn" : "gemini_connect_btn",
             ),
             icon: Icon(
-              isGeminiConnected ? Icons.account_circle : Icons.login,
+              isGeminiConnected ? Icons.auto_awesome : Icons.key_outlined,
+              color: isGeminiConnected ? Colors.amber : null,
             ),
             onPressed: _showGeminiAuthDialog,
           ),
@@ -546,6 +1395,8 @@ class _MyHomePageState extends State<MyHomePage> {
             onChanged: (String? newValue) {
               setState(() {
                 currentLang = newValue!;
+                bibleLang = getLangKey().substring(0, 2);
+                _syncDefaultBookForLanguage();
                 _loadBibleVersions();
               });
             },
@@ -555,431 +1406,67 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ],
       ),
+      bottomNavigationBar: _buildBottomActionBar(lang),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final Widget formContent = Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(generator.getLocaleString(lang, "instructions")),
-                const SizedBox(height: 10),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    Text(
-                      generator.getLocaleString(lang, "bible_version_label"),
-                    ),
-                    const SizedBox(width: 10),
-                    DropdownButton<String>(
-                      value: selectedBibleVersion,
-                      items: bibleVersions
-                          .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
-                          )
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => selectedBibleVersion = v!),
-                    ),
-                    const SizedBox(width: 10),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: referenceController,
-                      builder: (context, value, child) {
-                        return ElevatedButton.icon(
-                          onPressed:
-                              isFetching ||
-                                  selectedBibleVersion == "-" ||
-                                  value.text.trim().isEmpty
-                              ? null
-                              : _fetchVerse,
-                          icon: isFetching
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.download),
-                          label: Text(
-                            generator.getLocaleString(lang, "fetch_verse_btn"),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: referenceController,
-                  builder: (context, value, child) {
-                    return TextField(
-                      controller: referenceController,
-                      maxLength: 50,
-                      textInputAction: TextInputAction.next,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        labelText: generator.getLocaleString(
-                          lang,
-                          "reference_label",
-                        ),
-                        suffixIcon: value.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                tooltip: generator.getLocaleString(
-                                  lang,
-                                  "clear_btn",
-                                ),
-                                onPressed: referenceController.clear,
-                              )
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: verseController,
-                  builder: (context, value, child) {
-                    return TextField(
-                      controller: verseController,
-                      maxLength: 2000,
-                      maxLines: 4,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        alignLabelWithHint: true,
-                        labelText: generator.getLocaleString(
-                          lang,
-                          "verse_label",
-                        ),
-                        suffixIcon: value.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                tooltip: generator.getLocaleString(
-                                  lang,
-                                  "clear_btn",
-                                ),
-                                onPressed: verseController.clear,
-                              )
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    Text(generator.getLocaleString(lang, "background_label")),
-                    const SizedBox(width: 10),
-                    DropdownButton<String>(
-                      value: selectedBackground,
-                      items: backgrounds
-                          .map(
-                            (v) => DropdownMenuItem(value: v, child: Text(v)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        selectedBackground = v!;
-                        customImagePath = null;
-                        isGeminiBackground = false;
-                      }),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: _selectCustomImage,
-                      icon: const Icon(Icons.image),
-                      label: Text(
-                        generator.getLocaleString(lang, "custom_image_btn"),
-                      ),
-                    ),
-                  ],
-                ),
-                GeminiBackgroundCard(
-                  lang: lang,
-                  generator: generator,
-                  isConnected: isGeminiConnected,
-                  userEmail: geminiUserEmail,
-                  selectedStyle: selectedGeminiStyle,
-                  onStyleChanged: (v) =>
-                      setState(() => selectedGeminiStyle = v),
-                  promptController: geminiPromptController,
-                  verseController: verseController,
-                  isGenerating: isGeneratingGeminiBg,
-                  onConnectPressed: isGeminiConnected
-                      ? _showGeminiAuthDialog
-                      : _triggerGoogleSignIn,
-                  onGeneratePressed: _generateGeminiBackground,
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    Text(generator.getLocaleString(lang, "font_color_label")),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: fontColor,
-                        foregroundColor: fontColor.computeLuminance() > 0.5
-                            ? Colors.black
-                            : Colors.white,
-                      ),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return AlertDialog(
-                              title: Text(
-                                generator.getLocaleString(
-                                  lang,
-                                  "pick_color_title",
-                                ),
-                              ),
-                              content: SingleChildScrollView(
-                                child: ColorPicker(
-                                  pickerColor: fontColor,
-                                  onColorChanged: (c) =>
-                                      setState(() => fontColor = c),
-                                ),
-                              ),
-                              actions: <Widget>[
-                                ElevatedButton(
-                                  child: Text(
-                                    generator.getLocaleString(
-                                      lang,
-                                      "got_it_btn",
-                                    ),
-                                  ),
-                                  onPressed: () => Navigator.of(context).pop(),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                      icon: const Icon(Icons.color_lens),
-                      label: Text(
-                        generator.getLocaleString(lang, "select_color_btn"),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "${generator.getLocaleString(lang, "font_size_label")}: ${fontSize.round()}",
-                ),
-                Slider(
-                  value: fontSize,
-                  min: 20,
-                  max: 120,
-                  divisions: 100,
-                  label: fontSize.round().toString(),
-                  onChanged: (v) => setState(() => fontSize = v),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    Text(generator.getLocaleString(lang, "aspect_ratio_label")),
-                    const SizedBox(width: 10),
-                    DropdownButton<String>(
-                      value: aspectRatioStr,
-                      items: ["1:1", "3:4", "4:3"].map((v) {
-                        String labelKey = "ratio_square";
-                        if (v == "3:4") {
-                          labelKey = "ratio_portrait";
-                        } else if (v == "4:3") {
-                          labelKey = "ratio_landscape";
-                        }
-                        return DropdownMenuItem(
-                          value: v,
-                          child: Text(
-                            generator.getLocaleString(lang, labelKey),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) => setState(() => aspectRatioStr = v!),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "${generator.getLocaleString(lang, "y_offset_label")}: ${yOffset.round()}",
-                ),
-                Slider(
-                  value: yOffset,
-                  min: -400,
-                  max: 400,
-                  divisions: 800,
-                  label: yOffset.round().toString(),
-                  onChanged: (v) => setState(() => yOffset = v),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    InkWell(
-                      onTap: () =>
-                          setState(() => generateAudio = !generateAudio),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Checkbox(
-                            value: generateAudio,
-                            onChanged: (v) =>
-                                setState(() => generateAudio = v!),
-                          ),
-                          Text(generator.getLocaleString(lang, "audio_label")),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    if (generateAudio) ...[
-                      Text(generator.getLocaleString(lang, "gender_label")),
-                      const SizedBox(width: 10),
-                      DropdownButton<String>(
-                        value: gender,
-                        items: genders.map((v) {
-                          final String labelKey = v == "Female"
-                              ? "gender_female"
-                              : "gender_male";
-                          return DropdownMenuItem(
-                            value: v,
-                            child: Text(
-                              generator.getLocaleString(lang, labelKey),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (v) => setState(() => gender = v!),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 20),
-                AnimatedBuilder(
-                  animation: _previewListenable,
-                  builder: (context, child) {
-                    return ElevatedButton.icon(
-                      onPressed:
-                          isGenerating ||
-                              verseController.text.trim().isEmpty ||
-                              referenceController.text.trim().isEmpty
-                          ? null
-                          : _generateContent,
-                      icon: isGenerating
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome),
-                      label: Text(
-                        generator.getLocaleString(lang, "generate_btn"),
-                      ),
-                    );
-                  },
-                ),
-                if (statusMessage.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Row(
-                        children: [
-                          Icon(
-                            isError
-                                ? Icons.error
-                                : (isSuccess ? Icons.check_circle : Icons.info),
-                            color: isError
-                                ? Theme.of(context).colorScheme.error
-                                : (isSuccess
-                                      ? Colors.green
-                                      : Theme.of(context).colorScheme.primary),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              statusMessage,
-                              style: TextStyle(
-                                color: isError
-                                    ? Theme.of(context).colorScheme.error
-                                    : (isSuccess
-                                          ? Colors.green
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.primary),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (altText.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    generator.getLocaleString(lang, "alt_text_label"),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SelectableText(altText),
-                  ElevatedButton.icon(
-                    onPressed: () => _copyToClipboard(altText),
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: Text(
-                      generator.getLocaleString(lang, "copy_alt_text_btn"),
-                    ),
-                  ),
-                ],
-                if (caption.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    generator.getLocaleString(lang, "caption_label"),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SelectableText(caption),
-                  ElevatedButton.icon(
-                    onPressed: () => _copyToClipboard(caption),
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: Text(
-                      generator.getLocaleString(lang, "copy_caption_btn"),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-
           if (constraints.maxWidth > 800) {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 1,
-                  child: SingleChildScrollView(child: formContent),
+                  flex: 5,
+                  child: Column(
+                    children: [
+                      tabNavigation,
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16.0),
+                          child: tabbedWorkspace,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Expanded(flex: 1, child: Center(child: previewWidget)),
+                Expanded(
+                  flex: 5,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: previewWidget,
+                    ),
+                  ),
+                ),
               ],
             );
           } else {
-            return SingleChildScrollView(
-              child: Column(
-                children: [
-                  formContent,
-                  const SizedBox(height: 20),
-                  Center(child: previewWidget),
-                  const SizedBox(height: 40),
-                ],
-              ),
+            return Column(
+              children: [
+                // Pinned Live Preview at the Top
+                Container(
+                  width: double.infinity,
+                  constraints: BoxConstraints(
+                    maxHeight: (constraints.maxHeight * 0.36).clamp(
+                      180.0,
+                      290.0,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12.0,
+                    vertical: 6.0,
+                  ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withAlpha(80),
+                  child: Center(child: previewWidget),
+                ),
+                tabNavigation,
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(14.0),
+                    child: tabbedWorkspace,
+                  ),
+                ),
+              ],
             );
           }
         },

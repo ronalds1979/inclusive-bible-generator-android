@@ -107,7 +107,20 @@ void main() {
     );
 
     test(
-      'generateBackgroundImage sends OAuth Bearer token and Interactions API request and returns decoded image bytes',
+      'extractApiKeyFromText detects valid AIza API keys inside clipboard text',
+      () {
+        final validKey = 'AIza${List.filled(33, 'x').join()}';
+        expect(
+          GeminiService.extractApiKeyFromText('My key is $validKey!'),
+          equals(validKey),
+        );
+        expect(GeminiService.extractApiKeyFromText('no key here'), isNull);
+        expect(GeminiService.extractApiKeyFromText(null), isNull);
+      },
+    );
+
+    test(
+      'generateBackgroundImage sends x-goog-api-key and Interactions API request and returns decoded image bytes',
       () async {
         final expectedBytes = Uint8List.fromList([10, 20, 30, 40]);
         late http.Request capturedRequest;
@@ -137,7 +150,7 @@ void main() {
 
         final service = GeminiService(httpClient: mockClient);
         final result = await service.generateBackgroundImage(
-          accessToken: 'ya29.test-oauth-token-123',
+          apiKey: 'mock-gemini-key-for-unit-test',
           verse: 'In the beginning God created the heavens and the earth.',
           reference: 'Genesis 1:1',
           aspectRatio: '3:4',
@@ -148,8 +161,8 @@ void main() {
         expect(result, equals(expectedBytes));
         expect(capturedRequest.url.toString(), GeminiService.endpoint);
         expect(
-          capturedRequest.headers['Authorization'],
-          'Bearer ya29.test-oauth-token-123',
+          capturedRequest.headers['x-goog-api-key'],
+          'mock-gemini-key-for-unit-test',
         );
         expect(
           capturedRequest.headers['Api-Revision'],
@@ -161,6 +174,89 @@ void main() {
         expect(body['response_format']['type'], 'image');
         expect(body['response_format']['aspect_ratio'], '3:4');
         expect(body['response_format']['image_size'], '1K');
+      },
+    );
+
+    test(
+      'generateBackgroundImage falls back to Free-Tier Gemini Flash scene renderer when raster image models return HTTP 429',
+      () async {
+        final List<String> requestedModels = [];
+
+        final mockClient = MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final model = body['model'] as String;
+          requestedModels.add(model);
+
+          if (model.contains('image') || model.contains('banana')) {
+            return http.Response(
+              jsonEncode({
+                "error": {
+                  "message":
+                      "Rate limit exceeded for model $model (limit: 0 requests per day on Free Tier).",
+                  "code": "too_many_requests",
+                },
+              }),
+              429,
+            );
+          }
+
+          // Free-Tier text model (`gemini-3.8-flash`) returns scene JSON
+          return http.Response(
+            jsonEncode({
+              "id": "int_scene_1",
+              "steps": [
+                {
+                  "type": "model_output",
+                  "status": "done",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": jsonEncode({
+                        "skyColors": [
+                          "#0F2027",
+                          "#203A43",
+                          "#2C5364",
+                          "#F4A261",
+                        ],
+                        "glowColor": "#FFE599",
+                        "celestialType": "sun",
+                        "lightX": 0.5,
+                        "lightY": 0.3,
+                        "rayCount": 12,
+                        "landscapeType": "mountains",
+                        "layerColors": [
+                          "#2B4162",
+                          "#1B2A4A",
+                          "#121C33",
+                          "#0A101F",
+                        ],
+                        "bokehCount": 20,
+                        "seed": 777,
+                      }),
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        });
+
+        final service = GeminiService(httpClient: mockClient);
+        final pngBytes = await service.generateBackgroundImage(
+          apiKey: 'mock-gemini-key-for-unit-test',
+          verse: 'The Lord is my shepherd; I shall not want.',
+          reference: 'Psalm 23:1',
+          aspectRatio: '1:1',
+          styleKey: 'style_cinematic',
+        );
+
+        expect(pngBytes, isNotNull);
+        expect(pngBytes!.length, greaterThan(100));
+        // PNG magic header bytes: 137 80 78 71
+        expect(pngBytes.sublist(0, 4), equals([137, 80, 78, 71]));
+        expect(requestedModels, contains('gemini-nano-banana-2.1'));
+        expect(requestedModels, contains('gemini-3.8-flash'));
       },
     );
   });

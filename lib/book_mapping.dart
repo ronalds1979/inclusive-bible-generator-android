@@ -248,3 +248,122 @@ const Map<String, Map<String, int>> bookMapping = {
     "Filemon": 57,
   },
 };
+
+/// Returns the 66 canonical Bible book names (ordered 1..66) for the given language.
+List<String> getCanonicalBooks(String lang) {
+  final String prefix = lang.length >= 2
+      ? lang.substring(0, 2).toLowerCase()
+      : "pt";
+  final Map<String, int> map = bookMapping[prefix] ?? bookMapping["pt"]!;
+  final Map<int, String> byNumber = {};
+  for (final entry in map.entries) {
+    // Keep the first (properly accented) book name for each book number 1..66
+    byNumber.putIfAbsent(entry.value, () => entry.key);
+  }
+  final List<int> sortedKeys = byNumber.keys.toList()..sort();
+  return [for (final k in sortedKeys) byNumber[k]!];
+}
+
+const Map<int, String> bookNrToUsfm = {
+  1: "GEN",
+  2: "EXO",
+  3: "LEV",
+  4: "NUM",
+  5: "DEU",
+  6: "JOS",
+  7: "JDG",
+  8: "RUT",
+  9: "1SA",
+  10: "2SA",
+  11: "1KI",
+  12: "2KI",
+  13: "1CH",
+  14: "2CH",
+  15: "EZR",
+  16: "NEH",
+  17: "EST",
+  18: "JOB",
+  19: "PSA",
+  20: "PRO",
+  21: "ECC",
+  22: "SNG",
+  23: "ISA",
+  24: "JER",
+  25: "LAM",
+  26: "EZK",
+  27: "DAN",
+  28: "HOS",
+  29: "JOL",
+  30: "AMO",
+  31: "OBA",
+  32: "JON",
+  33: "MIC",
+  34: "NAM",
+  35: "HAB",
+  36: "ZEP",
+  37: "HAG",
+  38: "ZEC",
+  39: "MAL",
+  40: "MAT",
+  41: "MRK",
+  42: "LUK",
+  43: "JHN",
+  44: "ACT",
+  45: "ROM",
+  46: "1CO",
+  47: "2CO",
+  48: "GAL",
+  49: "EPH",
+  50: "PHP",
+  51: "COL",
+  52: "1TH",
+  53: "2TH",
+  54: "1TI",
+  55: "2TI",
+  56: "TIT",
+  57: "PHM",
+  58: "HEB",
+  59: "JAS",
+  60: "1PE",
+  61: "2PE",
+  62: "1JN",
+  63: "2JN",
+  64: "3JN",
+  65: "JUD",
+  66: "REV",
+};
+
+final Map<String, int> usfmToBookNr = {
+  for (final e in bookNrToUsfm.entries) e.value: e.key,
+};
+
+String? getBookNameByNumber(int bookNr, String lang) {
+  final books = getCanonicalBooks(lang);
+  if (bookNr >= 1 && bookNr <= books.length) {
+    return books[bookNr - 1];
+  }
+  return null;
+}
+
+String? buildUsfmReference({
+  required int bookNr,
+  required String chapter,
+  String? startVerse,
+  String? endVerse,
+}) {
+  final String? usfm = bookNrToUsfm[bookNr];
+  if (usfm == null || chapter.trim().isEmpty) return null;
+  final String ch = chapter.trim();
+  if (startVerse == null || startVerse.trim().isEmpty) {
+    return "$usfm.$ch";
+  }
+  final String sv = startVerse.trim();
+  if (endVerse != null &&
+      endVerse.trim().isNotEmpty &&
+      endVerse.trim() != sv) {
+    return "$usfm.$ch.$sv-${endVerse.trim()}";
+  }
+  return "$usfm.$ch.$sv";
+}
+
+

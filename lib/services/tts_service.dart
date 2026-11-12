@@ -38,6 +38,29 @@ class TtsService {
     );
   }
 
+  Future<void> speakPreview({
+    required String verse,
+    required String reference,
+    required String lang,
+    required String gender,
+  }) async {
+    final Map<String, String> voiceConfig = resolveVoiceConfig(lang, gender);
+    final String targetLocale = voiceConfig["locale"]!;
+    try {
+      await _flutterTts.stop();
+      await _flutterTts.setLanguage(targetLocale);
+      await _flutterTts.setVoice(voiceConfig);
+      final String textToRead = reference.trim().isNotEmpty
+          ? "$reference. $verse"
+          : verse;
+      await _flutterTts.speak(textToRead);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error playing TTS preview: $e");
+      }
+    }
+  }
+
   Future<String?> generateAudio({
     required String verse,
     required String reference,

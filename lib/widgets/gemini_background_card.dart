@@ -6,7 +6,6 @@ class GeminiBackgroundCard extends StatelessWidget {
   final String lang;
   final Generator generator;
   final bool isConnected;
-  final String? userEmail;
   final String selectedStyle;
   final ValueChanged<String> onStyleChanged;
   final TextEditingController promptController;
@@ -20,7 +19,6 @@ class GeminiBackgroundCard extends StatelessWidget {
     required this.lang,
     required this.generator,
     required this.isConnected,
-    this.userEmail,
     required this.selectedStyle,
     required this.onStyleChanged,
     required this.promptController,
@@ -32,12 +30,6 @@ class GeminiBackgroundCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String connectLabel = isConnected
-        ? (userEmail != null && userEmail!.isNotEmpty
-              ? userEmail!
-              : generator.getLocaleString(lang, "gemini_connected_btn"))
-        : generator.getLocaleString(lang, "gemini_connect_btn");
-
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       child: Padding(
@@ -58,35 +50,40 @@ class GeminiBackgroundCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onConnectPressed,
                   icon: Icon(
-                    isConnected ? Icons.verified_user : Icons.login,
+                    isConnected ? Icons.verified_user : Icons.key,
                     size: 16,
+                    color: isConnected ? Colors.green : null,
                   ),
-                  label: Text(connectLabel),
+                  label: Text(
+                    generator.getLocaleString(
+                      lang,
+                      isConnected
+                          ? "gemini_connected_btn"
+                          : "gemini_connect_btn",
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+            Text(
+              generator.getLocaleString(lang, "gemini_style_label"),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 6),
             Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                Text(generator.getLocaleString(lang, "gemini_style_label")),
-                DropdownButton<String>(
-                  value: selectedStyle,
-                  items: GeminiService.styleKeys.map((styleKey) {
-                    return DropdownMenuItem<String>(
-                      value: styleKey,
-                      child: Text(generator.getLocaleString(lang, styleKey)),
-                    );
-                  }).toList(),
-                  onChanged: (v) {
-                    if (v != null) onStyleChanged(v);
-                  },
-                ),
-              ],
+              spacing: 8,
+              runSpacing: 8,
+              children: GeminiService.styleKeys.map((styleKey) {
+                final bool isSelected = selectedStyle == styleKey;
+                return ChoiceChip(
+                  label: Text(generator.getLocaleString(lang, styleKey)),
+                  selected: isSelected,
+                  onSelected: (_) => onStyleChanged(styleKey),
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: promptController,
               builder: (context, value, child) {
@@ -94,10 +91,12 @@ class GeminiBackgroundCard extends StatelessWidget {
                   controller: promptController,
                   maxLength: 200,
                   decoration: InputDecoration(
+                    isDense: true,
                     labelText: generator.getLocaleString(
                       lang,
                       "gemini_prompt_label",
                     ),
+                    border: const OutlineInputBorder(),
                     suffixIcon: value.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear),
@@ -113,25 +112,28 @@ class GeminiBackgroundCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 8),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: verseController,
-              builder: (context, verseValue, child) {
-                return ElevatedButton.icon(
-                  onPressed: isGenerating || verseValue.text.trim().isEmpty
-                      ? null
-                      : onGeneratePressed,
-                  icon: isGenerating
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome),
-                  label: Text(
-                    generator.getLocaleString(lang, "gemini_generate_bg_btn"),
-                  ),
-                );
-              },
+            SizedBox(
+              width: double.infinity,
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: verseController,
+                builder: (context, verseValue, child) {
+                  return ElevatedButton.icon(
+                    onPressed: isGenerating || verseValue.text.trim().isEmpty
+                        ? null
+                        : onGeneratePressed,
+                    icon: isGenerating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(
+                      generator.getLocaleString(lang, "gemini_generate_bg_btn"),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),

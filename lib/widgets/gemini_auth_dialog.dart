@@ -1,40 +1,98 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../gemini_service.dart';
 import '../generator.dart';
 
 class GeminiAuthDialog extends StatefulWidget {
   final String lang;
   final Generator generator;
-  final String? userEmail;
-  final bool isSignedIn;
-  final Future<bool> Function() onSignIn;
-  final Future<void> Function() onSignOut;
+  final String? initialApiKey;
+  final Future<void> Function(String apiKey) onSave;
+  final Future<void> Function() onDisconnect;
 
   const GeminiAuthDialog({
     super.key,
     required this.lang,
     required this.generator,
-    required this.userEmail,
-    required this.isSignedIn,
-    required this.onSignIn,
-    required this.onSignOut,
+    required this.initialApiKey,
+    required this.onSave,
+    required this.onDisconnect,
   });
 
   @override
   State<GeminiAuthDialog> createState() => _GeminiAuthDialogState();
 }
 
-class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
-  bool _isAuthenticating = false;
+class _GeminiAuthDialogState extends State<GeminiAuthDialog>
+    with WidgetsBindingObserver {
+  late final TextEditingController _keyController;
+  bool _obscure = true;
+  bool _detectedFromClipboard = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _keyController = TextEditingController(text: widget.initialApiKey ?? "");
+    if (widget.initialApiKey == null || widget.initialApiKey!.isEmpty) {
+      _checkClipboardForKey(autoConnectIfFound: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _keyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardForKey(autoConnectIfFound: true);
+    }
+  }
+
+  Future<void> _checkClipboardForKey({required bool autoConnectIfFound}) async {
+    try {
+      final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+      final String? detectedKey = GeminiService.extractApiKeyFromText(
+        data?.text,
+      );
+      if (detectedKey != null && mounted) {
+        setState(() {
+          _keyController.text = detectedKey;
+          _detectedFromClipboard = true;
+        });
+        if (autoConnectIfFound) {
+          await widget.onSave(detectedKey);
+          if (mounted) {
+            Navigator.of(context).pop(true);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _openGoogleAiStudio() async {
+    final Uri uri = Uri.parse(GeminiService.aiStudioUrl);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     final String lang = widget.lang;
     final Generator generator = widget.generator;
+    final bool hasExistingKey =
+        widget.initialApiKey != null && widget.initialApiKey!.isNotEmpty;
 
     return AlertDialog(
       title: Row(
         children: [
-          const Icon(Icons.account_circle),
+          const Icon(Icons.auto_awesome),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -49,78 +107,117 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(generator.getLocaleString(lang, "gemini_dialog_hint")),
-            if (widget.isSignedIn &&
-                widget.userEmail != null &&
-                widget.userEmail!.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Icon(Icons.verified_user, color: Colors.green, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      generator.getLocaleString(
-                        lang,
-                        "gemini_signed_in_as",
-                        kwargs: {"email": widget.userEmail!},
-                      ),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: _openGoogleAiStudio,
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: Text(
+                  generator.getLocaleString(lang, "gemini_open_aistudio_btn"),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    _checkClipboardForKey(autoConnectIfFound: false),
+                icon: const Icon(Icons.content_paste, size: 18),
+                label: Text(
+                  generator.getLocaleString(lang, "gemini_paste_clipboard_btn"),
+                ),
+              ),
+            ),
+            if (_detectedFromClipboard) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 18,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "gemini_clipboard_detected_msg",
+                        ),
+                        style: const TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _keyController,
+              obscureText: _obscure,
+              maxLength: 256,
+              decoration: InputDecoration(
+                labelText: generator.getLocaleString(
+                  lang,
+                  "gemini_api_key_label",
+                ),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscure = !_obscure;
+                    });
+                  },
+                ),
+              ),
+            ),
           ],
         ),
       ),
       actions: [
-        if (widget.isSignedIn)
-          TextButton.icon(
-            icon: const Icon(Icons.logout),
-            onPressed: _isAuthenticating
-                ? null
-                : () async {
-                    await widget.onSignOut();
-                    if (context.mounted) {
-                      Navigator.of(context).pop(false);
-                    }
-                  },
-            label: Text(
+        if (hasExistingKey)
+          TextButton(
+            onPressed: () async {
+              await widget.onDisconnect();
+              if (context.mounted) {
+                Navigator.of(context).pop(false);
+              }
+            },
+            child: Text(
               generator.getLocaleString(lang, "gemini_disconnect_btn"),
             ),
           ),
         TextButton(
-          onPressed: _isAuthenticating
-              ? null
-              : () => Navigator.of(context).pop(widget.isSignedIn),
+          onPressed: () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
-        if (!widget.isSignedIn)
-          ElevatedButton.icon(
-            icon: _isAuthenticating
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.login),
-            label: Text(generator.getLocaleString(lang, "gemini_sign_in_btn")),
-            onPressed: _isAuthenticating
-                ? null
-                : () async {
-                    setState(() {
-                      _isAuthenticating = true;
-                    });
-                    final bool success = await widget.onSignIn();
-                    if (!context.mounted) return;
-                    setState(() {
-                      _isAuthenticating = false;
-                    });
-                    if (success) {
-                      Navigator.of(context).pop(true);
-                    }
-                  },
-          ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.check),
+          label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
+          onPressed: () async {
+            final String entered = _keyController.text.trim();
+            await widget.onSave(entered);
+            if (context.mounted) {
+              Navigator.of(context).pop(entered.isNotEmpty);
+            }
+          },
+        ),
       ],
     );
   }

@@ -14,6 +14,7 @@ class VersePreviewCard extends StatelessWidget {
   final Color fontColor;
   final double fontSize;
   final double yOffset;
+  final ValueChanged<double>? onYOffsetChanged;
   final String lang;
   final Generator generator;
 
@@ -29,6 +30,7 @@ class VersePreviewCard extends StatelessWidget {
     required this.fontColor,
     required this.fontSize,
     required this.yOffset,
+    this.onYOffsetChanged,
     required this.lang,
     required this.generator,
   });
@@ -38,25 +40,31 @@ class VersePreviewCard extends StatelessWidget {
     double width = 300;
     double height = 300;
     if (aspectRatioStr == "3:4") {
+      width = 300;
+      height = 400;
+    } else if (aspectRatioStr == "9:16") {
+      width = 225;
       height = 400;
     } else if (aspectRatioStr == "4:3") {
       width = 400;
       height = 300;
     }
 
-    return RepaintBoundary(
+    final Widget card = RepaintBoundary(
       key: repaintKey,
       child: Container(
         width: width,
         height: height,
+        clipBehavior: Clip.hardEdge,
         decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
           image: DecorationImage(
             image: customImagePath != null
                 ? FileImage(File(customImagePath!)) as ImageProvider
                 : AssetImage("assets/backgrounds/$selectedBackground"),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black.withAlpha(128),
+              Colors.black.withAlpha(38),
               BlendMode.darken,
             ),
           ),
@@ -84,6 +92,13 @@ class VersePreviewCard extends StatelessWidget {
                           color: fontColor,
                           fontSize: fontSize / 2,
                           fontWeight: FontWeight.bold,
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black54,
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -103,6 +118,13 @@ class VersePreviewCard extends StatelessWidget {
                       style: GoogleFonts.roboto(
                         color: fontColor,
                         fontSize: (fontSize * 0.66) / 2,
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 6,
+                            offset: Offset(0, 1.5),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -112,6 +134,21 @@ class VersePreviewCard extends StatelessWidget {
           },
         ),
       ),
+    );
+
+    if (onYOffsetChanged == null) {
+      return card;
+    }
+
+    return GestureDetector(
+      onVerticalDragUpdate: (details) {
+        final double updated = (yOffset + details.delta.dy * 1.5).clamp(
+          -400.0,
+          400.0,
+        );
+        onYOffsetChanged!(updated);
+      },
+      child: card,
     );
   }
 }

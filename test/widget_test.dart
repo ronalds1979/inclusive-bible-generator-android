@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:app/main.dart';
 import 'package:app/getbible_api.dart';
+import 'package:app/book_mapping.dart';
 import 'package:app/generator.dart';
 import 'package:app/widgets/gemini_auth_dialog.dart';
 import 'package:app/widgets/gemini_background_card.dart';
@@ -13,10 +14,43 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  test('GetBibleAPI.getVersions returns versions for pt, en, and es', () async {
-    expect((await GetBibleAPI.getVersions(lang: "pt")).isNotEmpty, isTrue);
-    expect((await GetBibleAPI.getVersions(lang: "en")).isNotEmpty, isTrue);
-    expect((await GetBibleAPI.getVersions(lang: "es")).isNotEmpty, isTrue);
+  test('GetBibleAPI.getVersions returns rich versions for pt, en, and es', () async {
+    final ptVersions = await GetBibleAPI.getVersions(lang: "pt");
+    final enVersions = await GetBibleAPI.getVersions(lang: "en");
+    final esVersions = await GetBibleAPI.getVersions(lang: "es");
+
+    expect(ptVersions.length, greaterThanOrEqualTo(10));
+    expect(enVersions.length, greaterThanOrEqualTo(10));
+    expect(esVersions.length, greaterThanOrEqualTo(8));
+    expect(enVersions.first["name"], equals("World English Bible"));
+  });
+
+  test('GetBibleAPI.cleanVerseText strips footnotes, Strong numbers, and HTML tags', () {
+    const raw =
+        'Porque Deus amou ao mundo<S>2889</S> de tal maneira<sup>[a]</sup> que deu o seu Filho<br>unigênito.';
+    expect(
+      GetBibleAPI.cleanVerseText(raw),
+      equals('Porque Deus amou ao mundo de tal maneira que deu o seu Filho unigênito.'),
+    );
+  });
+
+  test('USFM conversion and localized resolution work across languages', () {
+    expect(
+      buildUsfmReference(bookNr: 43, chapter: '3', startVerse: '16'),
+      equals('JHN.3.16'),
+    );
+    expect(
+      buildUsfmReference(bookNr: 19, chapter: '23', startVerse: '1', endVerse: '6'),
+      equals('PSA.23.1-6'),
+    );
+    expect(
+      GetBibleAPI.resolveUsfmToLocalizedReference('JHN.3.16', lang: 'pt')?['reference'],
+      equals('João 3:16'),
+    );
+    expect(
+      GetBibleAPI.resolveUsfmToLocalizedReference('PSA.23.1-4', lang: 'es')?['reference'],
+      equals('Salmos 23:1-4'),
+    );
   });
 
   testWidgets(
@@ -89,22 +123,25 @@ void main() {
     },
   );
 
-  testWidgets('GeminiAuthDialog triggers Google Sign-In and Sign-Out callbacks', (
+  testWidgets('GeminiAuthDialog saves entered API key and triggers callback', (
     WidgetTester tester,
   ) async {
     final generator = Generator();
     generator.locales = {
       "en": {
-        "gemini_dialog_title": "Google Account (Gemini)",
-        "gemini_dialog_hint": "Sign in with your Google Account",
-        "gemini_signed_in_as": "Signed in as: {email}",
-        "gemini_sign_in_btn": "Sign in with Google",
-        "gemini_disconnect_btn": "Sign Out",
-        "gemini_cancel_btn": "Close",
+        "gemini_dialog_title": "Connect Gemini AI",
+        "gemini_dialog_hint": "Get a free Gemini API key",
+        "gemini_open_aistudio_btn":
+            "1. Get Free Gemini Key (Google AI Studio)",
+        "gemini_paste_clipboard_btn": "Paste Key from Clipboard",
+        "gemini_api_key_label": "Gemini API Key (AIza...)",
+        "gemini_save_btn": "Save & Connect",
+        "gemini_disconnect_btn": "Remove Key",
+        "gemini_cancel_btn": "Cancel",
       },
     };
 
-    bool signInCalled = false;
+    String? savedKey;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -112,22 +149,24 @@ void main() {
           body: GeminiAuthDialog(
             lang: "en",
             generator: generator,
-            userEmail: null,
-            isSignedIn: false,
-            onSignIn: () async {
-              signInCalled = true;
-              return true;
+            initialApiKey: null,
+            onSave: (key) async {
+              savedKey = key;
             },
-            onSignOut: () async {},
+            onDisconnect: () async {},
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text("Sign in with Google"));
+    await tester.enterText(
+      find.byType(TextField),
+      "mock-gemini-key-for-widget-test",
+    );
+    await tester.tap(find.text("Save & Connect"));
     await tester.pumpAndSettle();
 
-    expect(signInCalled, isTrue);
+    expect(savedKey, equals("mock-gemini-key-for-widget-test"));
   });
 
   testWidgets('VersePreviewCard updates live when controllers change', (
@@ -184,7 +223,7 @@ void main() {
   });
 
   testWidgets(
-    'Full MyApp end-to-end initialization, language switch, and form interaction',
+    'Full MyApp end-to-end initialization, 4-tab navigation, language switch, and form interaction',
     (WidgetTester tester) async {
       await tester.runAsync(() async {
         await tester.pumpWidget(const MyApp());
@@ -193,9 +232,9 @@ void main() {
       });
       await tester.pumpAndSettle();
 
-      // Verify Portuguese default UI loaded along with default.png from AssetManifest
+      // Verify Portuguese default UI loaded along with NavigationBar
       expect(find.text("Inclusive Bible Generator"), findsOneWidget);
-      expect(find.text("default.png"), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
 
       // Switch language to English (US/UK)
       await tester.tap(find.text("Português (Brasil)"));
@@ -206,10 +245,10 @@ void main() {
       expect(find.text("Fetch Verse"), findsOneWidget);
       expect(find.text("World English Bible"), findsOneWidget);
 
-      // Enter reference and verse in the form
+      // Enter reference and verse in the form (indices 2 and 3 after Chapter and Verse quick inputs)
       final textFields = find.byType(TextField);
-      await tester.enterText(textFields.at(0), "John 3:16");
-      await tester.enterText(textFields.at(1), "For God so loved the world.");
+      await tester.enterText(textFields.at(2), "John 3:16");
+      await tester.enterText(textFields.at(3), "For God so loved the world.");
       await tester.pump();
 
       expect(find.text("John 3:16"), findsWidgets);
