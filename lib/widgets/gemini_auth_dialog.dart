@@ -24,8 +24,7 @@ class GeminiAuthDialog extends StatefulWidget {
   State<GeminiAuthDialog> createState() => _GeminiAuthDialogState();
 }
 
-class _GeminiAuthDialogState extends State<GeminiAuthDialog>
-    with WidgetsBindingObserver {
+class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
   late final TextEditingController _keyController;
   bool _obscure = true;
   bool _detectedFromClipboard = false;
@@ -33,25 +32,13 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _keyController = TextEditingController(text: widget.initialApiKey ?? "");
-    if (widget.initialApiKey == null || widget.initialApiKey!.isEmpty) {
-      _checkClipboardForKey(autoConnectIfFound: false);
-    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _keyController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkClipboardForKey(autoConnectIfFound: true);
-    }
   }
 
   Future<void> _checkClipboardForKey({required bool autoConnectIfFound}) async {

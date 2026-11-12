@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'book_mapping.dart';
@@ -11,12 +12,13 @@ class GetBibleAPI {
   static const String bollsBaseUrl = "https://bolls.life/get-text";
   static const String youVersionBaseUrl = "https://api.youversion.com/v1";
   static const String youVersionPortalUrl = "https://platform.youversion.com/";
-  static final String defaultYouVersionApiKey = utf8.decode(
-    base64Decode(
-      "S2ptcE9lUk9PRzdTOTJWWnUzQXpHZmRweWMxUG9wVEt6OTYzam14b2RQeGF5NXJV",
-    ),
+  static const String defaultYouVersionApiKey = String.fromEnvironment(
+    'YOUVERSION_API_KEY',
   );
-  static const String _yvKeyFileName = ".youversion_api_key";
+  static const String _yvSecureKeyName = "youversion_api_key";
+  static const String _legacyYvKeyFileName = ".youversion_api_key";
+  static const FlutterSecureStorage _defaultSecureStorage =
+      FlutterSecureStorage();
 
   static final RegExp _referenceRegExp = RegExp(
     r'^((?:\d\s+)?[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
@@ -113,37 +115,72 @@ class GetBibleAPI {
     "COL.3.14",
   ];
 
-  static Future<File> _getYvKeyFile() async {
+  static Future<File> _getLegacyYvKeyFile() async {
     final dir = await getApplicationSupportDirectory();
-    return File("${dir.path}/$_yvKeyFileName");
+    return File("${dir.path}/$_legacyYvKeyFileName");
   }
 
-  static Future<String?> loadYouVersionApiKey() async {
+  static Future<void> _deleteLegacyYvKeyFile() async {
     try {
-      final file = await _getYvKeyFile();
+      final file = await _getLegacyYvKeyFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
+  }
+
+  static Future<String?> loadYouVersionApiKey({
+    FlutterSecureStorage? secureStorage,
+  }) async {
+    final storage = secureStorage ?? _defaultSecureStorage;
+    try {
+      final stored = await storage.read(key: _yvSecureKeyName);
+      if (stored != null && stored.trim().isNotEmpty) {
+        await _deleteLegacyYvKeyFile();
+        return stored.trim();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error loading YouVersion API key from secure storage: $e");
+      }
+    }
+
+    // One-time migration from legacy plaintext file
+    try {
+      final file = await _getLegacyYvKeyFile();
       if (await file.exists()) {
         final raw = (await file.readAsString()).trim();
-        if (raw.isNotEmpty) return raw;
+        await file.delete();
+        if (raw.isNotEmpty) {
+          await storage.write(key: _yvSecureKeyName, value: raw);
+          return raw;
+        }
       }
     } catch (e) {
-      debugPrint("Error loading YouVersion API key: $e");
+      if (kDebugMode) {
+        debugPrint("Error migrating legacy YouVersion API key: $e");
+      }
     }
-    return defaultYouVersionApiKey;
+    return defaultYouVersionApiKey.isNotEmpty ? defaultYouVersionApiKey : null;
   }
 
-  static Future<void> saveYouVersionApiKey(String apiKey) async {
+  static Future<void> saveYouVersionApiKey(
+    String apiKey, {
+    FlutterSecureStorage? secureStorage,
+  }) async {
+    final storage = secureStorage ?? _defaultSecureStorage;
     try {
-      final file = await _getYvKeyFile();
       final trimmed = apiKey.trim();
       if (trimmed.isEmpty) {
-        if (await file.exists()) {
-          await file.delete();
-        }
+        await storage.delete(key: _yvSecureKeyName);
       } else {
-        await file.writeAsString(trimmed, flush: true);
+        await storage.write(key: _yvSecureKeyName, value: trimmed);
       }
+      await _deleteLegacyYvKeyFile();
     } catch (e) {
-      debugPrint("Error saving YouVersion API key: $e");
+      if (kDebugMode) {
+        debugPrint("Error saving YouVersion API key: $e");
+      }
     }
   }
 
@@ -246,7 +283,9 @@ class GetBibleAPI {
       }
       return builtIn;
     } catch (e) {
-      debugPrint("Error fetching versions: $e");
+      if (kDebugMode) {
+        debugPrint("Error fetching versions: $e");
+      }
       return [];
     }
   }
@@ -303,12 +342,16 @@ class GetBibleAPI {
         }
         return result;
       } else {
-        debugPrint(
-          "YouVersion /v1/bibles status (${response.statusCode}): ${response.body}",
-        );
+        if (kDebugMode) {
+          debugPrint(
+            "YouVersion /v1/bibles status (${response.statusCode}): ${response.body}",
+          );
+        }
       }
     } catch (e) {
-      debugPrint("Error calling YouVersion /v1/bibles: $e");
+      if (kDebugMode) {
+        debugPrint("Error calling YouVersion /v1/bibles: $e");
+      }
     }
     return [];
   }
@@ -503,12 +546,16 @@ class GetBibleAPI {
           }
         }
       } else {
-        debugPrint(
-          "YouVersion passage error (${response.statusCode}): ${response.body}",
-        );
+        if (kDebugMode) {
+          debugPrint(
+            "YouVersion passage error (${response.statusCode}): ${response.body}",
+          );
+        }
       }
     } catch (e) {
-      debugPrint("Error fetching YouVersion passage: $e");
+      if (kDebugMode) {
+        debugPrint("Error fetching YouVersion passage: $e");
+      }
     }
     return null;
   }
@@ -570,7 +617,9 @@ class GetBibleAPI {
         }
       }
     } catch (e) {
-      debugPrint("Error fetching Bolls passage ($translationCode): $e");
+      if (kDebugMode) {
+        debugPrint("Error fetching Bolls passage ($translationCode): $e");
+      }
     }
     return null;
   }
@@ -620,7 +669,9 @@ class GetBibleAPI {
         }
       }
     } catch (e) {
-      debugPrint("Error fetching GetBible passage: $e");
+      if (kDebugMode) {
+        debugPrint("Error fetching GetBible passage: $e");
+      }
     }
     return null;
   }
@@ -677,7 +728,9 @@ class GetBibleAPI {
           }
         }
       } catch (e) {
-        debugPrint("Error fetching YouVersion VOTD: $e");
+        if (kDebugMode) {
+          debugPrint("Error fetching YouVersion VOTD: $e");
+        }
       }
     }
 

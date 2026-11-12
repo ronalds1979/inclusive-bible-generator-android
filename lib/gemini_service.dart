@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -24,7 +25,8 @@ class GeminiService {
     "gemini-2.5-flash",
   ];
   static const String aiStudioUrl = "https://aistudio.google.com/app/apikey";
-  static const String _keyFileName = ".gemini_api_key";
+  static const String _secureKeyName = "gemini_api_key";
+  static const String _legacyKeyFileName = ".gemini_api_key";
 
   static final RegExp _apiKeyRegExp = RegExp(r'AIza[0-9A-Za-z\-_]{30,45}');
 
@@ -50,10 +52,14 @@ class GeminiService {
   };
 
   final http.Client _httpClient;
+  final FlutterSecureStorage _secureStorage;
   String? lastError;
 
-  GeminiService({http.Client? httpClient})
-    : _httpClient = httpClient ?? http.Client();
+  GeminiService({
+    http.Client? httpClient,
+    FlutterSecureStorage? secureStorage,
+  }) : _httpClient = httpClient ?? http.Client(),
+       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Extracts a Google AI Studio Gemini API key (`AIza...`) from arbitrary text,
   /// returning `null` if no key pattern is present.
@@ -69,47 +75,78 @@ class GeminiService {
       final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
       return extractApiKeyFromText(data?.text);
     } catch (e) {
-      debugPrint("Error reading clipboard for Gemini key: $e");
+      if (kDebugMode) {
+        debugPrint("Error reading clipboard for Gemini key: $e");
+      }
       return null;
     }
   }
 
-  Future<File> _getKeyFile() async {
+  Future<File> _getLegacyKeyFile() async {
     final dir = await getApplicationSupportDirectory();
-    return File("${dir.path}/$_keyFileName");
+    return File("${dir.path}/$_legacyKeyFileName");
+  }
+
+  Future<void> _deleteLegacyKeyFile() async {
+    try {
+      final file = await _getLegacyKeyFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
   }
 
   Future<String?> loadApiKey() async {
     try {
-      final file = await _getKeyFile();
+      final stored = await _secureStorage.read(key: _secureKeyName);
+      final validStored = extractApiKeyFromText(stored);
+      if (validStored != null) {
+        await _deleteLegacyKeyFile();
+        return validStored;
+      }
+      if (stored != null) {
+        await _secureStorage.delete(key: _secureKeyName);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error loading Gemini API key from secure storage: $e");
+      }
+    }
+
+    // One-time migration from legacy plaintext file
+    try {
+      final file = await _getLegacyKeyFile();
       if (await file.exists()) {
         final raw = (await file.readAsString()).trim();
         final validKey = extractApiKeyFromText(raw);
+        await file.delete();
         if (validKey != null) {
+          await _secureStorage.write(key: _secureKeyName, value: validKey);
           return validKey;
         }
-        await file.delete();
       }
     } catch (e) {
-      debugPrint("Error loading Gemini API key: $e");
+      if (kDebugMode) {
+        debugPrint("Error migrating legacy Gemini API key: $e");
+      }
     }
     return null;
   }
 
   Future<void> saveApiKey(String apiKey) async {
     try {
-      final file = await _getKeyFile();
       final trimmed = apiKey.trim();
       final extracted = extractApiKeyFromText(trimmed) ?? trimmed;
       if (extracted.isEmpty) {
-        if (await file.exists()) {
-          await file.delete();
-        }
+        await _secureStorage.delete(key: _secureKeyName);
       } else {
-        await file.writeAsString(extracted, flush: true);
+        await _secureStorage.write(key: _secureKeyName, value: extracted);
       }
+      await _deleteLegacyKeyFile();
     } catch (e) {
-      debugPrint("Error saving Gemini API key: $e");
+      if (kDebugMode) {
+        debugPrint("Error saving Gemini API key: $e");
+      }
     }
   }
 
@@ -317,9 +354,11 @@ class GeminiService {
         lastError = "No image returned in response.";
       } else {
         lastError = extractErrorMessage(response.statusCode, response.body);
-        debugPrint(
-          "Gemini primary API error (${response.statusCode}): ${response.body}",
-        );
+        if (kDebugMode) {
+          debugPrint(
+            "Gemini primary API error (${response.statusCode}): ${response.body}",
+          );
+        }
 
         // If the API key itself is invalid or unauthorized, stop immediately
         if (response.statusCode == 401 ||
@@ -349,7 +388,9 @@ class GeminiService {
       }
     } catch (e) {
       lastError = e.toString();
-      debugPrint("Error generating Gemini background image: $e");
+      if (kDebugMode) {
+        debugPrint("Error generating Gemini background image: $e");
+      }
     }
     return null;
   }
@@ -395,12 +436,16 @@ class GeminiService {
           final Uint8List? bytes = extractImageBytesFromResponse(decoded);
           if (bytes != null) return bytes;
         } else {
-          debugPrint(
-            "Gemini image fallback ($model) status (${response.statusCode}): ${response.body}",
-          );
+          if (kDebugMode) {
+            debugPrint(
+              "Gemini image fallback ($model) status (${response.statusCode}): ${response.body}",
+            );
+          }
         }
       } catch (e) {
-        debugPrint("Gemini image fallback ($model) exception: $e");
+        if (kDebugMode) {
+          debugPrint("Gemini image fallback ($model) exception: $e");
+        }
       }
     }
 
@@ -474,12 +519,16 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
           }
         } else {
           lastError = extractErrorMessage(response.statusCode, response.body);
-          debugPrint(
-            "Gemini Free-Tier Scene ($textModel) error (${response.statusCode}): ${response.body}",
-          );
+          if (kDebugMode) {
+            debugPrint(
+              "Gemini Free-Tier Scene ($textModel) error (${response.statusCode}): ${response.body}",
+            );
+          }
         }
       } catch (e) {
-        debugPrint("Gemini Free-Tier Scene ($textModel) exception: $e");
+        if (kDebugMode) {
+          debugPrint("Gemini Free-Tier Scene ($textModel) exception: $e");
+        }
       }
     }
 
@@ -883,7 +932,9 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
       );
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      debugPrint("Error rendering Gemini scene to PNG: $e");
+      if (kDebugMode) {
+        debugPrint("Error rendering Gemini scene to PNG: $e");
+      }
       return null;
     }
   }
