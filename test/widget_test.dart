@@ -51,6 +51,9 @@ void main() {
       GetBibleAPI.resolveUsfmToLocalizedReference('PSA.23.1-4', lang: 'es')?['reference'],
       equals('Salmos 23:1-4'),
     );
+    expect(getChapterCountForBook('Salmos', 'pt'), equals(150));
+    expect(getVerseCountForChapter('Salmos', 119, 'pt'), equals(176));
+    expect(getVerseCountForChapter('John', 3, 'en'), equals(36));
   });
 
   testWidgets(
@@ -245,10 +248,13 @@ void main() {
       expect(find.text("Fetch Verse"), findsOneWidget);
       expect(find.text("World English Bible"), findsOneWidget);
 
-      // Enter reference and verse in the form (indices 2 and 3 after Chapter and Verse quick inputs)
+      // Verify Chapter and Verse dropdowns are rendered
+      expect(find.byType(DropdownButton<int>), findsNWidgets(2));
+
+      // Enter reference and verse in the form
       final textFields = find.byType(TextField);
-      await tester.enterText(textFields.at(2), "John 3:16");
-      await tester.enterText(textFields.at(3), "For God so loved the world.");
+      await tester.enterText(textFields.at(0), "John 3:16");
+      await tester.enterText(textFields.at(1), "For God so loved the world.");
       await tester.pump();
 
       expect(find.text("John 3:16"), findsWidgets);

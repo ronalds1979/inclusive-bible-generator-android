@@ -115,12 +115,8 @@ class _MyHomePageState extends State<MyHomePage> {
   Map<String, String> bibleVersionsMap = {};
 
   String? selectedBook;
-  final TextEditingController chapterController = TextEditingController(
-    text: "119",
-  );
-  final TextEditingController verseNumController = TextEditingController(
-    text: "105",
-  );
+  int selectedChapter = 119;
+  int selectedVerse = 105;
   final TextEditingController referenceController = TextEditingController();
   final TextEditingController verseController = TextEditingController();
   final TextEditingController geminiPromptController = TextEditingController();
@@ -191,8 +187,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void dispose() {
-    chapterController.dispose();
-    verseNumController.dispose();
     referenceController.dispose();
     verseController.dispose();
     geminiPromptController.dispose();
@@ -237,17 +231,25 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  void _clampChapterAndVerse() {
+    final int maxChapters = getChapterCountForBook(selectedBook, bibleLang);
+    if (selectedChapter < 1 || selectedChapter > maxChapters) {
+      selectedChapter = 1;
+    }
+    final int maxVerses = getVerseCountForChapter(
+      selectedBook,
+      selectedChapter,
+      bibleLang,
+    );
+    if (selectedVerse < 1 || selectedVerse > maxVerses) {
+      selectedVerse = 1;
+    }
+  }
+
   void _applyQuickReferenceSelector() {
     if (selectedBook == null || selectedBook!.isEmpty) return;
-    final String ch = chapterController.text.trim();
-    final String v = verseNumController.text.trim();
-    if (ch.isEmpty) {
-      referenceController.text = selectedBook!;
-    } else if (v.isEmpty) {
-      referenceController.text = "$selectedBook $ch";
-    } else {
-      referenceController.text = "$selectedBook $ch:$v";
-    }
+    _clampChapterAndVerse();
+    referenceController.text = "$selectedBook $selectedChapter:$selectedVerse";
   }
 
   Future<void> _loadBackgrounds() async {
@@ -387,8 +389,10 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         isFetching = false;
         selectedBook = votd["book"];
-        chapterController.text = votd["chapter"] ?? "1";
-        verseNumController.text = votd["verse"] ?? "1";
+        selectedChapter = int.tryParse(votd["chapter"] ?? "1") ?? 1;
+        selectedVerse =
+            int.tryParse((votd["verse"] ?? "1").split('-').first) ?? 1;
+        _clampChapterAndVerse();
         referenceController.text = reference;
         verseController.text = content;
         altText = previewTexts["altText"]!;
@@ -750,61 +754,113 @@ class _MyHomePageState extends State<MyHomePage> {
           ],
         ),
         const SizedBox(height: 8),
-        // Interactive Book -> Chapter -> Verse selector row
+        // Interactive Book -> Chapter -> Verse dropdown selector row
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 12.0,
-              vertical: 8.0,
+              vertical: 6.0,
             ),
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
-              runSpacing: 8,
-              children: [
-                DropdownButton<String>(
-                  value: selectedBook,
-                  items: canonicalBooks
-                      .map((b) => DropdownMenuItem(value: b, child: Text(b)))
-                      .toList(),
-                  onChanged: (b) {
-                    setState(() {
-                      selectedBook = b;
-                      _applyQuickReferenceSelector();
-                    });
-                  },
-                ),
-                SizedBox(
-                  width: 70,
-                  child: TextField(
-                    controller: chapterController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: generator.getLocaleString(
-                        lang,
-                        "chapter_label",
-                      ),
+            child: Builder(
+              builder: (context) {
+                final int maxChapters = getChapterCountForBook(
+                  selectedBook,
+                  bibleLang,
+                );
+                if (selectedChapter < 1 || selectedChapter > maxChapters) {
+                  selectedChapter = 1;
+                }
+                final int maxVerses = getVerseCountForChapter(
+                  selectedBook,
+                  selectedChapter,
+                  bibleLang,
+                );
+                if (selectedVerse < 1 || selectedVerse > maxVerses) {
+                  selectedVerse = 1;
+                }
+
+                return Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    DropdownButton<String>(
+                      value: selectedBook,
+                      items: canonicalBooks
+                          .map(
+                            (b) => DropdownMenuItem(value: b, child: Text(b)),
+                          )
+                          .toList(),
+                      onChanged: (b) {
+                        setState(() {
+                          selectedBook = b;
+                          selectedChapter = 1;
+                          selectedVerse = 1;
+                          _applyQuickReferenceSelector();
+                        });
+                      },
                     ),
-                    onChanged: (_) => _applyQuickReferenceSelector(),
-                  ),
-                ),
-                SizedBox(
-                  width: 90,
-                  child: TextField(
-                    controller: verseNumController,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: generator.getLocaleString(
-                        lang,
-                        "verse_num_label",
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "${generator.getLocaleString(lang, "chapter_label")}: ",
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        DropdownButton<int>(
+                          value: selectedChapter,
+                          menuMaxHeight: 320,
+                          items: List<DropdownMenuItem<int>>.generate(
+                            maxChapters,
+                            (i) => DropdownMenuItem<int>(
+                              value: i + 1,
+                              child: Text("${i + 1}"),
+                            ),
+                          ),
+                          onChanged: (ch) {
+                            if (ch != null) {
+                              setState(() {
+                                selectedChapter = ch;
+                                selectedVerse = 1;
+                                _applyQuickReferenceSelector();
+                              });
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                    onChanged: (_) => _applyQuickReferenceSelector(),
-                  ),
-                ),
-              ],
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "${generator.getLocaleString(lang, "verse_num_label")}: ",
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        DropdownButton<int>(
+                          value: selectedVerse,
+                          menuMaxHeight: 320,
+                          items: List<DropdownMenuItem<int>>.generate(
+                            maxVerses,
+                            (i) => DropdownMenuItem<int>(
+                              value: i + 1,
+                              child: Text("${i + 1}"),
+                            ),
+                          ),
+                          onChanged: (v) {
+                            if (v != null) {
+                              setState(() {
+                                selectedVerse = v;
+                                _applyQuickReferenceSelector();
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
