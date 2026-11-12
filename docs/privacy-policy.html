@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Inclusive Bible Generator</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #59636e;
+      --card: #f6f8fa;
+      --border: #d0d7de;
+      --accent: #0969da;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --fg: #e6edf3;
+        --muted: #8b949e;
+        --card: #161b22;
+        --border: #30363d;
+        --accent: #58a6ff;
+      }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.65;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem;
+    }
+    h1, h2 { line-height: 1.25; }
+    .meta { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.5rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="meta"><strong>Inclusive Bible Generator</strong> (<code>com.ronalds1979.inclusivebible</code>)<br>
+    Effective Date: November 12, 2026</p>
+
+    <div class="card">
+      <strong>Summary:</strong> Inclusive Bible Generator does not collect, sell, or share personal data. All Bible graphics, alt-text, captions, and TTS audio are generated on your device, and any optional API keys you enter are stored encrypted locally on your device.
+    </div>
+
+    <h2>1. Information We Do Not Collect</h2>
+    <p>The developer of Inclusive Bible Generator does not operate backend servers and does not collect, track, or store your personal information, usage analytics, advertising identifiers, or generated content.</p>
+
+    <h2>2. Locally Stored Data (API Keys)</h2>
+    <p>If you choose to connect an optional <strong>Google Gemini API Key</strong> or <strong>YouVersion Platform App Key</strong>, that key is stored exclusively on your device using Android's encrypted storage (<code>flutter_secure_storage</code>). You can remove your key at any time inside the app.</p>
+
+    <h2>3. Photos, Media &amp; Audio</h2>
+    <ul>
+      <li><strong>Gallery Access:</strong> If you pick a custom background image from your device gallery, the image is read locally to render your verse graphic and is never uploaded to the developer.</li>
+      <li><strong>Export &amp; Sharing:</strong> Generated images and Text-to-Speech (TTS) audio files are saved to your device or shared only when you explicitly choose to share them.</li>
+    </ul>
+
+    <h2>4. Third-Party Services</h2>
+    <p>When you tap actions that require an internet connection, your device communicates directly with the respective service:</p>
+    <ul>
+      <li><strong>Bible Text Services (GetBible / YouVersion / Bible-API):</strong> Used to fetch the Bible verse or Verse of the Day you request.</li>
+      <li><strong>Google Gemini API (Optional):</strong> Only used if you connect your own Gemini API key and tap <em>Generate Background with Gemini</em>. Requests are governed by <a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google's Privacy Policy</a>.</li>
+    </ul>
+
+    <h2>5. Children's Privacy</h2>
+    <p>Inclusive Bible Generator does not knowingly collect any personal information from anyone, including children under 13.</p>
+
+    <h2>6. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated effective date.</p>
+
+    <h2>7. Contact</h2>
+    <p>If you have questions about this Privacy Policy, please open an issue on the project repository:
+    <a href="https://github.com/ronalds1979/inclusive-bible-generator-android" rel="noopener noreferrer">github.com/ronalds1979/inclusive-bible-generator-android</a>.</p>
+  </main>
+</body>
+</html>
