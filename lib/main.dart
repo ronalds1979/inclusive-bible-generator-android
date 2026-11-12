@@ -95,6 +95,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   String? _copiedField;
   Timer? _copyFeedbackTimer;
+  final ScrollController _workspaceScrollController = ScrollController();
+
+  static const List<String> _stepTabKeys = [
+    "tab_verse",
+    "tab_background",
+    "tab_style",
+    "tab_audio",
+  ];
 
   late final Generator generator;
   late final GeminiService geminiService;
@@ -121,6 +129,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? selectedBook;
   int selectedChapter = 119;
   int selectedVerse = 105;
+  int? selectedEndVerse;
   final TextEditingController referenceController = TextEditingController();
   final TextEditingController verseController = TextEditingController();
   final TextEditingController geminiPromptController = TextEditingController();
@@ -192,6 +201,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void dispose() {
     _copyFeedbackTimer?.cancel();
+    _workspaceScrollController.dispose();
     referenceController.dispose();
     verseController.dispose();
     geminiPromptController.dispose();
@@ -254,12 +264,19 @@ class _MyHomePageState extends State<MyHomePage> {
     if (selectedVerse < 1 || selectedVerse > maxVerses) {
       selectedVerse = 1;
     }
+    if (selectedEndVerse != null &&
+        (selectedEndVerse! <= selectedVerse || selectedEndVerse! > maxVerses)) {
+      selectedEndVerse = null;
+    }
   }
 
   void _applyQuickReferenceSelector() {
     if (selectedBook == null || selectedBook!.isEmpty) return;
     _clampChapterAndVerse();
-    referenceController.text = "$selectedBook $selectedChapter:$selectedVerse";
+    final String versePart = selectedEndVerse != null
+        ? "$selectedVerse-$selectedEndVerse"
+        : "$selectedVerse";
+    referenceController.text = "$selectedBook $selectedChapter:$versePart";
   }
 
   Future<void> _loadBackgrounds() async {
@@ -400,8 +417,11 @@ class _MyHomePageState extends State<MyHomePage> {
         isFetching = false;
         selectedBook = votd["book"];
         selectedChapter = int.tryParse(votd["chapter"] ?? "1") ?? 1;
-        selectedVerse =
-            int.tryParse((votd["verse"] ?? "1").split('-').first) ?? 1;
+        final List<String> verseParts = (votd["verse"] ?? "1").split('-');
+        selectedVerse = int.tryParse(verseParts.first) ?? 1;
+        selectedEndVerse = verseParts.length > 1
+            ? int.tryParse(verseParts.last)
+            : null;
         _clampChapterAndVerse();
         referenceController.text = reference;
         verseController.text = content;
@@ -679,6 +699,112 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Future<void> _showBookSearchSheet(
+    String lang,
+    List<String> canonicalBooks,
+  ) async {
+    final TextEditingController searchController = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final String query = searchController.text.trim().toLowerCase();
+            final List<String> filtered = query.isEmpty
+                ? canonicalBooks
+                : canonicalBooks
+                    .where((b) => b.toLowerCase().contains(query))
+                    .toList();
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.7,
+              minChildSize: 0.45,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (context, scrollController) {
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: searchController,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText: generator.getLocaleString(
+                            lang,
+                            "search_book_hint",
+                          ),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: query.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  tooltip: generator.getLocaleString(
+                                    lang,
+                                    "clear_btn",
+                                  ),
+                                  onPressed: () {
+                                    searchController.clear();
+                                    setSheetState(() {});
+                                  },
+                                )
+                              : null,
+                        ),
+                        onChanged: (_) => setSheetState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final String book = filtered[index];
+                            final bool isSelected = book == selectedBook;
+                            return ListTile(
+                              title: Text(
+                                book,
+                                style: TextStyle(
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
+                                    )
+                                  : null,
+                              onTap: () {
+                                setState(() {
+                                  selectedBook = book;
+                                  selectedChapter = 1;
+                                  selectedVerse = 1;
+                                  selectedEndVerse = null;
+                                  _applyQuickReferenceSelector();
+                                });
+                                Navigator.of(sheetContext).pop();
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+    searchController.dispose();
+  }
+
   Widget _buildVerseTab(String lang) {
     final List<String> canonicalBooks = getCanonicalBooks(bibleLang);
     if (selectedBook == null || !canonicalBooks.contains(selectedBook)) {
@@ -798,27 +924,53 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (selectedVerse < 1 || selectedVerse > maxVerses) {
                   selectedVerse = 1;
                 }
+                if (selectedEndVerse != null &&
+                    (selectedEndVerse! <= selectedVerse ||
+                        selectedEndVerse! > maxVerses)) {
+                  selectedEndVerse = null;
+                }
 
                 return Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 12,
                   runSpacing: 6,
                   children: [
-                    DropdownButton<String>(
-                      value: selectedBook,
-                      items: canonicalBooks
-                          .map(
-                            (b) => DropdownMenuItem(value: b, child: Text(b)),
-                          )
-                          .toList(),
-                      onChanged: (b) {
-                        setState(() {
-                          selectedBook = b;
-                          selectedChapter = 1;
-                          selectedVerse = 1;
-                          _applyQuickReferenceSelector();
-                        });
-                      },
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Semantics(
+                          label: generator.getLocaleString(lang, "book_label"),
+                          child: DropdownButton<String>(
+                            value: selectedBook,
+                            items: canonicalBooks
+                                .map(
+                                  (b) => DropdownMenuItem(
+                                    value: b,
+                                    child: Text(b),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (b) {
+                              setState(() {
+                                selectedBook = b;
+                                selectedChapter = 1;
+                                selectedVerse = 1;
+                                selectedEndVerse = null;
+                                _applyQuickReferenceSelector();
+                              });
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.search, size: 20),
+                          tooltip: generator.getLocaleString(
+                            lang,
+                            "search_book_tooltip",
+                          ),
+                          onPressed: () =>
+                              _showBookSearchSheet(lang, canonicalBooks),
+                        ),
+                      ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -827,25 +979,32 @@ class _MyHomePageState extends State<MyHomePage> {
                           "${generator.getLocaleString(lang, "chapter_label")}: ",
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        DropdownButton<int>(
-                          value: selectedChapter,
-                          menuMaxHeight: 320,
-                          items: List<DropdownMenuItem<int>>.generate(
-                            maxChapters,
-                            (i) => DropdownMenuItem<int>(
-                              value: i + 1,
-                              child: Text("${i + 1}"),
-                            ),
+                        Semantics(
+                          label: generator.getLocaleString(
+                            lang,
+                            "chapter_label",
                           ),
-                          onChanged: (ch) {
-                            if (ch != null) {
-                              setState(() {
-                                selectedChapter = ch;
-                                selectedVerse = 1;
-                                _applyQuickReferenceSelector();
-                              });
-                            }
-                          },
+                          child: DropdownButton<int>(
+                            value: selectedChapter,
+                            menuMaxHeight: 320,
+                            items: List<DropdownMenuItem<int>>.generate(
+                              maxChapters,
+                              (i) => DropdownMenuItem<int>(
+                                value: i + 1,
+                                child: Text("${i + 1}"),
+                              ),
+                            ),
+                            onChanged: (ch) {
+                              if (ch != null) {
+                                setState(() {
+                                  selectedChapter = ch;
+                                  selectedVerse = 1;
+                                  selectedEndVerse = null;
+                                  _applyQuickReferenceSelector();
+                                });
+                              }
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -856,27 +1015,84 @@ class _MyHomePageState extends State<MyHomePage> {
                           "${generator.getLocaleString(lang, "verse_num_label")}: ",
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        DropdownButton<int>(
-                          value: selectedVerse,
-                          menuMaxHeight: 320,
-                          items: List<DropdownMenuItem<int>>.generate(
-                            maxVerses,
-                            (i) => DropdownMenuItem<int>(
-                              value: i + 1,
-                              child: Text("${i + 1}"),
-                            ),
+                        Semantics(
+                          label: generator.getLocaleString(
+                            lang,
+                            "verse_num_label",
                           ),
-                          onChanged: (v) {
-                            if (v != null) {
-                              setState(() {
-                                selectedVerse = v;
-                                _applyQuickReferenceSelector();
-                              });
-                            }
-                          },
+                          child: DropdownButton<int>(
+                            value: selectedVerse,
+                            menuMaxHeight: 320,
+                            items: List<DropdownMenuItem<int>>.generate(
+                              maxVerses,
+                              (i) => DropdownMenuItem<int>(
+                                value: i + 1,
+                                child: Text("${i + 1}"),
+                              ),
+                            ),
+                            onChanged: (v) {
+                              if (v != null) {
+                                setState(() {
+                                  selectedVerse = v;
+                                  if (selectedEndVerse != null &&
+                                      selectedEndVerse! <= v) {
+                                    selectedEndVerse = null;
+                                  }
+                                  _applyQuickReferenceSelector();
+                                });
+                              }
+                            },
+                          ),
                         ),
                       ],
                     ),
+                    if (selectedVerse < maxVerses)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "${generator.getLocaleString(lang, "verse_end_label")}: ",
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Semantics(
+                            label: generator.getLocaleString(
+                              lang,
+                              "verse_end_label",
+                            ),
+                            child: DropdownButton<int?>(
+                              value: selectedEndVerse,
+                              menuMaxHeight: 320,
+                              items: [
+                                DropdownMenuItem<int?>(
+                                  value: null,
+                                  child: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "verse_end_single",
+                                    ),
+                                  ),
+                                ),
+                                ...List<DropdownMenuItem<int?>>.generate(
+                                  maxVerses - selectedVerse,
+                                  (i) {
+                                    final int endNum = selectedVerse + 1 + i;
+                                    return DropdownMenuItem<int?>(
+                                      value: endNum,
+                                      child: Text("$endNum"),
+                                    );
+                                  },
+                                ),
+                              ],
+                              onChanged: (endV) {
+                                setState(() {
+                                  selectedEndVerse = endV;
+                                  _applyQuickReferenceSelector();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 );
               },
@@ -972,6 +1188,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           },
         ),
+        _buildStepNavigationRow(lang, 0),
       ],
     );
   }
@@ -1058,6 +1275,7 @@ class _MyHomePageState extends State<MyHomePage> {
           onConnectPressed: _showGeminiAuthDialog,
           onGeneratePressed: _generateGeminiBackground,
         ),
+        _buildStepNavigationRow(lang, 1),
       ],
     );
   }
@@ -1233,6 +1451,7 @@ class _MyHomePageState extends State<MyHomePage> {
           label: yOffset.round().toString(),
           onChanged: (v) => setState(() => yOffset = v),
         ),
+        _buildStepNavigationRow(lang, 2),
       ],
     );
   }
@@ -1381,7 +1600,107 @@ class _MyHomePageState extends State<MyHomePage> {
             label: Text(generator.getLocaleString(lang, "copy_caption_btn")),
           ),
         ],
+        _buildStepNavigationRow(lang, 3),
       ],
+    );
+  }
+
+  void _selectTab(int index) {
+    if (index < 0 || index >= _stepTabKeys.length || index == _selectedTabIndex) {
+      return;
+    }
+    setState(() => _selectedTabIndex = index);
+    if (_workspaceScrollController.hasClients) {
+      if (MediaQuery.of(context).disableAnimations) {
+        _workspaceScrollController.jumpTo(0);
+      } else {
+        _workspaceScrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+  }
+
+  Widget _buildStepProgressHeader(String lang) {
+    final String stepName = generator.getLocaleString(
+      lang,
+      _stepTabKeys[_selectedTabIndex],
+    );
+    final String label = generator
+        .getLocaleString(lang, "step_progress_label")
+        .replaceAll("{current}", "${_selectedTabIndex + 1}")
+        .replaceAll("{total}", "${_stepTabKeys.length}")
+        .replaceAll("{step}", stepName);
+
+    return Semantics(
+      liveRegion: true,
+      label: label,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LinearProgressIndicator(
+            value: (_selectedTabIndex + 1) / _stepTabKeys.length,
+            minHeight: 4,
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withAlpha(60),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepNavigationRow(String lang, int stepIndex) {
+    final bool hasBack = stepIndex > 0;
+    final bool hasNext = stepIndex < _stepTabKeys.length - 1;
+    final String nextStepName = hasNext
+        ? generator.getLocaleString(lang, _stepTabKeys[stepIndex + 1])
+        : "";
+    final String nextLabel = generator
+        .getLocaleString(lang, "step_next_label")
+        .replaceAll("{step}", nextStepName);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
+      child: Row(
+        children: [
+          if (hasBack)
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+              ),
+              onPressed: () => _selectTab(stepIndex - 1),
+              icon: const Icon(Icons.arrow_back, size: 18),
+              label: Text(generator.getLocaleString(lang, "step_back_btn")),
+            ),
+          if (hasBack && hasNext) const SizedBox(width: 12),
+          if (hasNext)
+            Expanded(
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                ),
+                onPressed: () => _selectTab(stepIndex + 1),
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                iconAlignment: IconAlignment.end,
+                label: Text(nextLabel),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1513,8 +1832,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final Widget tabNavigation = NavigationBar(
       height: 60,
       selectedIndex: _selectedTabIndex,
-      onDestinationSelected: (index) =>
-          setState(() => _selectedTabIndex = index),
+      onDestinationSelected: _selectTab,
       destinations: [
         NavigationDestination(
           icon: const Icon(Icons.menu_book_outlined),
@@ -1592,8 +1910,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Column(
                     children: [
                       tabNavigation,
+                      _buildStepProgressHeader(lang),
                       Expanded(
                         child: SingleChildScrollView(
+                          controller: _workspaceScrollController,
                           padding: const EdgeInsets.all(16.0),
                           child: tabbedWorkspace,
                         ),
@@ -1634,8 +1954,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Center(child: previewWidget),
                 ),
                 tabNavigation,
+                _buildStepProgressHeader(lang),
                 Expanded(
                   child: SingleChildScrollView(
+                    controller: _workspaceScrollController,
                     padding: const EdgeInsets.all(14.0),
                     child: tabbedWorkspace,
                   ),

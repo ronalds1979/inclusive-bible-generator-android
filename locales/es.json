@@ -85,5 +85,14 @@
   "color_coral": "Coral Suave",
   "color_black": "Negro",
   "reset_position_btn": "Centrar",
-  "text_empty_state": "Toca \"Generar y Compartir\" para crear el Alt-Text y la Leyenda listos para copiar."
+  "text_empty_state": "Toca \"Generar y Compartir\" para crear el Alt-Text y la Leyenda listos para copiar.",
+  "step_progress_label": "Paso {current} de {total}: {step}",
+  "step_back_btn": "Atrás",
+  "step_next_label": "Siguiente: {step}",
+  "gemini_add_details_btn": "Añadir detalles de la escena (opcional)",
+  "gemini_verse_required_hint": "Elige un versículo en el Paso 1 para activar la generación con IA.",
+  "verse_end_label": "Hasta",
+  "verse_end_single": "—",
+  "search_book_tooltip": "Buscar libro",
+  "search_book_hint": "Escribe el nombre del libro..."
 }

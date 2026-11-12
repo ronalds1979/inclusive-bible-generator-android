@@ -166,6 +166,7 @@ void main() {
       find.byType(TextField),
       "mock-gemini-key-for-widget-test",
     );
+    await tester.pump();
     await tester.tap(find.text("Save & Connect"));
     await tester.pumpAndSettle();
 
@@ -259,6 +260,24 @@ void main() {
 
       expect(find.text("John 3:16"), findsWidgets);
       expect(find.text("For God so loved the world."), findsWidgets);
+
+      // Verify guided step-by-step navigation (Verse -> Background -> Style -> Back)
+      expect(find.text("Step 1 of 4: Verse"), findsOneWidget);
+      await tester.ensureVisible(find.text("Next: Background"));
+      await tester.tap(find.text("Next: Background"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Step 2 of 4: Background"), findsOneWidget);
+      await tester.ensureVisible(find.text("Next: Style"));
+      await tester.tap(find.text("Next: Style"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Step 3 of 4: Style"), findsOneWidget);
+      await tester.ensureVisible(find.text("Back").last);
+      await tester.tap(find.text("Back").last);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Step 2 of 4: Background"), findsOneWidget);
     },
   );
 }

@@ -85,5 +85,14 @@
   "color_coral": "Soft Coral",
   "color_black": "Black",
   "reset_position_btn": "Center",
-  "text_empty_state": "Tap \"Generate & Share\" to create Alt-Text and a Social Media Caption ready to copy."
+  "text_empty_state": "Tap \"Generate & Share\" to create Alt-Text and a Social Media Caption ready to copy.",
+  "step_progress_label": "Step {current} of {total}: {step}",
+  "step_back_btn": "Back",
+  "step_next_label": "Next: {step}",
+  "gemini_add_details_btn": "Add scene details (optional)",
+  "gemini_verse_required_hint": "Choose a verse in Step 1 to enable AI background generation.",
+  "verse_end_label": "To",
+  "verse_end_single": "—",
+  "search_book_tooltip": "Search book",
+  "search_book_hint": "Type book name..."
 }

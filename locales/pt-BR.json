@@ -85,5 +85,14 @@
   "color_coral": "Coral Suave",
   "color_black": "Preto",
   "reset_position_btn": "Centralizar",
-  "text_empty_state": "Toque em \"Gerar e Compartilhar\" para criar o Alt-Text e a Legenda prontos para copiar."
+  "text_empty_state": "Toque em \"Gerar e Compartilhar\" para criar o Alt-Text e a Legenda prontos para copiar.",
+  "step_progress_label": "Passo {current} de {total}: {step}",
+  "step_back_btn": "Voltar",
+  "step_next_label": "Próximo: {step}",
+  "gemini_add_details_btn": "Adicionar detalhes da cena (opcional)",
+  "gemini_verse_required_hint": "Escolha um versículo no Passo 1 para ativar a geração com IA.",
+  "verse_end_label": "Até",
+  "verse_end_single": "—",
+  "search_book_tooltip": "Buscar livro",
+  "search_book_hint": "Digite o nome do livro..."
 }

@@ -33,6 +33,11 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
   void initState() {
     super.initState();
     _keyController = TextEditingController(text: widget.initialApiKey ?? "");
+    if (_keyController.text.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkClipboardForKey(autoConnectIfFound: false);
+      });
+    }
   }
 
   @override
@@ -98,22 +103,11 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                 onPressed: _openGoogleAiStudio,
                 icon: const Icon(Icons.open_in_new, size: 18),
                 label: Text(
                   generator.getLocaleString(lang, "gemini_open_aistudio_btn"),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    _checkClipboardForKey(autoConnectIfFound: false),
-                icon: const Icon(Icons.content_paste, size: 18),
-                label: Text(
-                  generator.getLocaleString(lang, "gemini_paste_clipboard_btn"),
                 ),
               ),
             ),
@@ -157,20 +151,35 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
               obscureText: _obscure,
               maxLength: 256,
               decoration: InputDecoration(
+                counterText: "",
                 labelText: generator.getLocaleString(
                   lang,
                   "gemini_api_key_label",
                 ),
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _obscure = !_obscure;
-                    });
-                  },
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.content_paste),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "gemini_paste_clipboard_btn",
+                      ),
+                      onPressed: () =>
+                          _checkClipboardForKey(autoConnectIfFound: false),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _obscure ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscure = !_obscure;
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -194,15 +203,23 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
           onPressed: () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.check),
-          label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
-          onPressed: () async {
-            final String entered = _keyController.text.trim();
-            await widget.onSave(entered);
-            if (context.mounted) {
-              Navigator.of(context).pop(entered.isNotEmpty);
-            }
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _keyController,
+          builder: (context, value, child) {
+            final bool canSave = value.text.trim().isNotEmpty;
+            return ElevatedButton.icon(
+              icon: const Icon(Icons.check),
+              label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
+              onPressed: canSave
+                  ? () async {
+                      final String entered = _keyController.text.trim();
+                      await widget.onSave(entered);
+                      if (context.mounted) {
+                        Navigator.of(context).pop(entered.isNotEmpty);
+                      }
+                    }
+                  : null,
+            );
           },
         ),
       ],
