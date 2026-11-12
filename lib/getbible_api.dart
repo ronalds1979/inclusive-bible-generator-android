@@ -23,6 +23,17 @@ class GetBibleAPI {
   static final RegExp _referenceRegExp = RegExp(
     r'^((?:\d\s+)?[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
   );
+  // ⚡ Bolt: Pre-compile verse cleanup patterns once and reuse a persistent HTTP client
+  static final RegExp _footnoteTagRegExp = RegExp(
+    r'<(sup|S)\b[^>]*>.*?</\1>',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  static final RegExp _htmlTagRegExp = RegExp(r'<[^>]+>');
+  static final RegExp _circledMarkerRegExp = RegExp(r'[\u24B6-\u24E9\u2460-\u2473]');
+  static final RegExp _bracketNumberRegExp = RegExp(r'\[\d+\]');
+  static final RegExp _whitespaceRegExp = RegExp(r'\s+');
+  static final http.Client _sharedHttpClient = http.Client();
 
   // ⚡ Bolt: Pre-compute lowercase book mappings once so case-insensitive
   // fallback lookups are O(1) instead of O(N) with per-entry .toLowerCase() allocations.
@@ -297,7 +308,7 @@ class GetBibleAPI {
     required String apiKey,
     http.Client? httpClient,
   }) async {
-    final client = httpClient ?? http.Client();
+    final client = httpClient ?? _sharedHttpClient;
     final String iso3 = langPrefix == "pt"
         ? "por"
         : (langPrefix == "es" ? "spa" : "eng");
@@ -404,20 +415,17 @@ class GetBibleAPI {
   /// Cleans footnote tags (`<sup>...</sup>`), Strong's numbers (`<S>...</S>`),
   /// and HTML markup from verse text.
   static String cleanVerseText(String raw) {
+    if (raw.isEmpty) return raw;
     String text = raw;
     // Remove footnote and Strong's number tags along with their inner content
-    text = text.replaceAll(
-      RegExp(r'<(sup|S)\b[^>]*>.*?</\1>', caseSensitive: false, dotAll: true),
-      '',
-    );
+    text = text.replaceAll(_footnoteTagRegExp, '');
     // Remove remaining HTML tags
-    text = text.replaceAll(RegExp(r'<[^>]+>'), ' ');
+    text = text.replaceAll(_htmlTagRegExp, ' ');
     // Remove stray circled footnote markers or bracketed numbers if any remain
-    text = text.replaceAll(RegExp(r'[\u24B6-\u24E9\u2460-\u2473]'), '');
-    text = text.replaceAll(RegExp(r'\[\d+\]'), '');
+    text = text.replaceAll(_circledMarkerRegExp, '');
+    text = text.replaceAll(_bracketNumberRegExp, '');
     // Collapse multiple spaces
-    text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return text;
+    return text.replaceAll(_whitespaceRegExp, ' ').trim();
   }
 
   static Future<String?> getPassage(
@@ -449,7 +457,7 @@ class GetBibleAPI {
       }
     }
 
-    final client = httpClient ?? http.Client();
+    final client = httpClient ?? _sharedHttpClient;
     final String normalizedId = bibleId.trim().toLowerCase();
     final String effectiveYvKey =
         (youVersionApiKey != null && youVersionApiKey.trim().isNotEmpty)
@@ -684,7 +692,7 @@ class GetBibleAPI {
     String? youVersionApiKey,
     http.Client? httpClient,
   }) async {
-    final client = httpClient ?? http.Client();
+    final client = httpClient ?? _sharedHttpClient;
     final DateTime now = DateTime.now();
     final int dayOfYear =
         now.difference(DateTime(now.year, 1, 1)).inDays + 1;

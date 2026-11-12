@@ -5,10 +5,19 @@ import 'package:flutter/foundation.dart';
 class Generator {
   Map<String, Map<String, dynamic>> locales = {};
   static final RegExp _templateRegex = RegExp(r'\{([^}]+)\}');
+  static const Map<String, String> _langAliasMap = {
+    "Português (Brasil)": "pt-BR",
+    "Português": "pt-BR",
+    "English (US/UK)": "en",
+    "English": "en",
+    "Español (España)": "es",
+    "Español": "es",
+  };
 
   Future<void> loadLocales() async {
     const List<String> langCodes = ["pt-BR", "en", "es"];
-    for (final String langCode in langCodes) {
+    // ⚡ Bolt: Load locale JSON files concurrently at startup instead of sequentially
+    await Future.wait(langCodes.map((langCode) async {
       try {
         final String jsonString = await rootBundle.loadString(
           "locales/$langCode.json",
@@ -19,7 +28,7 @@ class Generator {
           debugPrint("Error loading locale $langCode: $e");
         }
       }
-    }
+    }));
   }
 
   String getLocaleString(
@@ -27,16 +36,9 @@ class Generator {
     String key, {
     Map<String, String>? kwargs,
   }) {
-    // ⚡ Bolt: Fast-path optimization to skip expensive string replacements
-    // if the provided language string is already pre-normalized. This reduces
-    // unnecessary allocations since this method is called frequently during builds.
+    // ⚡ Bolt: O(1) fast-path + alias map lookup instead of chained .replaceAll() calls
     if (!locales.containsKey(lang)) {
-      lang = lang
-          .replaceAll(" (Brasil)", "")
-          .replaceAll("English (US/UK)", "en")
-          .replaceAll("Español (España)", "es")
-          .replaceAll("Português", "pt-BR");
-
+      lang = _langAliasMap[lang] ?? "pt-BR";
       if (!locales.containsKey(lang)) {
         lang = "pt-BR";
       }

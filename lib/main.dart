@@ -200,14 +200,19 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _initApp() async {
-    await generator.loadLocales();
-    geminiApiKey = await geminiService.loadApiKey();
+    // ⚡ Bolt: Parallelize independent startup I/O (locales, secure storage keys, asset manifest)
+    final results = await Future.wait<dynamic>([
+      generator.loadLocales(),
+      geminiService.loadApiKey(),
+      GetBibleAPI.loadYouVersionApiKey(),
+      _loadBackgrounds(),
+    ]);
+    geminiApiKey = results[1] as String?;
     youVersionApiKey =
-        (await GetBibleAPI.loadYouVersionApiKey()) ??
-        GetBibleAPI.defaultYouVersionApiKey;
-    await _loadBackgrounds();
+        (results[2] as String?) ?? GetBibleAPI.defaultYouVersionApiKey;
     _syncDefaultBookForLanguage();
     await _loadBibleVersions();
+    if (!mounted) return;
     setState(() {
       isLoading = false;
     });

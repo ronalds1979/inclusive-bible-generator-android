@@ -20,9 +20,15 @@ class MediaExportService {
       if (renderObject is! RenderRepaintBoundary) return;
 
       final ui.Image image = await renderObject.toImage(pixelRatio: 3.0);
-      final ByteData? byteData = await image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
+      final ByteData? byteData;
+      try {
+        byteData = await image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+      } finally {
+        // ⚡ Bolt: Release native GPU/Skia image buffer immediately after PNG encoding
+        image.dispose();
+      }
       if (byteData == null) return;
       final Uint8List pngBytes = byteData.buffer.asUint8List();
 
