@@ -82,64 +82,73 @@ class VersePreviewCard extends StatelessWidget {
         child: AnimatedBuilder(
           animation: previewListenable,
           builder: (context, child) {
-            return Stack(
-              children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Transform.translate(
-                      offset: Offset(0, yOffset - 20),
-                      child: Text(
-                        verseController.text.isEmpty
-                            ? generator.getLocaleString(
-                                lang,
-                                "preview_verse_placeholder",
-                              )
-                            : verseController.text,
-                        textAlign: TextAlign.center,
-                        style: _baseRobotoStyle.copyWith(
-                          color: fontColor,
-                          fontSize: fontSize / 2,
-                          fontWeight: FontWeight.bold,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+            return Align(
+              alignment: Alignment.center,
+              child: Transform.translate(
+                offset: Offset(0, yOffset),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 16.0,
                   ),
-                ),
-                Align(
-                  alignment: Alignment.center,
-                  child: Transform.translate(
-                    offset: Offset(0, yOffset + (fontSize / 2) + 40),
-                    child: Text(
-                      referenceController.text.isEmpty
-                          ? generator.getLocaleString(
-                              lang,
-                              "reference_placeholder",
-                            )
-                          : referenceController.text,
-                      style: _baseRobotoStyle.copyWith(
-                        color: fontColor,
-                        fontSize: (fontSize * 0.66) / 2,
-                        shadows: const [
-                          Shadow(
-                            color: Colors.black54,
-                            blurRadius: 6,
-                            offset: Offset(0, 1.5),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: SizedBox(
+                      width: width - 40.0,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            verseController.text.isEmpty
+                                ? generator.getLocaleString(
+                                    lang,
+                                    "preview_verse_placeholder",
+                                  )
+                                : verseController.text,
+                            textAlign: TextAlign.center,
+                            style: _baseRobotoStyle.copyWith(
+                              color: fontColor,
+                              fontSize: fontSize / 2,
+                              fontWeight: FontWeight.bold,
+                              shadows: const [
+                                Shadow(
+                                  color: Colors.black54,
+                                  blurRadius: 8,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            height: (fontSize * 0.35).clamp(12.0, 24.0),
+                          ),
+                          Text(
+                            referenceController.text.isEmpty
+                                ? generator.getLocaleString(
+                                    lang,
+                                    "reference_placeholder",
+                                  )
+                                : referenceController.text,
+                            textAlign: TextAlign.center,
+                            style: _baseRobotoStyle.copyWith(
+                              color: fontColor,
+                              fontSize: (fontSize * 0.66) / 2,
+                              shadows: const [
+                                Shadow(
+                                  color: Colors.black54,
+                                  blurRadius: 6,
+                                  offset: Offset(0, 1.5),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
             );
           },
         ),

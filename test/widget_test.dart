@@ -411,4 +411,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Almeida Revista e Atualizada (ARA)"), findsOneWidget);
   });
+
+  testWidgets('VersePreviewCard prevents overlap between long verse text and reference', (
+    WidgetTester tester,
+  ) async {
+    const String longVerse =
+        "Because God so loved the world that he gave his one and only Son, "
+        "that whoever believes in him shall not perish but have eternal life. "
+        "For God did not send his Son into the world to condemn the world, "
+        "but to save the world through him.";
+    const String reference = "John 3:16-17";
+    final verseController = TextEditingController(text: longVerse);
+    final referenceController = TextEditingController(text: reference);
+    final listenable = Listenable.merge([verseController, referenceController]);
+    final generator = Generator();
+    addTearDown(() {
+      verseController.dispose();
+      referenceController.dispose();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 300,
+            height: 400,
+            child: VersePreviewCard(
+              repaintKey: GlobalKey(),
+              aspectRatioStr: "9:16",
+              customImagePath: null,
+              selectedBackground: "bg1.jpg",
+              previewListenable: listenable,
+              verseController: verseController,
+              referenceController: referenceController,
+              fontColor: Colors.white,
+              fontSize: 48,
+              yOffset: 0,
+              lang: "en",
+              generator: generator,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Rect verseRect = tester.getRect(find.text(longVerse));
+    final Rect referenceRect = tester.getRect(find.text(reference));
+
+    expect(verseRect.bottom, lessThan(referenceRect.top));
+    expect(tester.takeException(), isNull);
+  });
 }
