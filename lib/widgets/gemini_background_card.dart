@@ -68,7 +68,9 @@ class _GeminiBackgroundCardState extends State<GeminiBackgroundCard> {
                   icon: Icon(
                     widget.isConnected ? Icons.verified_user : Icons.key,
                     size: 16,
-                    color: widget.isConnected ? Colors.green : null,
+                    color: widget.isConnected
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
                   ),
                   label: Text(
                     generator.getLocaleString(
@@ -100,45 +102,53 @@ class _GeminiBackgroundCardState extends State<GeminiBackgroundCard> {
               }).toList(),
             ),
             const SizedBox(height: 6),
-            if (!_showExtraDetails)
-              TextButton.icon(
-                onPressed: () => setState(() => _showExtraDetails = true),
-                icon: const Icon(Icons.tune, size: 16),
-                label: Text(
-                  generator.getLocaleString(lang, "gemini_add_details_btn"),
-                ),
-              )
-            else ...[
-              const SizedBox(height: 4),
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: widget.promptController,
-                builder: (context, value, child) {
-                  return TextField(
-                    controller: widget.promptController,
-                    maxLength: 200,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      counterText: "",
-                      labelText: generator.getLocaleString(
-                        lang,
-                        "gemini_prompt_label",
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              alignment: Alignment.topLeft,
+              child: !_showExtraDetails
+                  ? TextButton.icon(
+                      onPressed: () => setState(() => _showExtraDetails = true),
+                      icon: const Icon(Icons.tune, size: 16),
+                      label: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "gemini_add_details_btn",
+                        ),
                       ),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: value.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              tooltip: generator.getLocaleString(
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: widget.promptController,
+                        builder: (context, value, child) {
+                          return TextField(
+                            controller: widget.promptController,
+                            maxLength: 200,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              counterText: "",
+                              labelText: generator.getLocaleString(
                                 lang,
-                                "clear_btn",
+                                "gemini_prompt_label",
                               ),
-                              onPressed: widget.promptController.clear,
-                            )
-                          : null,
+                              border: const OutlineInputBorder(),
+                              suffixIcon: value.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      tooltip: generator.getLocaleString(
+                                        lang,
+                                        "clear_btn",
+                                      ),
+                                      onPressed: widget.promptController.clear,
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  );
-                },
-              ),
-            ],
+            ),
             const SizedBox(height: 8),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: widget.verseController,

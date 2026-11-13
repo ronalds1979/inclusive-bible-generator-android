@@ -226,9 +226,52 @@ void main() {
     referenceController.dispose();
   });
 
+  test('resolveAppLanguageForLocale maps device locales with English fallback', () {
+    expect(
+      resolveAppLanguageForLocale(const Locale('pt', 'BR')),
+      equals('Português (Brasil)'),
+    );
+    expect(
+      resolveAppLanguageForLocale(const Locale('pt')),
+      equals('Português (Brasil)'),
+    );
+    expect(
+      resolveAppLanguageForLocale(const Locale('es', 'ES')),
+      equals('Español (España)'),
+    );
+    expect(
+      resolveAppLanguageForLocale(const Locale('en', 'US')),
+      equals('English (US/UK)'),
+    );
+    expect(
+      resolveAppLanguageForLocale(const Locale('fr', 'FR')),
+      equals('English (US/UK)'),
+    );
+  });
+
+  testWidgets(
+    'MyApp recognizes Spanish device locale on startup',
+    (WidgetTester tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('es', 'ES');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(const MyApp());
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text("Español (España)"), findsOneWidget);
+      expect(find.text("Buscar Versículo"), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'Full MyApp end-to-end initialization, 4-tab navigation, language switch, and form interaction',
     (WidgetTester tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('pt', 'BR');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
       await tester.runAsync(() async {
         await tester.pumpWidget(const MyApp());
         // Allow async asset bundle and initialization to complete

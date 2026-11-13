@@ -94,5 +94,21 @@
   "verse_end_label": "To",
   "verse_end_single": "—",
   "search_book_tooltip": "Search book",
-  "search_book_hint": "Type book name..."
+  "search_book_hint": "Type book name...",
+  "show_api_key_tooltip": "Show API key",
+  "hide_api_key_tooltip": "Hide API key",
+  "image_size_limit_error": "Image file exceeds 20MB limit.",
+  "background_dim_label": "Background Dim (Contrast)",
+  "stock_search_title": "Free Stock Photos",
+  "stock_search_hint": "Search scene (e.g. sunrise, ocean)",
+  "stock_search_btn": "Search",
+  "stock_search_empty": "No photos found. Try another keyword.",
+  "stock_search_error": "Could not load stock photos. Check your connection.",
+  "stock_mood_sunrise": "Sunrise",
+  "stock_mood_ocean": "Ocean",
+  "stock_mood_mountains": "Mountains",
+  "stock_mood_stars": "Stars",
+  "stock_mood_forest": "Forest",
+  "experimental_gemini_title": "Experimental: AI Background (Gemini)",
+  "experimental_gemini_subtitle": "Requires a billed Gemini API key for real image generation"
 }

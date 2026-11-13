@@ -116,15 +116,17 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.withAlpha(30),
+                  color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle,
-                      color: Colors.green,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -134,8 +136,10 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
                           lang,
                           "gemini_clipboard_detected_msg",
                         ),
-                        style: const TextStyle(
-                          color: Colors.green,
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
                         ),
@@ -172,6 +176,12 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
                     IconButton(
                       icon: Icon(
                         _obscure ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        _obscure
+                            ? "show_api_key_tooltip"
+                            : "hide_api_key_tooltip",
                       ),
                       onPressed: () {
                         setState(() {

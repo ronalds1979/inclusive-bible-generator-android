@@ -12,10 +12,24 @@ import 'gemini_service.dart';
 import 'generator.dart';
 import 'getbible_api.dart';
 import 'services/media_export_service.dart';
+import 'services/stock_photo_service.dart';
 import 'services/tts_service.dart';
 import 'widgets/gemini_auth_dialog.dart';
 import 'widgets/gemini_background_card.dart';
+import 'widgets/stock_photo_search_card.dart';
 import 'widgets/verse_preview_card.dart';
+
+String resolveAppLanguageForLocale(Locale locale) {
+  switch (locale.languageCode.toLowerCase()) {
+    case 'pt':
+      return "Português (Brasil)";
+    case 'es':
+      return "Español (España)";
+    case 'en':
+    default:
+      return "English (US/UK)";
+  }
+}
 
 void main() {
   runApp(const MyApp());
@@ -108,6 +122,7 @@ class _MyHomePageState extends State<MyHomePage> {
   late final GeminiService geminiService;
   late final TtsService ttsService;
   late final MediaExportService mediaExportService;
+  final StockPhotoService stockPhotoService = StockPhotoService();
   final GlobalKey _globalKey = GlobalKey();
 
   int _selectedTabIndex = 0;
@@ -137,11 +152,13 @@ class _MyHomePageState extends State<MyHomePage> {
   String selectedBackground = "default.png";
   List<String> backgrounds = ["default.png"];
   String? customImagePath;
+  double backgroundDim = 0.15;
 
   String? geminiApiKey;
   String selectedGeminiStyle = GeminiService.styleKeys.first;
   bool isGeneratingGeminiBg = false;
   bool isGeminiBackground = false;
+  bool _showExperimentalGemini = false;
 
   Color fontColor = Colors.white;
   double fontSize = 60.0;
@@ -187,6 +204,10 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+    final Locale deviceLocale =
+        WidgetsBinding.instance.platformDispatcher.locale;
+    currentLang = resolveAppLanguageForLocale(deviceLocale);
+    bibleLang = getLangKey().substring(0, 2);
     generator = widget.generator ?? Generator();
     geminiService = widget.geminiService ?? GeminiService();
     ttsService = widget.ttsService ?? TtsService();
@@ -446,7 +467,14 @@ class _MyHomePageState extends State<MyHomePage> {
       if (fileSize > 20 * 1024 * 1024) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image file exceeds 20MB limit.')),
+          SnackBar(
+            content: Text(
+              generator.getLocaleString(
+                getLangKey(),
+                "image_size_limit_error",
+              ),
+            ),
+          ),
         );
         return;
       }
@@ -1193,6 +1221,15 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  String _formatBackgroundName(String fileName) {
+    final String base = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
+    return base
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ');
+  }
+
   Widget _buildBackgroundTab(String lang, bool isGeminiConnected) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1209,7 +1246,12 @@ class _MyHomePageState extends State<MyHomePage> {
             DropdownButton<String>(
               value: selectedBackground,
               items: backgrounds
-                  .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                  .map(
+                    (v) => DropdownMenuItem(
+                      value: v,
+                      child: Text(_formatBackgroundName(v)),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) => setState(() {
                 selectedBackground = v!;
@@ -1217,7 +1259,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 isGeminiBackground = false;
               }),
             ),
-            FilledButton.tonalIcon(
+            FilledButton.icon(
               onPressed: _selectCustomImage,
               icon: const Icon(Icons.photo_library, size: 18),
               label: Text(generator.getLocaleString(lang, "custom_image_btn")),
@@ -1235,26 +1277,36 @@ class _MyHomePageState extends State<MyHomePage> {
               final String bgName = backgrounds[index];
               final bool isSelected =
                   customImagePath == null && selectedBackground == bgName;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  selectedBackground = bgName;
-                  customImagePath = null;
-                  isGeminiBackground = false;
-                }),
-                child: Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
+              final String label = _formatBackgroundName(bgName);
+              return Semantics(
+                button: true,
+                selected: isSelected,
+                label: label,
+                child: Tooltip(
+                  message: label,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.transparent,
-                      width: 3,
-                    ),
-                    image: DecorationImage(
-                      image: AssetImage("assets/backgrounds/$bgName"),
-                      fit: BoxFit.cover,
+                    onTap: () => setState(() {
+                      selectedBackground = bgName;
+                      customImagePath = null;
+                      isGeminiBackground = false;
+                    }),
+                    child: Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: 3,
+                        ),
+                        image: DecorationImage(
+                          image: AssetImage("assets/backgrounds/$bgName"),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1262,18 +1314,80 @@ class _MyHomePageState extends State<MyHomePage> {
             },
           ),
         ),
-        const SizedBox(height: 8),
-        GeminiBackgroundCard(
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                "${generator.getLocaleString(lang, "background_dim_label")}: ${(backgroundDim * 100).round()}%",
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: backgroundDim,
+          min: 0.0,
+          max: 0.75,
+          divisions: 15,
+          label: "${(backgroundDim * 100).round()}%",
+          onChanged: (v) => setState(() => backgroundDim = v),
+        ),
+        StockPhotoSearchCard(
           lang: lang,
           generator: generator,
-          isConnected: isGeminiConnected,
-          selectedStyle: selectedGeminiStyle,
-          onStyleChanged: (v) => setState(() => selectedGeminiStyle = v),
-          promptController: geminiPromptController,
-          verseController: verseController,
-          isGenerating: isGeneratingGeminiBg,
-          onConnectPressed: _showGeminiAuthDialog,
-          onGeneratePressed: _generateGeminiBackground,
+          stockPhotoService: stockPhotoService,
+          onPhotoSelected: (path) {
+            setState(() {
+              customImagePath = path;
+              isGeminiBackground = false;
+            });
+          },
+        ),
+        Card(
+          margin: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Column(
+            children: [
+              SwitchListTile(
+                secondary: const Icon(Icons.science_outlined),
+                title: Text(
+                  generator.getLocaleString(lang, "experimental_gemini_title"),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  generator.getLocaleString(
+                    lang,
+                    "experimental_gemini_subtitle",
+                  ),
+                ),
+                value: _showExperimentalGemini,
+                onChanged: (val) =>
+                    setState(() => _showExperimentalGemini = val),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                child: _showExperimentalGemini
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        child: GeminiBackgroundCard(
+                          lang: lang,
+                          generator: generator,
+                          isConnected: isGeminiConnected,
+                          selectedStyle: selectedGeminiStyle,
+                          onStyleChanged: (v) =>
+                              setState(() => selectedGeminiStyle = v),
+                          promptController: geminiPromptController,
+                          verseController: verseController,
+                          isGenerating: isGeneratingGeminiBg,
+                          onConnectPressed: _showGeminiAuthDialog,
+                          onGeneratePressed: _generateGeminiBackground,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
         ),
         _buildStepNavigationRow(lang, 1),
       ],
@@ -1815,6 +1929,7 @@ class _MyHomePageState extends State<MyHomePage> {
               fontColor: fontColor,
               fontSize: fontSize,
               yOffset: yOffset,
+              backgroundDim: backgroundDim,
               onYOffsetChanged: (updated) => setState(() => yOffset = updated),
               lang: lang,
               generator: generator,

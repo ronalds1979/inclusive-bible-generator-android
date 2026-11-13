@@ -94,5 +94,21 @@
   "verse_end_label": "Hasta",
   "verse_end_single": "—",
   "search_book_tooltip": "Buscar libro",
-  "search_book_hint": "Escribe el nombre del libro..."
+  "search_book_hint": "Escribe el nombre del libro...",
+  "show_api_key_tooltip": "Mostrar clave de API",
+  "hide_api_key_tooltip": "Ocultar clave de API",
+  "image_size_limit_error": "El archivo de imagen supera el límite de 20 MB.",
+  "background_dim_label": "Oscurecer Fondo (Contraste)",
+  "stock_search_title": "Fotos Gratuitas",
+  "stock_search_hint": "Buscar escena (ej: amanecer, mar)",
+  "stock_search_btn": "Buscar",
+  "stock_search_empty": "No se encontraron fotos. Prueba otra palabra.",
+  "stock_search_error": "No se pudieron cargar las fotos. Revisa tu conexión.",
+  "stock_mood_sunrise": "Amanecer",
+  "stock_mood_ocean": "Océano",
+  "stock_mood_mountains": "Montañas",
+  "stock_mood_stars": "Estrellas",
+  "stock_mood_forest": "Bosque",
+  "experimental_gemini_title": "Experimental: Fondo con IA (Gemini)",
+  "experimental_gemini_subtitle": "Requiere una clave Gemini de pago para generar imágenes reales"
 }

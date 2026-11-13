@@ -14,6 +14,7 @@ class VersePreviewCard extends StatelessWidget {
   final Color fontColor;
   final double fontSize;
   final double yOffset;
+  final double backgroundDim;
   final ValueChanged<double>? onYOffsetChanged;
   final String lang;
   final Generator generator;
@@ -30,6 +31,7 @@ class VersePreviewCard extends StatelessWidget {
     required this.fontColor,
     required this.fontSize,
     required this.yOffset,
+    this.backgroundDim = 0.15,
     this.onYOffsetChanged,
     required this.lang,
     required this.generator,
@@ -64,7 +66,7 @@ class VersePreviewCard extends StatelessWidget {
                 : AssetImage("assets/backgrounds/$selectedBackground"),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black.withAlpha(38),
+              Colors.black.withAlpha((backgroundDim.clamp(0.0, 0.85) * 255).round()),
               BlendMode.darken,
             ),
           ),
@@ -136,8 +138,13 @@ class VersePreviewCard extends StatelessWidget {
       ),
     );
 
+    final Widget responsiveCard = FittedBox(
+      fit: BoxFit.contain,
+      child: card,
+    );
+
     if (onYOffsetChanged == null) {
-      return card;
+      return responsiveCard;
     }
 
     return GestureDetector(
@@ -148,7 +155,7 @@ class VersePreviewCard extends StatelessWidget {
         );
         onYOffsetChanged!(updated);
       },
-      child: card,
+      child: responsiveCard,
     );
   }
 }
