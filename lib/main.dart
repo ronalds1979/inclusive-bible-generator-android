@@ -142,6 +142,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String selectedBibleVersion = "-";
   Map<String, String> bibleVersionsMap = {};
   Map<String, String> _preferredBibleVersions = {};
+  int _verseFetchSeq = 0;
 
   String? selectedBook;
   int selectedChapter = 119;
@@ -329,6 +330,11 @@ class _MyHomePageState extends State<MyHomePage> {
     referenceController.text = "$selectedBook $selectedChapter:$versePart";
   }
 
+  void _onQuickReferenceChanged() {
+    _applyQuickReferenceSelector();
+    _fetchVerse();
+  }
+
   Future<void> _loadBackgrounds() async {
     try {
       final AssetManifest assetManifest =
@@ -476,6 +482,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final String? bibleId = bibleVersionsMap[selectedBibleVersion];
     if (bibleId == null) return;
 
+    final int seq = ++_verseFetchSeq;
     setState(() {
       isFetching = true;
       _updateStatus("Fetching verse...");
@@ -487,13 +494,14 @@ class _MyHomePageState extends State<MyHomePage> {
       lang: bibleLang,
       youVersionApiKey: youVersionApiKey,
     );
+    if (!mounted || seq != _verseFetchSeq) return;
     if (content != null) {
       final Map<String, String> previewTexts = await generator.generateTexts(
         getLangKey(),
         content,
         reference,
       );
-      if (!mounted) return;
+      if (!mounted || seq != _verseFetchSeq) return;
       setState(() {
         isFetching = false;
         verseController.text = content;
@@ -517,6 +525,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final String? bibleId = bibleVersionsMap[selectedBibleVersion];
     if (bibleId == null || selectedBibleVersion == "-") return;
 
+    final int seq = ++_verseFetchSeq;
     setState(() {
       isFetching = true;
       _updateStatus("Fetching Verse of the Day...");
@@ -527,7 +536,7 @@ class _MyHomePageState extends State<MyHomePage> {
       bibleId: bibleId,
       youVersionApiKey: youVersionApiKey,
     );
-    if (!mounted) return;
+    if (!mounted || seq != _verseFetchSeq) return;
     if (onlyIfEmpty && verseController.text.trim().isNotEmpty) {
       setState(() => isFetching = false);
       return;
@@ -541,7 +550,7 @@ class _MyHomePageState extends State<MyHomePage> {
         content,
         reference,
       );
-      if (!mounted) return;
+      if (!mounted || seq != _verseFetchSeq) return;
       if (onlyIfEmpty && verseController.text.trim().isNotEmpty) {
         setState(() => isFetching = false);
         return;
@@ -927,7 +936,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   selectedChapter = 1;
                                   selectedVerse = 1;
                                   selectedEndVerse = null;
-                                  _applyQuickReferenceSelector();
+                                  _onQuickReferenceChanged();
                                 });
                                 Navigator.of(sheetContext).pop();
                               },
@@ -1033,6 +1042,9 @@ class _MyHomePageState extends State<MyHomePage> {
                   if (v == null) return;
                   setState(() => selectedBibleVersion = v);
                   _savePreferredBibleVersion(bibleLang, v);
+                  if (referenceController.text.trim().isNotEmpty) {
+                    _fetchVerse();
+                  }
                 },
               ),
             ),
@@ -1096,7 +1108,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 selectedChapter = 1;
                                 selectedVerse = 1;
                                 selectedEndVerse = null;
-                                _applyQuickReferenceSelector();
+                                _onQuickReferenceChanged();
                               });
                             },
                           ),
@@ -1140,7 +1152,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   selectedChapter = ch;
                                   selectedVerse = 1;
                                   selectedEndVerse = null;
-                                  _applyQuickReferenceSelector();
+                                  _onQuickReferenceChanged();
                                 });
                               }
                             },
@@ -1178,7 +1190,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       selectedEndVerse! <= v) {
                                     selectedEndVerse = null;
                                   }
-                                  _applyQuickReferenceSelector();
+                                  _onQuickReferenceChanged();
                                 });
                               }
                             },
@@ -1226,7 +1238,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               onChanged: (endV) {
                                 setState(() {
                                   selectedEndVerse = endV;
-                                  _applyQuickReferenceSelector();
+                                  _onQuickReferenceChanged();
                                 });
                               },
                             ),
