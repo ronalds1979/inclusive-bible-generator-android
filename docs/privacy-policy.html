@@ -93,8 +93,8 @@
     <h2>1. Information We Do Not Collect</h2>
     <p>The developer of Inclusive Bible Generator does not operate backend servers and does not collect, track, or store your personal information, usage analytics, advertising identifiers, or generated content.</p>
 
-    <h2>2. Locally Stored Data (API Keys)</h2>
-    <p>If you choose to connect an optional <strong>Google Gemini API Key</strong> or <strong>YouVersion Platform App Key</strong>, that key is stored exclusively on your device using Android's encrypted storage (<code>flutter_secure_storage</code>). You can remove your key at any time inside the app.</p>
+    <h2>2. Locally Stored Data (API Keys &amp; Preferences)</h2>
+    <p>If you choose to connect an optional <strong>Google Gemini API Key</strong> or <strong>YouVersion Platform App Key</strong>, that key is stored exclusively on your device using Android's encrypted storage (<code>flutter_secure_storage</code>). Your preferred Bible version per language is also stored locally on your device. You can remove your API keys at any time inside the app.</p>
 
     <h2>3. Photos, Media &amp; Audio</h2>
     <ul>
@@ -105,7 +105,7 @@
     <h2>4. Third-Party Services</h2>
     <p>When the app fetches the Verse of the Day on startup or when you tap actions that require an internet connection, your device communicates directly with the respective service:</p>
     <ul>
-      <li><strong>Bible Text Services (GetBible / YouVersion / Bible-API):</strong> Used to fetch the Verse of the Day on launch or the specific Bible passage you request.</li>
+      <li><strong>Bible Text Services (YouVersion / Bolls.life / GetBible):</strong> Used to fetch the Verse of the Day on launch or when switching languages, and to retrieve the Bible books, translations, and verses you request.</li>
       <li><strong>Free Stock Photo Services:</strong> Only used when you search for or select a free stock photo background in the Background tab.</li>
       <li><strong>Google Gemini API (Optional, Experimental):</strong> Only used if you enable the experimental Gemini toggle, connect your own Gemini API key, and tap <em>Generate Background with Gemini</em>. Requests are governed by <a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google's Privacy Policy</a>.</li>
     </ul>
