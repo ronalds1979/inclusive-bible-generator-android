@@ -64,6 +64,9 @@ class _GeminiBackgroundCardState extends State<GeminiBackgroundCard> {
                   ),
                 ),
                 OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                  ),
                   onPressed: widget.onConnectPressed,
                   icon: Icon(
                     widget.isConnected ? Icons.verified_user : Icons.key,
@@ -95,6 +98,7 @@ class _GeminiBackgroundCardState extends State<GeminiBackgroundCard> {
               children: GeminiService.styleKeys.map((styleKey) {
                 final bool isSelected = widget.selectedStyle == styleKey;
                 return ChoiceChip(
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
                   label: Text(generator.getLocaleString(lang, styleKey)),
                   selected: isSelected,
                   onSelected: (_) => widget.onStyleChanged(styleKey),
@@ -108,6 +112,9 @@ class _GeminiBackgroundCardState extends State<GeminiBackgroundCard> {
               alignment: Alignment.topLeft,
               child: !_showExtraDetails
                   ? TextButton.icon(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
                       onPressed: () => setState(() => _showExtraDetails = true),
                       icon: const Icon(Icons.tune, size: 16),
                       label: Text(

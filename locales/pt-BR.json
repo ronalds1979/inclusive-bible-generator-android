@@ -110,5 +110,10 @@
   "stock_mood_stars": "Estrelas",
   "stock_mood_forest": "Floresta",
   "experimental_gemini_title": "Experimental: Fundo com IA (Gemini)",
-  "experimental_gemini_subtitle": "Requer uma chave Gemini faturada para geração real de imagens"
+  "experimental_gemini_subtitle": "Requer uma chave Gemini faturada para geração real de imagens",
+  "app_language_label": "Idioma do App",
+  "preview_semantic_label": "Prévia do cartão ({ratio})",
+  "audio_transcript_label": "Transcrição do Áudio",
+  "audio_playing_caption": "Reproduzindo Áudio (Legendas)",
+  "selected_badge_label": "Selecionado"
 }

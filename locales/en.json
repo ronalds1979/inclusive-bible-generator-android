@@ -110,5 +110,10 @@
   "stock_mood_stars": "Stars",
   "stock_mood_forest": "Forest",
   "experimental_gemini_title": "Experimental: AI Background (Gemini)",
-  "experimental_gemini_subtitle": "Requires a billed Gemini API key for real image generation"
+  "experimental_gemini_subtitle": "Requires a billed Gemini API key for real image generation",
+  "app_language_label": "App Language",
+  "preview_semantic_label": "Verse card preview ({ratio})",
+  "audio_transcript_label": "Audio Transcript",
+  "audio_playing_caption": "Playing Audio (Captions)",
+  "selected_badge_label": "Selected"
 }

@@ -323,4 +323,62 @@ void main() {
       expect(find.text("Step 2 of 4: Background"), findsOneWidget);
     },
   );
+
+  testWidgets('Accessibility guidelines: semantics, tap targets, and audio transcript', (
+    WidgetTester tester,
+  ) async {
+    final SemanticsHandle handle = tester.ensureSemantics();
+    try {
+      tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      await tester.binding.setSurfaceSize(const Size(412, 915));
+      await tester.runAsync(() async {
+        await tester.pumpWidget(const MyApp());
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      // Verify Android tap target (>=48x48dp) and labeled tap target guidelines
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+      // Verify layout does not overflow or clip under large system font scaling
+      tester.platformDispatcher.textScaleFactorTestValue = 1.15;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      await tester.pumpAndSettle();
+
+      // Enter verse & reference and verify live preview Semantics label
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), "Psalm 23:1");
+      await tester.enterText(textFields.at(1), "The Lord is my shepherd.");
+      await tester.pump();
+
+      expect(
+        find.bySemanticsLabel(
+          RegExp(r'Verse card preview \(1:1\):.*The Lord is my shepherd\.'),
+        ),
+        findsOneWidget,
+      );
+
+      // Navigate to Style tab and verify default font size is 22
+      await tester.tap(find.text("Style"));
+      await tester.pumpAndSettle();
+      expect(find.text("Font Size: 22"), findsOneWidget);
+
+      // Navigate to Audio & Text tab and verify Audio Transcript is shown
+      await tester.tap(find.text("Audio & Text"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Audio Transcript"), findsOneWidget);
+      expect(
+        find.text("Psalm, chapter 23, verse 1... The Lord is my shepherd."),
+        findsOneWidget,
+      );
+    } finally {
+      handle.dispose();
+    }
+  });
 }

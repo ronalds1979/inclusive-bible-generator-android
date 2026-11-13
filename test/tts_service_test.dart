@@ -2,38 +2,152 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:app/services/tts_service.dart';
 
 void main() {
-  group('TtsService resolveVoiceConfig tests', () {
-    test('resolves Portuguese Female and Male voices', () {
-      expect(TtsService.resolveVoiceConfig('pt-BR', 'Female'), {
-        'name': 'pt-BR-FranciscaNeural',
-        'locale': 'pt-BR',
-      });
-      expect(TtsService.resolveVoiceConfig('pt-BR', 'Male'), {
-        'name': 'pt-BR-AntonioNeural',
-        'locale': 'pt-BR',
-      });
+  group('TtsService device voice selection tests', () {
+    test('detectVoiceGender distinguishes male and female without substring collisions', () {
+      expect(
+        TtsService.detectVoiceGender({
+          'name': 'pt-br-x-afs#female_2-local',
+          'locale': 'pt-BR',
+        }),
+        equals('Female'),
+      );
+      expect(
+        TtsService.detectVoiceGender({
+          'name': 'pt-br-x-afs#male_1-local',
+          'locale': 'pt-BR',
+        }),
+        equals('Male'),
+      );
+      expect(
+        TtsService.detectVoiceGender({
+          'name': 'en-us-x-iom-local',
+          'locale': 'en-US',
+        }),
+        equals('Male'),
+      );
+      expect(
+        TtsService.detectVoiceGender({
+          'name': 'en-us-x-sfg-local',
+          'locale': 'en-US',
+        }),
+        equals('Female'),
+      );
+      expect(
+        TtsService.detectVoiceGender({
+          'name': 'com.apple.voice.compact.en-US.Aaron',
+          'locale': 'en-US',
+          'gender': 'male',
+        }),
+        equals('Male'),
+      );
     });
 
-    test('resolves English Female and Male voices', () {
-      expect(TtsService.resolveVoiceConfig('en', 'Female'), {
-        'name': 'en-US-JennyNeural',
+    test('selectVoiceFromAvailable picks Male and Female Android TTS voices', () {
+      final List<Map<String, String>> androidVoices = [
+        {
+          'name': 'pt-br-x-afs#female_1-local',
+          'locale': 'pt-BR',
+          'quality': 'high',
+          'network_required': '0',
+        },
+        {
+          'name': 'pt-br-x-afs#male_1-local',
+          'locale': 'pt-BR',
+          'quality': 'high',
+          'network_required': '0',
+        },
+        {
+          'name': 'en-us-x-sfg-local',
+          'locale': 'en-US',
+          'quality': 'high',
+          'network_required': '0',
+        },
+        {
+          'name': 'en-us-x-iom-local',
+          'locale': 'en-US',
+          'quality': 'high',
+          'network_required': '0',
+        },
+        {
+          'name': 'es-es-x-eec-local',
+          'locale': 'es-ES',
+          'quality': 'high',
+          'network_required': '0',
+        },
+        {
+          'name': 'es-es-x-eed-local',
+          'locale': 'es-ES',
+          'quality': 'high',
+          'network_required': '0',
+        },
+      ];
+
+      final ptMale = TtsService.selectVoiceFromAvailable(
+        androidVoices,
+        'pt-BR',
+        'Male',
+      );
+      expect(ptMale.voice, {
+        'name': 'pt-br-x-afs#male_1-local',
+        'locale': 'pt-BR',
+      });
+      expect(ptMale.pitch, equals(TtsService.documentaryPitch));
+
+      final enMale = TtsService.selectVoiceFromAvailable(
+        androidVoices,
+        'en',
+        'Male',
+      );
+      expect(enMale.voice, {
+        'name': 'en-us-x-iom-local',
         'locale': 'en-US',
       });
-      expect(TtsService.resolveVoiceConfig('en', 'Male'), {
-        'name': 'en-US-GuyNeural',
+      expect(enMale.pitch, equals(TtsService.documentaryPitch));
+
+      final esMale = TtsService.selectVoiceFromAvailable(
+        androidVoices,
+        'es',
+        'Male',
+      );
+      expect(esMale.voice, {
+        'name': 'es-es-x-eed-local',
+        'locale': 'es-ES',
+      });
+      expect(esMale.pitch, equals(TtsService.documentaryPitch));
+
+      final enFemale = TtsService.selectVoiceFromAvailable(
+        androidVoices,
+        'en',
+        'Female',
+      );
+      expect(enFemale.voice, {
+        'name': 'en-us-x-sfg-local',
         'locale': 'en-US',
       });
+      expect(enFemale.pitch, equals(TtsService.documentaryPitch));
     });
 
-    test('resolves Spanish Female and Male voices', () {
-      expect(TtsService.resolveVoiceConfig('es', 'Female'), {
-        'name': 'es-ES-ElviraNeural',
-        'locale': 'es-ES',
+    test('falls back to deeper male pitch when device has no Male voice for locale', () {
+      final List<Map<String, String>> femaleOnlyVoices = [
+        {
+          'name': 'pt-br-x-afs-local',
+          'locale': 'pt-BR',
+          'quality': 'high',
+          'network_required': '0',
+        },
+      ];
+
+      final ptMaleFallback = TtsService.selectVoiceFromAvailable(
+        femaleOnlyVoices,
+        'pt-BR',
+        'Male',
+      );
+      expect(ptMaleFallback.voice, {
+        'name': 'pt-br-x-afs-local',
+        'locale': 'pt-BR',
       });
-      expect(TtsService.resolveVoiceConfig('es', 'Male'), {
-        'name': 'es-ES-AlvaroNeural',
-        'locale': 'es-ES',
-      });
+      expect(ptMaleFallback.pitch, equals(TtsService.maleFallbackPitch));
+      expect(ptMaleFallback.pitch, lessThan(TtsService.documentaryPitch));
     });
   });
 

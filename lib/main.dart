@@ -164,7 +164,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showExperimentalGemini = false;
 
   Color fontColor = Colors.white;
-  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier<double>(60.0);
+  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier<double>(22.0);
   double get fontSize => _fontSizeNotifier.value;
   set fontSize(double v) => _fontSizeNotifier.value = v;
   String aspectRatioStr = "1:1";
@@ -201,6 +201,9 @@ class _MyHomePageState extends State<MyHomePage> {
             lowerMsg.contains("conectada") ||
             lowerMsg.contains("connected") ||
             lowerMsg.contains("éxito"));
+    if (isError || isSuccess) {
+      HapticFeedback.mediumImpact();
+    }
   }
 
   bool isLoading = true;
@@ -265,6 +268,8 @@ class _MyHomePageState extends State<MyHomePage> {
     });
     // Merge YouVersion versions asynchronously in the background
     _loadBibleVersions();
+    // Pre-populate with Verse of the Day so users have ready-to-share content on launch
+    _fetchVerseOfTheDay(onlyIfEmpty: true);
   }
 
   void _syncDefaultBookForLanguage() {
@@ -411,6 +416,7 @@ class _MyHomePageState extends State<MyHomePage> {
         content,
         reference,
       );
+      if (!mounted) return;
       setState(() {
         isFetching = false;
         verseController.text = content;
@@ -429,7 +435,8 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> _fetchVerseOfTheDay() async {
+  Future<void> _fetchVerseOfTheDay({bool onlyIfEmpty = false}) async {
+    if (onlyIfEmpty && verseController.text.trim().isNotEmpty) return;
     final String? bibleId = bibleVersionsMap[selectedBibleVersion];
     if (bibleId == null || selectedBibleVersion == "-") return;
 
@@ -443,6 +450,11 @@ class _MyHomePageState extends State<MyHomePage> {
       bibleId: bibleId,
       youVersionApiKey: youVersionApiKey,
     );
+    if (!mounted) return;
+    if (onlyIfEmpty && verseController.text.trim().isNotEmpty) {
+      setState(() => isFetching = false);
+      return;
+    }
 
     if (votd != null) {
       final String content = votd["text"]!;
@@ -452,6 +464,11 @@ class _MyHomePageState extends State<MyHomePage> {
         content,
         reference,
       );
+      if (!mounted) return;
+      if (onlyIfEmpty && verseController.text.trim().isNotEmpty) {
+        setState(() => isFetching = false);
+        return;
+      }
       setState(() {
         isFetching = false;
         selectedBook = votd["book"];
@@ -638,6 +655,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _toggleAudioPreview() async {
+    HapticFeedback.selectionClick();
     if (isPlayingAudioPreview) {
       await ttsService.stop();
       setState(() {
@@ -726,6 +744,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _copyToClipboard(String text, {String? fieldKey}) {
+    HapticFeedback.lightImpact();
     Clipboard.setData(ClipboardData(text: text));
     if (fieldKey != null) {
       _copyFeedbackTimer?.cancel();
@@ -851,6 +870,12 @@ class _MyHomePageState extends State<MyHomePage> {
     searchController.dispose();
   }
 
+  Color _successColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? Colors.green.shade300
+        : Colors.green.shade800;
+  }
+
   Widget _buildVerseTab(String lang) {
     final List<String> canonicalBooks = getCanonicalBooks(bibleLang);
     if (selectedBook == null || !canonicalBooks.contains(selectedBook)) {
@@ -875,7 +900,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ChoiceChip(
               label: const Text("Português"),
               selected: bibleLang == "pt",
-              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.padded,
               onSelected: (selected) {
                 if (selected && bibleLang != "pt") {
                   setState(() {
@@ -889,7 +914,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ChoiceChip(
               label: const Text("English"),
               selected: bibleLang == "en",
-              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.padded,
               onSelected: (selected) {
                 if (selected && bibleLang != "en") {
                   setState(() {
@@ -903,7 +928,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ChoiceChip(
               label: const Text("Español"),
               selected: bibleLang == "es",
-              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.padded,
               onSelected: (selected) {
                 if (selected && bibleLang != "es") {
                   setState(() {
@@ -1278,6 +1303,9 @@ class _MyHomePageState extends State<MyHomePage> {
               }),
             ),
             FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 48),
+              ),
               onPressed: _selectCustomImage,
               icon: const Icon(Icons.photo_library, size: 18),
               label: Text(generator.getLocaleString(lang, "custom_image_btn")),
@@ -1329,6 +1357,26 @@ class _MyHomePageState extends State<MyHomePage> {
                           fit: BoxFit.cover,
                         ),
                       ),
+                      child: isSelected
+                          ? Align(
+                              alignment: Alignment.topRight,
+                              child: Container(
+                                margin: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                padding: const EdgeInsets.all(2),
+                                child: Icon(
+                                  Icons.check,
+                                  size: 14,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
                   ),
                 ),
@@ -1359,6 +1407,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   max: 0.75,
                   divisions: 15,
                   label: "${(dimValue * 100).round()}%",
+                  semanticFormatterCallback: (v) => "${(v * 100).round()}%",
                   onChanged: (v) => _backgroundDimNotifier.value = v,
                 ),
               ],
@@ -1449,6 +1498,7 @@ class _MyHomePageState extends State<MyHomePage> {
             final String val = r["value"]!;
             final String label = generator.getLocaleString(lang, r["key"]!);
             return ChoiceChip(
+              materialTapTargetSize: MaterialTapTargetSize.padded,
               label: Text(label.isNotEmpty ? label : val),
               selected: aspectRatioStr == val,
               onSelected: (_) => setState(() => aspectRatioStr = val),
@@ -1521,6 +1571,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
+                minimumSize: const Size(0, 48),
                 backgroundColor: fontColor,
                 foregroundColor: fontColor.computeLuminance() > 0.5
                     ? Colors.black
@@ -1574,6 +1625,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   max: 120,
                   divisions: 100,
                   label: sizeValue.round().toString(),
+                  semanticFormatterCallback: (v) => v.round().toString(),
                   onChanged: (v) => _fontSizeNotifier.value = v,
                 ),
               ],
@@ -1597,6 +1649,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     if (offsetValue.round() != 0)
                       TextButton.icon(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
                         onPressed: () => _yOffsetNotifier.value = 0.0,
                         icon: const Icon(Icons.vertical_align_center, size: 16),
                         label: Text(
@@ -1611,6 +1666,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   max: 400,
                   divisions: 800,
                   label: offsetValue.round().toString(),
+                  semanticFormatterCallback: (v) => v.round().toString(),
                   onChanged: (v) => _yOffsetNotifier.value = v,
                 ),
               ],
@@ -1633,21 +1689,35 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InkWell(
-                  onTap: () => setState(() => generateAudio = !generateAudio),
-                  child: Row(
-                    children: [
-                      Checkbox(
-                        value: generateAudio,
-                        onChanged: (v) => setState(() => generateAudio = v!),
+                Semantics(
+                  toggled: generateAudio,
+                  label: generator.getLocaleString(lang, "audio_label"),
+                  child: InkWell(
+                    onTap: () => setState(() => generateAudio = !generateAudio),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Row(
+                        children: [
+                          ExcludeSemantics(
+                            child: Checkbox(
+                              value: generateAudio,
+                              onChanged: (v) =>
+                                  setState(() => generateAudio = v!),
+                            ),
+                          ),
+                          Expanded(
+                            child: ExcludeSemantics(
+                              child: Text(
+                                generator.getLocaleString(lang, "audio_label"),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      Expanded(
-                        child: Text(
-                          generator.getLocaleString(lang, "audio_label"),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1657,25 +1727,35 @@ class _MyHomePageState extends State<MyHomePage> {
                   runSpacing: 8,
                   children: [
                     Text(generator.getLocaleString(lang, "gender_label")),
-                    DropdownButton<String>(
-                      value: gender,
-                      items: genders.map((v) {
-                        final String labelKey = v == "Female"
-                            ? "gender_female"
-                            : "gender_male";
-                        return DropdownMenuItem(
-                          value: v,
-                          child: Text(
-                            generator.getLocaleString(lang, labelKey),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) => setState(() => gender = v!),
+                    Semantics(
+                      label: generator.getLocaleString(lang, "gender_label"),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: DropdownButton<String>(
+                          itemHeight: null,
+                          value: gender,
+                          items: genders.map((v) {
+                            final String labelKey = v == "Female"
+                                ? "gender_female"
+                                : "gender_male";
+                            return DropdownMenuItem(
+                              value: v,
+                              child: Text(
+                                generator.getLocaleString(lang, labelKey),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (v) => setState(() => gender = v!),
+                        ),
+                      ),
                     ),
                     ValueListenableBuilder<TextEditingValue>(
                       valueListenable: verseController,
                       builder: (context, value, child) {
                         return OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
                           onPressed: value.text.trim().isEmpty
                               ? null
                               : _toggleAudioPreview,
@@ -1698,6 +1778,91 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ],
                 ),
+                AnimatedBuilder(
+                  animation: _previewListenable,
+                  builder: (context, _) {
+                    final String verseText = verseController.text.trim();
+                    if (verseText.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final String transcript = TtsService.buildSpokenScript(
+                      verse: verseText,
+                      reference: referenceController.text.trim(),
+                      lang: getAudioLangKey(),
+                    );
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12.0),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10.0),
+                        decoration: BoxDecoration(
+                          color: isPlayingAudioPreview
+                              ? Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer.withAlpha(140)
+                              : Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest
+                                    .withAlpha(90),
+                          borderRadius: BorderRadius.circular(8),
+                          border: isPlayingAudioPreview
+                              ? Border.all(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 1.5,
+                                )
+                              : null,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Semantics(
+                              liveRegion: isPlayingAudioPreview,
+                              child: MergeSemantics(
+                                child: Row(
+                                  children: [
+                                    ExcludeSemantics(
+                                      child: Icon(
+                                        isPlayingAudioPreview
+                                            ? Icons.graphic_eq
+                                            : Icons.subtitles_outlined,
+                                        size: 16,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        generator.getLocaleString(
+                                          lang,
+                                          isPlayingAudioPreview
+                                              ? "audio_playing_caption"
+                                              : "audio_transcript_label",
+                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            SelectableText(
+                              transcript,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -1708,22 +1873,26 @@ class _MyHomePageState extends State<MyHomePage> {
             margin: EdgeInsets.zero,
             child: Padding(
               padding: const EdgeInsets.all(14.0),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.accessibility_new,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      generator.getLocaleString(lang, "text_empty_state"),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+              child: MergeSemantics(
+                child: Row(
+                  children: [
+                    ExcludeSemantics(
+                      child: Icon(
+                        Icons.accessibility_new,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        generator.getLocaleString(lang, "text_empty_state"),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1738,11 +1907,14 @@ class _MyHomePageState extends State<MyHomePage> {
           SelectableText(altText),
           const SizedBox(height: 4),
           OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+            ),
             onPressed: () => _copyToClipboard(altText, fieldKey: "alt"),
             icon: Icon(
               _copiedField == "alt" ? Icons.check : Icons.copy,
               size: 16,
-              color: _copiedField == "alt" ? Colors.green : null,
+              color: _copiedField == "alt" ? _successColor(context) : null,
             ),
             label: Text(generator.getLocaleString(lang, "copy_alt_text_btn")),
           ),
@@ -1757,11 +1929,14 @@ class _MyHomePageState extends State<MyHomePage> {
           SelectableText(caption),
           const SizedBox(height: 4),
           OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+            ),
             onPressed: () => _copyToClipboard(caption, fieldKey: "caption"),
             icon: Icon(
               _copiedField == "caption" ? Icons.check : Icons.copy,
               size: 16,
-              color: _copiedField == "caption" ? Colors.green : null,
+              color: _copiedField == "caption" ? _successColor(context) : null,
             ),
             label: Text(generator.getLocaleString(lang, "copy_caption_btn")),
           ),
@@ -1889,36 +2064,42 @@ class _MyHomePageState extends State<MyHomePage> {
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: Semantics(
                   liveRegion: true,
-                  child: Row(
-                    children: [
-                      Icon(
-                        isError
-                            ? Icons.error
-                            : (isSuccess ? Icons.check_circle : Icons.info),
-                        size: 18,
-                        color: isError
-                            ? Theme.of(context).colorScheme.error
-                            : (isSuccess
-                                  ? Colors.green
-                                  : Theme.of(context).colorScheme.primary),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          statusMessage,
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
+                  child: MergeSemantics(
+                    child: Row(
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            isError
+                                ? Icons.error
+                                : (isSuccess ? Icons.check_circle : Icons.info),
+                            size: 18,
                             color: isError
                                 ? Theme.of(context).colorScheme.error
                                 : (isSuccess
-                                      ? Colors.green
+                                      ? _successColor(context)
                                       : Theme.of(context).colorScheme.primary),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            statusMessage,
+                            maxLines: 6,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isError
+                                  ? Theme.of(context).colorScheme.error
+                                  : (isSuccess
+                                        ? _successColor(context)
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.primary),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1928,6 +2109,9 @@ class _MyHomePageState extends State<MyHomePage> {
                 animation: _previewListenable,
                 builder: (context, child) {
                   return FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
                     onPressed:
                         isGenerating ||
                             verseController.text.trim().isEmpty ||
@@ -2006,7 +2190,6 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     final Widget tabNavigation = NavigationBar(
-      height: 60,
       selectedIndex: _selectedTabIndex,
       onDestinationSelected: _selectTab,
       destinations: [
@@ -2054,28 +2237,43 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             icon: Icon(
               isGeminiConnected ? Icons.auto_awesome : Icons.key_outlined,
-              color: isGeminiConnected ? Colors.amber : null,
+              color: isGeminiConnected
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
             onPressed: _showGeminiAuthDialog,
           ),
-          DropdownButton<String>(
-            value: currentLang,
-            onChanged: (String? newValue) {
-              setState(() {
-                currentLang = newValue!;
-                bibleLang = getLangKey().substring(0, 2);
-                _syncDefaultBookForLanguage();
-                _loadBibleVersions();
-              });
-            },
-            items: languages.map<DropdownMenuItem<String>>((String value) {
-              return DropdownMenuItem<String>(value: value, child: Text(value));
-            }).toList(),
+          Semantics(
+            label: generator.getLocaleString(lang, "app_language_label"),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48, maxWidth: 150),
+              child: DropdownButton<String>(
+                isExpanded: true,
+                itemHeight: null,
+                value: currentLang,
+                onChanged: (String? newValue) {
+                  setState(() {
+                    currentLang = newValue!;
+                    bibleLang = getLangKey().substring(0, 2);
+                    _syncDefaultBookForLanguage();
+                    _loadBibleVersions();
+                  });
+                },
+                items: languages.map<DropdownMenuItem<String>>((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value, overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ],
       ),
       bottomNavigationBar: _buildBottomActionBar(lang),
-      body: LayoutBuilder(
+      body: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(),
+        child: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth > 800) {
             return Row(
@@ -2142,6 +2340,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           }
         },
+      ),
       ),
     );
   }

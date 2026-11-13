@@ -117,17 +117,21 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.photo_camera_back, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    generator.getLocaleString(lang, 'stock_search_title'),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+            MergeSemantics(
+              child: Row(
+                children: [
+                  const ExcludeSemantics(
+                    child: Icon(Icons.photo_camera_back, size: 20),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      generator.getLocaleString(lang, 'stock_search_title'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -135,6 +139,7 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
               runSpacing: 6,
               children: _moodPresets.map((preset) {
                 return ActionChip(
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
                   label: Text(generator.getLocaleString(lang, preset.key)),
                   onPressed: _isSearching
                       ? null
@@ -204,11 +209,27 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
               const SizedBox(height: 8),
               Semantics(
                 liveRegion: true,
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontSize: 12,
+                child: MergeSemantics(
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

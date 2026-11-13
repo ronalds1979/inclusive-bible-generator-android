@@ -151,19 +151,46 @@ class VersePreviewCard extends StatelessWidget {
       child: card,
     );
 
-    if (onYOffsetChanged == null) {
-      return responsiveCard;
-    }
+    final Widget interactiveCard = onYOffsetChanged == null
+        ? responsiveCard
+        : GestureDetector(
+            onVerticalDragUpdate: (details) {
+              final double updated = (yOffset + details.delta.dy * 1.5).clamp(
+                -400.0,
+                400.0,
+              );
+              onYOffsetChanged!(updated);
+            },
+            child: responsiveCard,
+          );
 
-    return GestureDetector(
-      onVerticalDragUpdate: (details) {
-        final double updated = (yOffset + details.delta.dy * 1.5).clamp(
-          -400.0,
-          400.0,
+    return AnimatedBuilder(
+      animation: previewListenable,
+      builder: (context, child) {
+        final String verseText = verseController.text.trim().isEmpty
+            ? generator.getLocaleString(lang, "preview_verse_placeholder")
+            : verseController.text.trim();
+        final String refText = referenceController.text.trim().isEmpty
+            ? generator.getLocaleString(lang, "reference_placeholder")
+            : referenceController.text.trim();
+        final String rawHeader = generator.getLocaleString(
+          lang,
+          "preview_semantic_label",
         );
-        onYOffsetChanged!(updated);
+        final String header =
+            (rawHeader.isEmpty || rawHeader == "preview_semantic_label"
+                    ? "Verse card preview ({ratio})"
+                    : rawHeader)
+                .replaceAll("{ratio}", aspectRatioStr);
+        return Semantics(
+          container: true,
+          image: true,
+          excludeSemantics: true,
+          label: "$header: \"$verseText\" — $refText",
+          child: child,
+        );
       },
-      child: responsiveCard,
+      child: interactiveCard,
     );
   }
 }
