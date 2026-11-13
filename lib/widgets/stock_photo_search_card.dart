@@ -246,6 +246,8 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                                 item.thumbUrl,
                                 width: 76,
                                 height: 76,
+                                // ⚡ Bolt: Decode 1080px thumbnails at 3x display size instead of full resolution
+                                cacheWidth: 228,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, _, _) => Container(
                                   width: 76,

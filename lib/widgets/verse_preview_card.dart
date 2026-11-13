@@ -4,6 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../generator.dart';
 
 class VersePreviewCard extends StatelessWidget {
+  // ⚡ Bolt: Cache base GoogleFonts TextStyle instead of calling GoogleFonts.roboto() on every frame
+  static final TextStyle _baseRobotoStyle = GoogleFonts.roboto();
+
   final GlobalKey repaintKey;
   final String aspectRatioStr;
   final String? customImagePath;
@@ -61,9 +64,14 @@ class VersePreviewCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
           image: DecorationImage(
-            image: customImagePath != null
-                ? FileImage(File(customImagePath!)) as ImageProvider
-                : AssetImage("assets/backgrounds/$selectedBackground"),
+            // ⚡ Bolt: Cap decoded bitmap width to 1080px to prevent multi-MB gallery photo OOMs
+            image: ResizeImage.resizeIfNeeded(
+              1080,
+              null,
+              customImagePath != null
+                  ? FileImage(File(customImagePath!)) as ImageProvider
+                  : AssetImage("assets/backgrounds/$selectedBackground"),
+            ),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
               Colors.black.withAlpha((backgroundDim.clamp(0.0, 0.85) * 255).round()),
@@ -90,7 +98,7 @@ class VersePreviewCard extends StatelessWidget {
                               )
                             : verseController.text,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.roboto(
+                        style: _baseRobotoStyle.copyWith(
                           color: fontColor,
                           fontSize: fontSize / 2,
                           fontWeight: FontWeight.bold,
@@ -117,7 +125,7 @@ class VersePreviewCard extends StatelessWidget {
                               "reference_placeholder",
                             )
                           : referenceController.text,
-                      style: GoogleFonts.roboto(
+                      style: _baseRobotoStyle.copyWith(
                         color: fontColor,
                         fontSize: (fontSize * 0.66) / 2,
                         shadows: const [

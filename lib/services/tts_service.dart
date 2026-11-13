@@ -210,7 +210,6 @@ class TtsService {
         if (dir != null) {
           await _flutterTts.awaitSynthCompletion(true);
           await _flutterTts.synthesizeToFile(textToRead, fileName);
-          await Future.delayed(const Duration(milliseconds: 800));
           return "${dir.path}/$fileName";
         }
       }

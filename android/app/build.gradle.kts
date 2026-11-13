@@ -52,6 +52,9 @@ android {
 
     buildTypes {
         release {
+            // ⚡ Bolt: Enable R8 code shrinking and resource shrinking for smaller, faster release APKs
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

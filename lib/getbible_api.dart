@@ -259,6 +259,22 @@ class GetBibleAPI {
     return [];
   }
 
+  static List<Map<String, String>> getBuiltInVersions(String lang) {
+    if (lang.length < 2) return [];
+    return _getBuiltInVersions(lang.substring(0, 2).toLowerCase());
+  }
+
+  // ⚡ Bolt: Bounded LRU-style in-memory chapter cache so switching verses in the same chapter is instant
+  static const int _maxCachedChapters = 30;
+  static final Map<String, List<dynamic>> _chapterCache = {};
+
+  static void _cacheChapter(String key, List<dynamic> verses) {
+    if (_chapterCache.length >= _maxCachedChapters && !_chapterCache.containsKey(key)) {
+      _chapterCache.remove(_chapterCache.keys.first);
+    }
+    _chapterCache[key] = verses;
+  }
+
   static Future<List<Map<String, String>>> getVersions({
     String lang = "en",
     String? youVersionApiKey,
@@ -576,57 +592,66 @@ class GetBibleAPI {
     required String? endVerse,
     required http.Client client,
   }) async {
-    final Uri uri = Uri.parse(
-      "$bollsBaseUrl/${Uri.encodeComponent(translationCode)}/$bookNr/${Uri.encodeComponent(chapter)}/",
-    );
-    try {
-      final response = await client
-          .get(uri)
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is List && decoded.isNotEmpty) {
-          if (startVerse != null) {
-            final int startV = int.parse(startVerse);
-            final int endV = endVerse != null ? int.parse(endVerse) : startV;
-            if (endV < startV) return null;
-
-            final List<String> matched = [];
-            for (final item in decoded) {
-              if (item is Map<String, dynamic>) {
-                final int? vNum = (item["verse"] is int)
-                    ? item["verse"] as int
-                    : int.tryParse(item["verse"]?.toString() ?? "");
-                if (vNum != null && vNum >= startV && vNum <= endV) {
-                  final String cleaned = cleanVerseText(
-                    (item["text"] ?? "").toString(),
-                  );
-                  if (cleaned.isNotEmpty) {
-                    matched.add(cleaned);
-                  }
-                }
-              }
-            }
-            return matched.isNotEmpty ? matched.join(" ") : null;
-          } else {
-            final List<String> allVerses = [];
-            for (final item in decoded) {
-              if (item is Map<String, dynamic>) {
-                final String cleaned = cleanVerseText(
-                  (item["text"] ?? "").toString(),
-                );
-                if (cleaned.isNotEmpty) {
-                  allVerses.add(cleaned);
-                }
-              }
-            }
-            return allVerses.isNotEmpty ? allVerses.join(" ") : null;
+    final String cacheKey = "bolls:$translationCode:$bookNr:$chapter";
+    List<dynamic>? decoded = _chapterCache[cacheKey];
+    if (decoded == null) {
+      final Uri uri = Uri.parse(
+        "$bollsBaseUrl/${Uri.encodeComponent(translationCode)}/$bookNr/${Uri.encodeComponent(chapter)}/",
+      );
+      try {
+        final response = await client
+            .get(uri)
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          final parsed = jsonDecode(response.body);
+          if (parsed is List && parsed.isNotEmpty) {
+            decoded = parsed;
+            _cacheChapter(cacheKey, decoded);
           }
         }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint("Error fetching Bolls passage ($translationCode): $e");
+        }
       }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("Error fetching Bolls passage ($translationCode): $e");
+    }
+
+    if (decoded != null && decoded.isNotEmpty) {
+      if (startVerse != null) {
+        final int startV = int.parse(startVerse);
+        final int endV = endVerse != null ? int.parse(endVerse) : startV;
+        if (endV < startV) return null;
+
+        final List<String> matched = [];
+        for (final item in decoded) {
+          if (item is Map<String, dynamic>) {
+            final int? vNum = (item["verse"] is int)
+                ? item["verse"] as int
+                : int.tryParse(item["verse"]?.toString() ?? "");
+            if (vNum != null && vNum >= startV && vNum <= endV) {
+              final String cleaned = cleanVerseText(
+                (item["text"] ?? "").toString(),
+              );
+              if (cleaned.isNotEmpty) {
+                matched.add(cleaned);
+              }
+            }
+          }
+        }
+        return matched.isNotEmpty ? matched.join(" ") : null;
+      } else {
+        final List<String> allVerses = [];
+        for (final item in decoded) {
+          if (item is Map<String, dynamic>) {
+            final String cleaned = cleanVerseText(
+              (item["text"] ?? "").toString(),
+            );
+            if (cleaned.isNotEmpty) {
+              allVerses.add(cleaned);
+            }
+          }
+        }
+        return allVerses.isNotEmpty ? allVerses.join(" ") : null;
       }
     }
     return null;
@@ -640,45 +665,55 @@ class GetBibleAPI {
     required String? endVerse,
     required http.Client client,
   }) async {
-    String safeBibleId = Uri.encodeComponent(bibleId);
-    String safeBookNr = Uri.encodeComponent(bookNr);
-    String safeChapter = Uri.encodeComponent(chapter);
-    String url = "$baseUrl/$safeBibleId/$safeBookNr/$safeChapter.json";
+    final String cacheKey = "getbible:$bibleId:$bookNr:$chapter";
+    List<dynamic>? verses = _chapterCache[cacheKey];
+    if (verses == null) {
+      String safeBibleId = Uri.encodeComponent(bibleId);
+      String safeBookNr = Uri.encodeComponent(bookNr);
+      String safeChapter = Uri.encodeComponent(chapter);
+      String url = "$baseUrl/$safeBibleId/$safeBookNr/$safeChapter.json";
 
-    try {
-      final response = await client
-          .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        List verses = data["verses"] ?? [];
-
-        if (startVerse != null) {
-          int startIdx = int.parse(startVerse) - 1;
-          int endIdx = endVerse != null
-              ? int.parse(endVerse)
-              : int.parse(startVerse);
-
-          if (startIdx >= 0 && startIdx < verses.length) {
-            int endIndex = endIdx > verses.length ? verses.length : endIdx;
-            if (endIndex < startIdx) return null;
-            List selectedVerses = verses.sublist(startIdx, endIndex);
-            return selectedVerses
-                .map((v) => cleanVerseText((v["text"] ?? "").toString()))
-                .join(" ")
-                .trim();
+      try {
+        final response = await client
+            .get(Uri.parse(url))
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          var data = jsonDecode(response.body);
+          final parsedVerses = data["verses"];
+          if (parsedVerses is List && parsedVerses.isNotEmpty) {
+            verses = parsedVerses;
+            _cacheChapter(cacheKey, verses);
           }
-          return null;
-        } else {
-          return verses
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint("Error fetching GetBible passage: $e");
+        }
+      }
+    }
+
+    if (verses != null && verses.isNotEmpty) {
+      if (startVerse != null) {
+        int startIdx = int.parse(startVerse) - 1;
+        int endIdx = endVerse != null
+            ? int.parse(endVerse)
+            : int.parse(startVerse);
+
+        if (startIdx >= 0 && startIdx < verses.length) {
+          int endIndex = endIdx > verses.length ? verses.length : endIdx;
+          if (endIndex < startIdx) return null;
+          List selectedVerses = verses.sublist(startIdx, endIndex);
+          return selectedVerses
               .map((v) => cleanVerseText((v["text"] ?? "").toString()))
               .join(" ")
               .trim();
         }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("Error fetching GetBible passage: $e");
+        return null;
+      } else {
+        return verses
+            .map((v) => cleanVerseText((v["text"] ?? "").toString()))
+            .join(" ")
+            .trim();
       }
     }
     return null;

@@ -152,7 +152,10 @@ class _MyHomePageState extends State<MyHomePage> {
   String selectedBackground = "default.png";
   List<String> backgrounds = ["default.png"];
   String? customImagePath;
-  double backgroundDim = 0.15;
+  // ⚡ Bolt: Use ValueNotifiers for continuous slider/drag values to avoid full-tree rebuilds
+  final ValueNotifier<double> _backgroundDimNotifier = ValueNotifier<double>(0.15);
+  double get backgroundDim => _backgroundDimNotifier.value;
+  set backgroundDim(double v) => _backgroundDimNotifier.value = v;
 
   String? geminiApiKey;
   String selectedGeminiStyle = GeminiService.styleKeys.first;
@@ -161,9 +164,13 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showExperimentalGemini = false;
 
   Color fontColor = Colors.white;
-  double fontSize = 60.0;
+  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier<double>(60.0);
+  double get fontSize => _fontSizeNotifier.value;
+  set fontSize(double v) => _fontSizeNotifier.value = v;
   String aspectRatioStr = "1:1";
-  double yOffset = 0.0;
+  final ValueNotifier<double> _yOffsetNotifier = ValueNotifier<double>(0.0);
+  double get yOffset => _yOffsetNotifier.value;
+  set yOffset(double v) => _yOffsetNotifier.value = v;
 
   bool generateAudio = false;
   bool isPlayingAudioPreview = false;
@@ -223,6 +230,9 @@ class _MyHomePageState extends State<MyHomePage> {
   void dispose() {
     _copyFeedbackTimer?.cancel();
     _workspaceScrollController.dispose();
+    _backgroundDimNotifier.dispose();
+    _fontSizeNotifier.dispose();
+    _yOffsetNotifier.dispose();
     referenceController.dispose();
     verseController.dispose();
     geminiPromptController.dispose();
@@ -242,11 +252,19 @@ class _MyHomePageState extends State<MyHomePage> {
     youVersionApiKey =
         (results[2] as String?) ?? GetBibleAPI.defaultYouVersionApiKey;
     _syncDefaultBookForLanguage();
-    await _loadBibleVersions();
+    // ⚡ Bolt: Populate built-in Bible versions synchronously so cold start isn't blocked by network I/O
+    final builtIn = GetBibleAPI.getBuiltInVersions(bibleLang);
+    if (builtIn.isNotEmpty) {
+      bibleVersionsMap = {for (var v in builtIn) v["name"]!: v["id"]!};
+      bibleVersions = bibleVersionsMap.keys.toList();
+      selectedBibleVersion = bibleVersions.first;
+    }
     if (!mounted) return;
     setState(() {
       isLoading = false;
     });
+    // Merge YouVersion versions asynchronously in the background
+    _loadBibleVersions();
   }
 
   void _syncDefaultBookForLanguage() {
@@ -1303,7 +1321,11 @@ class _MyHomePageState extends State<MyHomePage> {
                           width: 3,
                         ),
                         image: DecorationImage(
-                          image: AssetImage("assets/backgrounds/$bgName"),
+                          // ⚡ Bolt: Decode 68x68 background strip thumbnails at 3x display width
+                          image: ResizeImage(
+                            AssetImage("assets/backgrounds/$bgName"),
+                            width: 204,
+                          ),
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -1315,23 +1337,33 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                "${generator.getLocaleString(lang, "background_dim_label")}: ${(backgroundDim * 100).round()}%",
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          value: backgroundDim,
-          min: 0.0,
-          max: 0.75,
-          divisions: 15,
-          label: "${(backgroundDim * 100).round()}%",
-          onChanged: (v) => setState(() => backgroundDim = v),
+        ValueListenableBuilder<double>(
+          valueListenable: _backgroundDimNotifier,
+          builder: (context, dimValue, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "${generator.getLocaleString(lang, "background_dim_label")}: ${(dimValue * 100).round()}%",
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                Slider(
+                  value: dimValue,
+                  min: 0.0,
+                  max: 0.75,
+                  divisions: 15,
+                  label: "${(dimValue * 100).round()}%",
+                  onChanged: (v) => _backgroundDimNotifier.value = v,
+                ),
+              ],
+            );
+          },
         ),
         StockPhotoSearchCard(
           lang: lang,
@@ -1526,44 +1558,64 @@ class _MyHomePageState extends State<MyHomePage> {
           ],
         ),
         const SizedBox(height: 12),
-        Text(
-          "${generator.getLocaleString(lang, "font_size_label")}: ${fontSize.round()}",
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        Slider(
-          value: fontSize,
-          min: 20,
-          max: 120,
-          divisions: 100,
-          label: fontSize.round().toString(),
-          onChanged: (v) => setState(() => fontSize = v),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                "${generator.getLocaleString(lang, "y_offset_label")}: ${yOffset.round()}",
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-            if (yOffset.round() != 0)
-              TextButton.icon(
-                onPressed: () => setState(() => yOffset = 0.0),
-                icon: const Icon(Icons.vertical_align_center, size: 16),
-                label: Text(
-                  generator.getLocaleString(lang, "reset_position_btn"),
+        ValueListenableBuilder<double>(
+          valueListenable: _fontSizeNotifier,
+          builder: (context, sizeValue, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "${generator.getLocaleString(lang, "font_size_label")}: ${sizeValue.round()}",
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-              ),
-          ],
+                Slider(
+                  value: sizeValue,
+                  min: 20,
+                  max: 120,
+                  divisions: 100,
+                  label: sizeValue.round().toString(),
+                  onChanged: (v) => _fontSizeNotifier.value = v,
+                ),
+              ],
+            );
+          },
         ),
-        Slider(
-          value: yOffset,
-          min: -400,
-          max: 400,
-          divisions: 800,
-          label: yOffset.round().toString(),
-          onChanged: (v) => setState(() => yOffset = v),
+        ValueListenableBuilder<double>(
+          valueListenable: _yOffsetNotifier,
+          builder: (context, offsetValue, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "${generator.getLocaleString(lang, "y_offset_label")}: ${offsetValue.round()}",
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (offsetValue.round() != 0)
+                      TextButton.icon(
+                        onPressed: () => _yOffsetNotifier.value = 0.0,
+                        icon: const Icon(Icons.vertical_align_center, size: 16),
+                        label: Text(
+                          generator.getLocaleString(lang, "reset_position_btn"),
+                        ),
+                      ),
+                  ],
+                ),
+                Slider(
+                  value: offsetValue,
+                  min: -400,
+                  max: 400,
+                  divisions: 800,
+                  label: offsetValue.round().toString(),
+                  onChanged: (v) => _yOffsetNotifier.value = v,
+                ),
+              ],
+            );
+          },
         ),
         _buildStepNavigationRow(lang, 2),
       ],
@@ -1918,21 +1970,30 @@ class _MyHomePageState extends State<MyHomePage> {
         Flexible(
           child: FittedBox(
             fit: BoxFit.contain,
-            child: VersePreviewCard(
-              repaintKey: _globalKey,
-              aspectRatioStr: aspectRatioStr,
-              customImagePath: customImagePath,
-              selectedBackground: selectedBackground,
-              previewListenable: _previewListenable,
-              verseController: verseController,
-              referenceController: referenceController,
-              fontColor: fontColor,
-              fontSize: fontSize,
-              yOffset: yOffset,
-              backgroundDim: backgroundDim,
-              onYOffsetChanged: (updated) => setState(() => yOffset = updated),
-              lang: lang,
-              generator: generator,
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                _backgroundDimNotifier,
+                _fontSizeNotifier,
+                _yOffsetNotifier,
+              ]),
+              builder: (context, _) {
+                return VersePreviewCard(
+                  repaintKey: _globalKey,
+                  aspectRatioStr: aspectRatioStr,
+                  customImagePath: customImagePath,
+                  selectedBackground: selectedBackground,
+                  previewListenable: _previewListenable,
+                  verseController: verseController,
+                  referenceController: referenceController,
+                  fontColor: fontColor,
+                  fontSize: _fontSizeNotifier.value,
+                  yOffset: _yOffsetNotifier.value,
+                  backgroundDim: _backgroundDimNotifier.value,
+                  onYOffsetChanged: (updated) => _yOffsetNotifier.value = updated,
+                  lang: lang,
+                  generator: generator,
+                );
+              },
             ),
           ),
         ),

@@ -21,10 +21,20 @@ class StockPhotoService {
     'User-Agent': 'InclusiveBibleGenerator/1.0 (https://github.com)',
   };
 
+  static final http.Client _sharedHttpClient = http.Client();
+
   final http.Client _httpClient;
+  final bool _ownsClient;
 
   StockPhotoService({http.Client? httpClient})
-    : _httpClient = httpClient ?? http.Client();
+    : _httpClient = httpClient ?? _sharedHttpClient,
+      _ownsClient = false;
+
+  void close() {
+    if (_ownsClient) {
+      _httpClient.close();
+    }
+  }
 
   /// Searches Wikimedia Commons for free bitmap photography matching [query].
   Future<List<StockPhotoResult>> searchPhotos(String query) async {
