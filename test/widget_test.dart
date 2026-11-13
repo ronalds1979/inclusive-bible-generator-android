@@ -381,4 +381,34 @@ void main() {
       handle.dispose();
     }
   });
+
+  testWidgets('Remembers preferred Bible version per language when switching languages', (
+    WidgetTester tester,
+  ) async {
+    tester.platformDispatcher.localeTestValue = const Locale('pt', 'BR');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(const MyApp());
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+
+    // Select a non-default Portuguese Bible version
+    await tester.tap(find.text("Nova Almeida Atualizada (NAA)"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Almeida Revista e Atualizada (ARA)").last);
+    await tester.pumpAndSettle();
+    expect(find.text("Almeida Revista e Atualizada (ARA)"), findsOneWidget);
+
+    // Switch Bible language to English
+    await tester.tap(find.text("English"));
+    await tester.pumpAndSettle();
+    expect(find.text("World English Bible"), findsOneWidget);
+
+    // Switch back to Portuguese and verify ARA is remembered
+    await tester.tap(find.text("Português"));
+    await tester.pumpAndSettle();
+    expect(find.text("Almeida Revista e Atualizada (ARA)"), findsOneWidget);
+  });
 }

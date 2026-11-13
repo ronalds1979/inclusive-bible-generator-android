@@ -27,7 +27,7 @@ class TtsService {
   static const double documentaryPitch = 0.95;
 
   /// Deeper pitch fallback when the device lacks a dedicated Male voice pack.
-  static const double maleFallbackPitch = 0.78;
+  static const double maleFallbackPitch = 0.62;
 
   /// Higher pitch fallback when only a Male voice pack is available for Female.
   static const double femaleFallbackPitch = 1.10;

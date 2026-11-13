@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -140,6 +141,7 @@ class _MyHomePageState extends State<MyHomePage> {
   List<String> bibleVersions = ["-"];
   String selectedBibleVersion = "-";
   Map<String, String> bibleVersionsMap = {};
+  Map<String, String> _preferredBibleVersions = {};
 
   String? selectedBook;
   int selectedChapter = 119;
@@ -250,6 +252,7 @@ class _MyHomePageState extends State<MyHomePage> {
       geminiService.loadApiKey(),
       GetBibleAPI.loadYouVersionApiKey(),
       _loadBackgrounds(),
+      _loadPreferredBibleVersions(),
     ]);
     geminiApiKey = results[1] as String?;
     youVersionApiKey =
@@ -260,7 +263,10 @@ class _MyHomePageState extends State<MyHomePage> {
     if (builtIn.isNotEmpty) {
       bibleVersionsMap = {for (var v in builtIn) v["name"]!: v["id"]!};
       bibleVersions = bibleVersionsMap.keys.toList();
-      selectedBibleVersion = bibleVersions.first;
+      selectedBibleVersion = _resolvePreferredVersionForLang(
+        bibleLang,
+        bibleVersions,
+      );
     }
     if (!mounted) return;
     setState(() {
@@ -359,22 +365,93 @@ class _MyHomePageState extends State<MyHomePage> {
     return "pt-BR";
   }
 
-  Future<void> _loadBibleVersions() async {
+  Future<void> _loadPreferredBibleVersions() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/preferred_bible_versions.json');
+      if (await file.exists()) {
+        final dynamic decoded = jsonDecode(await file.readAsString());
+        if (decoded is Map) {
+          _preferredBibleVersions = decoded.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error loading preferred Bible versions: $e");
+      }
+    }
+  }
+
+  Future<void> _savePreferredBibleVersion(
+    String langCode,
+    String versionName,
+  ) async {
+    _preferredBibleVersions[langCode] = versionName;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/preferred_bible_versions.json');
+      await file.writeAsString(jsonEncode(_preferredBibleVersions));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error saving preferred Bible version: $e");
+      }
+    }
+  }
+
+  String _resolvePreferredVersionForLang(
+    String langCode,
+    List<String> availableVersions,
+  ) {
+    final String? preferred = _preferredBibleVersions[langCode];
+    if (preferred != null && availableVersions.contains(preferred)) {
+      return preferred;
+    }
+    return availableVersions.first;
+  }
+
+  void _switchBibleLanguage(String newBibleLang) {
+    setState(() {
+      bibleLang = newBibleLang;
+      _syncDefaultBookForLanguage();
+      final builtIn = GetBibleAPI.getBuiltInVersions(bibleLang);
+      if (builtIn.isNotEmpty) {
+        bibleVersionsMap = {for (var v in builtIn) v["name"]!: v["id"]!};
+        bibleVersions = bibleVersionsMap.keys.toList();
+        selectedBibleVersion = _resolvePreferredVersionForLang(
+          bibleLang,
+          bibleVersions,
+        );
+      }
+    });
+    _loadBibleVersions(reloadVotd: true);
+  }
+
+  Future<void> _loadBibleVersions({bool reloadVotd = false}) async {
+    final String requestedLang = bibleLang;
     setState(() {
       _updateStatus("Loading Bible versions...");
     });
 
     final versions = await GetBibleAPI.getVersions(
-      lang: bibleLang,
+      lang: requestedLang,
       youVersionApiKey: youVersionApiKey,
     );
+    if (!mounted || requestedLang != bibleLang) return;
     if (versions.isNotEmpty) {
       bibleVersionsMap = {for (var v in versions) v["name"]!: v["id"]!};
       bibleVersions = bibleVersionsMap.keys.toList();
-      selectedBibleVersion = bibleVersions.first;
+      selectedBibleVersion = _resolvePreferredVersionForLang(
+        requestedLang,
+        bibleVersions,
+      );
       setState(() {
         _updateStatus("");
       });
+      if (reloadVotd) {
+        await _fetchVerseOfTheDay();
+      }
     } else {
       setState(() {
         bibleVersions = ["-"];
@@ -903,11 +980,7 @@ class _MyHomePageState extends State<MyHomePage> {
               materialTapTargetSize: MaterialTapTargetSize.padded,
               onSelected: (selected) {
                 if (selected && bibleLang != "pt") {
-                  setState(() {
-                    bibleLang = "pt";
-                    _syncDefaultBookForLanguage();
-                    _loadBibleVersions();
-                  });
+                  _switchBibleLanguage("pt");
                 }
               },
             ),
@@ -917,11 +990,7 @@ class _MyHomePageState extends State<MyHomePage> {
               materialTapTargetSize: MaterialTapTargetSize.padded,
               onSelected: (selected) {
                 if (selected && bibleLang != "en") {
-                  setState(() {
-                    bibleLang = "en";
-                    _syncDefaultBookForLanguage();
-                    _loadBibleVersions();
-                  });
+                  _switchBibleLanguage("en");
                 }
               },
             ),
@@ -931,11 +1000,7 @@ class _MyHomePageState extends State<MyHomePage> {
               materialTapTargetSize: MaterialTapTargetSize.padded,
               onSelected: (selected) {
                 if (selected && bibleLang != "es") {
-                  setState(() {
-                    bibleLang = "es";
-                    _syncDefaultBookForLanguage();
-                    _loadBibleVersions();
-                  });
+                  _switchBibleLanguage("es");
                 }
               },
             ),
@@ -964,7 +1029,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     )
                     .toList(),
-                onChanged: (v) => setState(() => selectedBibleVersion = v!),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => selectedBibleVersion = v);
+                  _savePreferredBibleVersion(bibleLang, v);
+                },
               ),
             ),
           ],
@@ -2252,12 +2321,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 itemHeight: null,
                 value: currentLang,
                 onChanged: (String? newValue) {
+                  if (newValue == null) return;
                   setState(() {
-                    currentLang = newValue!;
-                    bibleLang = getLangKey().substring(0, 2);
-                    _syncDefaultBookForLanguage();
-                    _loadBibleVersions();
+                    currentLang = newValue;
                   });
+                  _switchBibleLanguage(getLangKey().substring(0, 2));
                 },
                 items: languages.map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
