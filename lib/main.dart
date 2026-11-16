@@ -757,16 +757,19 @@ class _MyHomePageState extends State<MyHomePage> {
     if (imageBytes != null) {
       try {
         final Directory docsDir = await getApplicationDocumentsDirectory();
-        await pruneTransientFiles(
-          docsDir,
-          prefix: 'gemini_bg_',
-          suffix: '.png',
-          excludePath: customImagePath,
+        // ⚡ Bolt: Prune old transient files in the background without blocking UI update
+        unawaited(
+          pruneTransientFiles(
+            docsDir,
+            prefix: 'gemini_bg_',
+            suffix: '.png',
+            excludePath: customImagePath,
+          ),
         );
         final File bgFile = File(
           '${docsDir.path}/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
         );
-        await bgFile.writeAsBytes(imageBytes, flush: true);
+        await bgFile.writeAsBytes(imageBytes);
 
         setState(() {
           customImagePath = bgFile.path;
@@ -1906,6 +1909,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 AnimatedBuilder(
                   animation: _previewListenable,
                   builder: (context, _) {
+                    // ⚡ Bolt: Skip spoken-script regex & SelectableText layout on keystrokes when Audio tab is inactive
+                    if (_selectedTabIndex != 3) {
+                      return const SizedBox.shrink();
+                    }
                     final String verseText = verseController.text.trim();
                     if (verseText.isEmpty) {
                       return const SizedBox.shrink();

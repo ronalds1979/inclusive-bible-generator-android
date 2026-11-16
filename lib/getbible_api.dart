@@ -7,6 +7,40 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'book_mapping.dart';
 
+class _CachedChapter {
+  final Map<int, String> byVerse;
+  final String fullChapterText;
+
+  const _CachedChapter({
+    required this.byVerse,
+    required this.fullChapterText,
+  });
+
+  String? extractRange(String? startVerse, String? endVerse) {
+    if (startVerse == null) {
+      return fullChapterText.isNotEmpty ? fullChapterText : null;
+    }
+    final int? startV = int.tryParse(startVerse);
+    final int? endV = endVerse != null ? int.tryParse(endVerse) : startV;
+    if (startV == null || endV == null || endV < startV) return null;
+
+    if (startV == endV) {
+      final String? single = byVerse[startV];
+      return (single != null && single.isNotEmpty) ? single : null;
+    }
+
+    final StringBuffer sb = StringBuffer();
+    for (int v = startV; v <= endV; v++) {
+      final String? verseText = byVerse[v];
+      if (verseText != null && verseText.isNotEmpty) {
+        if (sb.isNotEmpty) sb.write(' ');
+        sb.write(verseText);
+      }
+    }
+    return sb.isNotEmpty ? sb.toString() : null;
+  }
+}
+
 class GetBibleAPI {
   static const String baseUrl = "https://api.getbible.net/v2";
   static const String bollsBaseUrl = "https://bolls.life/get-text";
@@ -264,26 +298,26 @@ class GetBibleAPI {
     return _getBuiltInVersions(lang.substring(0, 2).toLowerCase());
   }
 
-  // ⚡ Bolt: Bounded LRU in-memory chapter cache so switching verses in the same chapter is instant
+  // ⚡ Bolt: Bounded LRU in-memory pre-cleaned & indexed chapter cache for O(1) verse lookups
   static const int _maxCachedChapters = 30;
-  static final Map<String, List<dynamic>> _chapterCache = {};
+  static final Map<String, _CachedChapter> _chapterCache = {};
   static final Map<String, List<Map<String, String>>> _youVersionBiblesCache =
       {};
 
-  static List<dynamic>? _getCachedChapter(String key) {
-    final List<dynamic>? hit = _chapterCache.remove(key);
+  static _CachedChapter? _getCachedChapter(String key) {
+    final _CachedChapter? hit = _chapterCache.remove(key);
     if (hit != null) {
       _chapterCache[key] = hit;
     }
     return hit;
   }
 
-  static void _cacheChapter(String key, List<dynamic> verses) {
+  static void _cacheChapter(String key, _CachedChapter chapter) {
     _chapterCache.remove(key);
     if (_chapterCache.length >= _maxCachedChapters) {
       _chapterCache.remove(_chapterCache.keys.first);
     }
-    _chapterCache[key] = verses;
+    _chapterCache[key] = chapter;
   }
 
   static Future<List<Map<String, String>>> getVersions({
@@ -613,8 +647,8 @@ class GetBibleAPI {
     required http.Client client,
   }) async {
     final String cacheKey = "bolls:$translationCode:$bookNr:$chapter";
-    List<dynamic>? decoded = _getCachedChapter(cacheKey);
-    if (decoded == null) {
+    _CachedChapter? cached = _getCachedChapter(cacheKey);
+    if (cached == null) {
       final Uri uri = Uri.parse(
         "$bollsBaseUrl/${Uri.encodeComponent(translationCode)}/$bookNr/${Uri.encodeComponent(chapter)}/",
       );
@@ -625,8 +659,28 @@ class GetBibleAPI {
         if (response.statusCode == 200) {
           final parsed = jsonDecode(response.body);
           if (parsed is List && parsed.isNotEmpty) {
-            decoded = parsed;
-            _cacheChapter(cacheKey, decoded);
+            final Map<int, String> byVerse = {};
+            final StringBuffer fullBuf = StringBuffer();
+            for (final item in parsed) {
+              if (item is Map<String, dynamic>) {
+                final int? vNum = (item["verse"] is int)
+                    ? item["verse"] as int
+                    : int.tryParse(item["verse"]?.toString() ?? "");
+                final String cleaned = cleanVerseText(
+                  (item["text"] ?? "").toString(),
+                );
+                if (cleaned.isNotEmpty) {
+                  if (vNum != null) byVerse[vNum] = cleaned;
+                  if (fullBuf.isNotEmpty) fullBuf.write(' ');
+                  fullBuf.write(cleaned);
+                }
+              }
+            }
+            cached = _CachedChapter(
+              byVerse: byVerse,
+              fullChapterText: fullBuf.toString(),
+            );
+            _cacheChapter(cacheKey, cached);
           }
         }
       } catch (e) {
@@ -636,43 +690,8 @@ class GetBibleAPI {
       }
     }
 
-    if (decoded != null && decoded.isNotEmpty) {
-      if (startVerse != null) {
-        final int startV = int.parse(startVerse);
-        final int endV = endVerse != null ? int.parse(endVerse) : startV;
-        if (endV < startV) return null;
-
-        final List<String> matched = [];
-        for (final item in decoded) {
-          if (item is Map<String, dynamic>) {
-            final int? vNum = (item["verse"] is int)
-                ? item["verse"] as int
-                : int.tryParse(item["verse"]?.toString() ?? "");
-            if (vNum != null && vNum >= startV && vNum <= endV) {
-              final String cleaned = cleanVerseText(
-                (item["text"] ?? "").toString(),
-              );
-              if (cleaned.isNotEmpty) {
-                matched.add(cleaned);
-              }
-            }
-          }
-        }
-        return matched.isNotEmpty ? matched.join(" ") : null;
-      } else {
-        final List<String> allVerses = [];
-        for (final item in decoded) {
-          if (item is Map<String, dynamic>) {
-            final String cleaned = cleanVerseText(
-              (item["text"] ?? "").toString(),
-            );
-            if (cleaned.isNotEmpty) {
-              allVerses.add(cleaned);
-            }
-          }
-        }
-        return allVerses.isNotEmpty ? allVerses.join(" ") : null;
-      }
+    if (cached != null) {
+      return cached.extractRange(startVerse, endVerse);
     }
     return null;
   }
@@ -686,8 +705,8 @@ class GetBibleAPI {
     required http.Client client,
   }) async {
     final String cacheKey = "getbible:$bibleId:$bookNr:$chapter";
-    List<dynamic>? verses = _getCachedChapter(cacheKey);
-    if (verses == null) {
+    _CachedChapter? cached = _getCachedChapter(cacheKey);
+    if (cached == null) {
       String safeBibleId = Uri.encodeComponent(bibleId);
       String safeBookNr = Uri.encodeComponent(bookNr);
       String safeChapter = Uri.encodeComponent(chapter);
@@ -701,8 +720,24 @@ class GetBibleAPI {
           var data = jsonDecode(response.body);
           final parsedVerses = data["verses"];
           if (parsedVerses is List && parsedVerses.isNotEmpty) {
-            verses = parsedVerses;
-            _cacheChapter(cacheKey, verses);
+            final Map<int, String> byVerse = {};
+            final StringBuffer fullBuf = StringBuffer();
+            for (int i = 0; i < parsedVerses.length; i++) {
+              final v = parsedVerses[i];
+              final String cleaned = cleanVerseText(
+                (v["text"] ?? "").toString(),
+              );
+              if (cleaned.isNotEmpty) {
+                byVerse[i + 1] = cleaned;
+                if (fullBuf.isNotEmpty) fullBuf.write(' ');
+                fullBuf.write(cleaned);
+              }
+            }
+            cached = _CachedChapter(
+              byVerse: byVerse,
+              fullChapterText: fullBuf.toString(),
+            );
+            _cacheChapter(cacheKey, cached);
           }
         }
       } catch (e) {
@@ -712,29 +747,8 @@ class GetBibleAPI {
       }
     }
 
-    if (verses != null && verses.isNotEmpty) {
-      if (startVerse != null) {
-        int startIdx = int.parse(startVerse) - 1;
-        int endIdx = endVerse != null
-            ? int.parse(endVerse)
-            : int.parse(startVerse);
-
-        if (startIdx >= 0 && startIdx < verses.length) {
-          int endIndex = endIdx > verses.length ? verses.length : endIdx;
-          if (endIndex < startIdx) return null;
-          List selectedVerses = verses.sublist(startIdx, endIndex);
-          return selectedVerses
-              .map((v) => cleanVerseText((v["text"] ?? "").toString()))
-              .join(" ")
-              .trim();
-        }
-        return null;
-      } else {
-        return verses
-            .map((v) => cleanVerseText((v["text"] ?? "").toString()))
-            .join(" ")
-            .trim();
-      }
+    if (cached != null) {
+      return cached.extractRange(startVerse, endVerse);
     }
     return null;
   }
