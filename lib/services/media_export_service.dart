@@ -34,7 +34,6 @@ class MediaExportService {
       final Uint8List pngBytes = byteData.buffer.asUint8List();
 
       final Directory docsDir = await getApplicationDocumentsDirectory();
-      await pruneTransientFiles(docsDir, prefix: 'verse_', suffix: '.png');
       final File imgFile = File(
         '${docsDir.path}/verse_${DateTime.now().millisecondsSinceEpoch}.png',
       );
@@ -55,6 +54,8 @@ class MediaExportService {
       await SharePlus.instance.share(
         ShareParams(files: filesToShare, text: "$altText\n\n$caption"),
       );
+      // ⚡ Bolt: Defer transient file cleanup until after share sheet opens so directory I/O is off the critical path
+      await pruneTransientFiles(docsDir, prefix: 'verse_', suffix: '.png');
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error capturing image: $e");

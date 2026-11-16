@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../generator.dart';
 
-class VersePreviewCard extends StatelessWidget {
+class VersePreviewCard extends StatefulWidget {
   // ⚡ Bolt: Cache base GoogleFonts TextStyle instead of calling GoogleFonts.roboto() on every frame
   static final TextStyle _baseRobotoStyle = GoogleFonts.roboto();
 
@@ -48,19 +48,67 @@ class VersePreviewCard extends StatelessWidget {
   });
 
   @override
+  State<VersePreviewCard> createState() => _VersePreviewCardState();
+}
+
+class _VersePreviewCardState extends State<VersePreviewCard> {
+  late Listenable _textAnimation;
+
+  Listenable _buildTextAnimation() => Listenable.merge([
+    widget.previewListenable,
+    ?widget.fontSizeListenable,
+    ?widget.yOffsetListenable,
+  ]);
+
+  @override
+  void initState() {
+    super.initState();
+    _textAnimation = _buildTextAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant VersePreviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.previewListenable != widget.previewListenable ||
+        oldWidget.fontSizeListenable != widget.fontSizeListenable ||
+        oldWidget.yOffsetListenable != widget.yOffsetListenable) {
+      _textAnimation = _buildTextAnimation();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     double width = 300;
     double height = 300;
-    if (aspectRatioStr == "3:4") {
+    if (widget.aspectRatioStr == "3:4") {
       width = 300;
       height = 400;
-    } else if (aspectRatioStr == "9:16") {
+    } else if (widget.aspectRatioStr == "9:16") {
       width = 225;
       height = 400;
-    } else if (aspectRatioStr == "4:3") {
+    } else if (widget.aspectRatioStr == "4:3") {
       width = 400;
       height = 300;
     }
+
+    // ⚡ Bolt: Pre-resolve locale placeholder & header strings outside 60Hz AnimatedBuilders
+    final String versePlaceholder = widget.generator.getLocaleString(
+      widget.lang,
+      "preview_verse_placeholder",
+    );
+    final String refPlaceholder = widget.generator.getLocaleString(
+      widget.lang,
+      "reference_placeholder",
+    );
+    final String rawHeader = widget.generator.getLocaleString(
+      widget.lang,
+      "preview_semantic_label",
+    );
+    final String semanticHeader =
+        (rawHeader.isEmpty || rawHeader == "preview_semantic_label"
+                ? "Verse card preview ({ratio})"
+                : rawHeader)
+            .replaceAll("{ratio}", widget.aspectRatioStr);
 
     // ⚡ Bolt: Isolate static background image from 60Hz drag/slider layers so
     // dragging text or adjusting dim/font size never rebuilds the image provider.
@@ -69,9 +117,9 @@ class VersePreviewCard extends StatelessWidget {
         image: ResizeImage.resizeIfNeeded(
           1080,
           null,
-          customImagePath != null
-              ? FileImage(File(customImagePath!)) as ImageProvider
-              : AssetImage("assets/backgrounds/$selectedBackground"),
+          widget.customImagePath != null
+              ? FileImage(File(widget.customImagePath!)) as ImageProvider
+              : AssetImage("assets/backgrounds/${widget.selectedBackground}"),
         ),
         fit: BoxFit.cover,
         width: width,
@@ -79,30 +127,28 @@ class VersePreviewCard extends StatelessWidget {
       ),
     );
 
-    final Widget dimOverlay = backgroundDimListenable != null
+    final Widget dimOverlay = widget.backgroundDimListenable != null
         ? ValueListenableBuilder<double>(
-            valueListenable: backgroundDimListenable!,
+            valueListenable: widget.backgroundDimListenable!,
             builder: (context, dim, _) => ColoredBox(
               color: Colors.black.withAlpha((dim.clamp(0.0, 0.85) * 255).round()),
             ),
           )
         : ColoredBox(
             color: Colors.black.withAlpha(
-              (backgroundDim.clamp(0.0, 0.85) * 255).round(),
+              (widget.backgroundDim.clamp(0.0, 0.85) * 255).round(),
             ),
           );
 
-    final Listenable textAnimation = Listenable.merge([
-      previewListenable,
-      ?fontSizeListenable,
-      ?yOffsetListenable,
-    ]);
-
     final Widget textOverlay = AnimatedBuilder(
-      animation: textAnimation,
+      animation: _textAnimation,
       builder: (context, child) {
-        final double currentFontSize = fontSizeListenable?.value ?? fontSize;
-        final double currentYOffset = yOffsetListenable?.value ?? yOffset;
+        final double currentFontSize =
+            widget.fontSizeListenable?.value ?? widget.fontSize;
+        final double currentYOffset =
+            widget.yOffsetListenable?.value ?? widget.yOffset;
+        final String verseText = widget.verseController.text;
+        final String refText = widget.referenceController.text;
         return Align(
           alignment: Alignment.center,
           child: Transform.translate(
@@ -121,15 +167,10 @@ class VersePreviewCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        verseController.text.isEmpty
-                            ? generator.getLocaleString(
-                                lang,
-                                "preview_verse_placeholder",
-                              )
-                            : verseController.text,
+                        verseText.isEmpty ? versePlaceholder : verseText,
                         textAlign: TextAlign.center,
-                        style: _baseRobotoStyle.copyWith(
-                          color: fontColor,
+                        style: VersePreviewCard._baseRobotoStyle.copyWith(
+                          color: widget.fontColor,
                           fontSize: currentFontSize / 2,
                           fontWeight: FontWeight.bold,
                           shadows: const [
@@ -145,15 +186,10 @@ class VersePreviewCard extends StatelessWidget {
                         height: (currentFontSize * 0.35).clamp(12.0, 24.0),
                       ),
                       Text(
-                        referenceController.text.isEmpty
-                            ? generator.getLocaleString(
-                                lang,
-                                "reference_placeholder",
-                              )
-                            : referenceController.text,
+                        refText.isEmpty ? refPlaceholder : refText,
                         textAlign: TextAlign.center,
-                        style: _baseRobotoStyle.copyWith(
-                          color: fontColor,
+                        style: VersePreviewCard._baseRobotoStyle.copyWith(
+                          color: widget.fontColor,
                           fontSize: (currentFontSize * 0.66) / 2,
                           shadows: const [
                             Shadow(
@@ -175,7 +211,7 @@ class VersePreviewCard extends StatelessWidget {
     );
 
     final Widget card = RepaintBoundary(
-      key: repaintKey,
+      key: widget.repaintKey,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: SizedBox(
@@ -198,41 +234,33 @@ class VersePreviewCard extends StatelessWidget {
       child: card,
     );
 
-    final Widget interactiveCard = onYOffsetChanged == null
+    final Widget interactiveCard = widget.onYOffsetChanged == null
         ? responsiveCard
         : GestureDetector(
             onVerticalDragUpdate: (details) {
-              final double baseOffset = yOffsetListenable?.value ?? yOffset;
+              final double baseOffset =
+                  widget.yOffsetListenable?.value ?? widget.yOffset;
               final double updated = (baseOffset + details.delta.dy * 1.5)
                   .clamp(-400.0, 400.0);
-              onYOffsetChanged!(updated);
+              widget.onYOffsetChanged!(updated);
             },
             child: responsiveCard,
           );
 
     return AnimatedBuilder(
-      animation: previewListenable,
+      animation: widget.previewListenable,
       builder: (context, child) {
-        final String verseText = verseController.text.trim().isEmpty
-            ? generator.getLocaleString(lang, "preview_verse_placeholder")
-            : verseController.text.trim();
-        final String refText = referenceController.text.trim().isEmpty
-            ? generator.getLocaleString(lang, "reference_placeholder")
-            : referenceController.text.trim();
-        final String rawHeader = generator.getLocaleString(
-          lang,
-          "preview_semantic_label",
-        );
-        final String header =
-            (rawHeader.isEmpty || rawHeader == "preview_semantic_label"
-                    ? "Verse card preview ({ratio})"
-                    : rawHeader)
-                .replaceAll("{ratio}", aspectRatioStr);
+        final String trimmedVerse = widget.verseController.text.trim();
+        final String trimmedRef = widget.referenceController.text.trim();
+        final String verseText =
+            trimmedVerse.isEmpty ? versePlaceholder : trimmedVerse;
+        final String refText =
+            trimmedRef.isEmpty ? refPlaceholder : trimmedRef;
         return Semantics(
           container: true,
           image: true,
           excludeSemantics: true,
-          label: "$header: \"$verseText\" — $refText",
+          label: "$semanticHeader: \"$verseText\" — $refText",
           child: child,
         );
       },
