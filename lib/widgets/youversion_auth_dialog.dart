@@ -149,15 +149,24 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
           onPressed: () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.check),
-          label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
-          onPressed: () async {
-            final String entered = _keyController.text.trim();
-            await widget.onSave(entered);
-            if (context.mounted) {
-              Navigator.of(context).pop(entered.isNotEmpty);
-            }
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _keyController,
+          builder: (context, value, child) {
+            final bool canSave = value.text.trim().isNotEmpty;
+            return ElevatedButton.icon(
+              icon: const Icon(Icons.check),
+              label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
+              onPressed: canSave
+                  ? () async {
+                      final String entered = _keyController.text.trim();
+                      if (entered.isEmpty) return;
+                      await widget.onSave(entered);
+                      if (context.mounted) {
+                        Navigator.of(context).pop(true);
+                      }
+                    }
+                  : null,
+            );
           },
         ),
       ],

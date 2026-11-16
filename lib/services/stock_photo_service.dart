@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'temp_file_cleanup.dart';
 
 class StockPhotoResult {
   final String title;
@@ -17,9 +19,27 @@ class StockPhotoResult {
 
 class StockPhotoService {
   static const String _commonsApiBase = 'https://commons.wikimedia.org/w/api.php';
+  static const int maxDownloadBytes = 20 * 1024 * 1024;
+  static const Set<String> _allowedHosts = {
+    'upload.wikimedia.org',
+    'commons.wikimedia.org',
+  };
   static const Map<String, String> _requestHeaders = {
     'User-Agent': 'InclusiveBibleGenerator/1.0 (https://github.com)',
   };
+
+  /// Parses [rawUrl] and returns it only if it uses HTTPS and an allowlisted
+  /// Wikimedia host.
+  static Uri? parseAllowedWikimediaUri(String rawUrl) {
+    final Uri? uri = Uri.tryParse(rawUrl.trim());
+    if (uri == null || !uri.hasScheme || uri.scheme.toLowerCase() != 'https') {
+      return null;
+    }
+    if (!_allowedHosts.contains(uri.host.toLowerCase())) {
+      return null;
+    }
+    return uri;
+  }
 
   static final http.Client _sharedHttpClient = http.Client();
 
@@ -84,7 +104,9 @@ class StockPhotoService {
       final String? thumbUrl = info['thumburl'] as String?;
       final String? url = info['url'] as String?;
       final String resolvedUrl = thumbUrl ?? url ?? '';
-      if (resolvedUrl.isEmpty) continue;
+      if (resolvedUrl.isEmpty || parseAllowedWikimediaUri(resolvedUrl) == null) {
+        continue;
+      }
 
       final String rawTitle = (pageValue['title'] as String? ?? '')
           .replaceFirst('File:', '')
@@ -93,8 +115,8 @@ class StockPhotoService {
       results.add(
         StockPhotoResult(
           title: rawTitle,
-          thumbUrl: thumbUrl ?? url ?? '',
-          fullUrl: thumbUrl ?? url ?? '',
+          thumbUrl: resolvedUrl,
+          fullUrl: resolvedUrl,
         ),
       );
     }
@@ -103,22 +125,49 @@ class StockPhotoService {
 
   /// Downloads [photo] to a temporary file and returns its local path.
   Future<String> downloadPhotoToTemp(StockPhotoResult photo) async {
-    final Uri uri = Uri.parse(photo.fullUrl);
-    final http.Response response = await _httpClient
-        .get(uri, headers: _requestHeaders)
+    final Uri? uri = parseAllowedWikimediaUri(photo.fullUrl);
+    if (uri == null) {
+      throw const HttpException('Disallowed stock photo URL');
+    }
+
+    final http.Request request = http.Request('GET', uri)
+      ..headers.addAll(_requestHeaders);
+    final http.StreamedResponse streamedResponse = await _httpClient
+        .send(request)
         .timeout(const Duration(seconds: 15));
 
-    if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
+    if (streamedResponse.statusCode != 200) {
       throw HttpException(
-        'Failed to download stock photo (${response.statusCode})',
+        'Failed to download stock photo (${streamedResponse.statusCode})',
       );
     }
 
+    final int? contentLength = streamedResponse.contentLength;
+    if (contentLength != null && contentLength > maxDownloadBytes) {
+      throw const HttpException('Stock photo exceeds 20 MB size limit');
+    }
+
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    await for (final List<int> chunk in streamedResponse.stream.timeout(
+      const Duration(seconds: 15),
+    )) {
+      if (builder.length + chunk.length > maxDownloadBytes) {
+        throw const HttpException('Stock photo exceeds 20 MB size limit');
+      }
+      builder.add(chunk);
+    }
+
+    final Uint8List bytes = builder.takeBytes();
+    if (bytes.isEmpty) {
+      throw const HttpException('Failed to download stock photo (empty body)');
+    }
+
     final Directory tempDir = await getTemporaryDirectory();
+    await pruneTransientFiles(tempDir, prefix: 'stock_bg_', suffix: '.jpg');
     final File outFile = File(
       '${tempDir.path}/stock_bg_${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
-    await outFile.writeAsBytes(response.bodyBytes, flush: true);
+    await outFile.writeAsBytes(bytes, flush: true);
     return outFile.path;
   }
 }

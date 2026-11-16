@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'temp_file_cleanup.dart';
 
 class MediaExportService {
   Future<void> captureSaveAndShareImage({
@@ -32,9 +33,10 @@ class MediaExportService {
       if (byteData == null) return;
       final Uint8List pngBytes = byteData.buffer.asUint8List();
 
-      final String directory = (await getApplicationDocumentsDirectory()).path;
+      final Directory docsDir = await getApplicationDocumentsDirectory();
+      await pruneTransientFiles(docsDir, prefix: 'verse_', suffix: '.png');
       final File imgFile = File(
-        '$directory/verse_${DateTime.now().millisecondsSinceEpoch}.png',
+        '${docsDir.path}/verse_${DateTime.now().millisecondsSinceEpoch}.png',
       );
       await imgFile.writeAsBytes(pngBytes);
 

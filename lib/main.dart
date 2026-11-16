@@ -14,6 +14,7 @@ import 'generator.dart';
 import 'getbible_api.dart';
 import 'services/media_export_service.dart';
 import 'services/stock_photo_service.dart';
+import 'services/temp_file_cleanup.dart';
 import 'services/tts_service.dart';
 import 'widgets/gemini_auth_dialog.dart';
 import 'widgets/gemini_background_card.dart';
@@ -650,23 +651,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (verse.isEmpty) return;
 
-    // Auto-detect from clipboard first if not connected yet
     if (geminiApiKey == null || geminiApiKey!.isEmpty) {
-      final String? clipKey = await geminiService.detectApiKeyFromClipboard();
-      if (clipKey != null && clipKey.isNotEmpty) {
-        await geminiService.saveApiKey(clipKey);
-        setState(() {
-          geminiApiKey = clipKey;
-          _updateStatus(
-            generator.getLocaleString(lang, "gemini_clipboard_detected_msg"),
-            forceSuccess: true,
-          );
-        });
-      } else {
-        final bool connected = await _showGeminiAuthDialog();
-        if (!connected || geminiApiKey == null || geminiApiKey!.isEmpty) {
-          return;
-        }
+      final bool connected = await _showGeminiAuthDialog();
+      if (!connected || geminiApiKey == null || geminiApiKey!.isEmpty) {
+        return;
       }
     }
 
@@ -686,9 +674,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (imageBytes != null) {
       try {
-        final directory = (await getApplicationDocumentsDirectory()).path;
+        final Directory docsDir = await getApplicationDocumentsDirectory();
+        await pruneTransientFiles(
+          docsDir,
+          prefix: 'gemini_bg_',
+          suffix: '.png',
+          excludePath: customImagePath,
+        );
         final File bgFile = File(
-          '$directory/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
+          '${docsDir.path}/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
         );
         await bgFile.writeAsBytes(imageBytes, flush: true);
 

@@ -40,13 +40,22 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties.getProperty("keyAlias")
-            keyPassword = keystoreProperties.getProperty("keyPassword")
-            val storeFileProp = keystoreProperties.getProperty("storeFile")
-            if (storeFileProp != null) {
-                storeFile = file(storeFileProp)
+            val envStoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+            val envStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            val envKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            val envKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+
+            val storeFilePath = envStoreFile?.takeIf { it.isNotBlank() }
+                ?: keystoreProperties.getProperty("storeFile")
+            if (!storeFilePath.isNullOrBlank()) {
+                storeFile = file(storeFilePath)
             }
-            storePassword = keystoreProperties.getProperty("storePassword")
+            storePassword = envStorePassword?.takeIf { it.isNotBlank() }
+                ?: keystoreProperties.getProperty("storePassword")
+            keyAlias = envKeyAlias?.takeIf { it.isNotBlank() }
+                ?: keystoreProperties.getProperty("keyAlias")
+            keyPassword = envKeyPassword?.takeIf { it.isNotBlank() }
+                ?: keystoreProperties.getProperty("keyPassword")
         }
     }
 
@@ -55,7 +64,12 @@ android {
             // ⚡ Bolt: Enable R8 code shrinking and resource shrinking for smaller, faster release APKs
             isMinifyEnabled = true
             isShrinkResources = true
-            if (keystorePropertiesFile.exists()) {
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            val hasEnvSigning = !System.getenv("ANDROID_KEYSTORE_PATH").isNullOrBlank()
+            if (hasEnvSigning || keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }

@@ -33,11 +33,6 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
   void initState() {
     super.initState();
     _keyController = TextEditingController(text: widget.initialApiKey ?? "");
-    if (_keyController.text.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _checkClipboardForKey(autoConnectIfFound: false);
-      });
-    }
   }
 
   @override

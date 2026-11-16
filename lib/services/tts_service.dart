@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
+import 'temp_file_cleanup.dart';
 
 class TtsVoiceSelection {
   final Map<String, String>? voice;
@@ -450,14 +451,14 @@ class TtsService {
       );
 
       if (Platform.isAndroid) {
+        final Directory dir = await getTemporaryDirectory();
+        await pruneTransientFiles(dir, prefix: 'verse_audio_', suffix: '.wav');
         final String fileName =
             "verse_audio_${DateTime.now().millisecondsSinceEpoch}.wav";
-        final dir = await getExternalStorageDirectory();
-        if (dir != null) {
-          await _flutterTts.awaitSynthCompletion(true);
-          await _flutterTts.synthesizeToFile(textToRead, fileName);
-          return "${dir.path}/$fileName";
-        }
+        final String fullPath = "${dir.path}/$fileName";
+        await _flutterTts.awaitSynthCompletion(true);
+        await _flutterTts.synthesizeToFile(textToRead, fullPath, true);
+        return fullPath;
       }
     } catch (e) {
       if (kDebugMode) {
