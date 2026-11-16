@@ -49,6 +49,9 @@ class TtsService {
     r'female|-f-',
   );
 
+  // ⚡ Bolt: Pre-compile voice name tokenizer instead of allocating a RegExp per voice
+  static final RegExp _voiceTokenSplitRegExp = RegExp(r'[-_#.\s]+');
+
   static const Set<String> _maleVoiceTokens = {
     'iol',
     'iom',
@@ -114,6 +117,8 @@ class TtsService {
     'marisol',
   };
 
+  List<dynamic>? _cachedDeviceVoices;
+
   TtsService({FlutterTts? flutterTts})
     : _flutterTts = flutterTts ?? FlutterTts();
 
@@ -150,7 +155,7 @@ class TtsService {
     if (_explicitFemaleNameRegExp.hasMatch(name)) return "Female";
     if (_explicitMaleNameRegExp.hasMatch(name)) return "Male";
 
-    final List<String> tokens = name.split(RegExp(r'[-_#.\s]+'));
+    final List<String> tokens = name.split(_voiceTokenSplitRegExp);
     for (final String token in tokens) {
       if (_femaleVoiceTokens.contains(token)) return "Female";
       if (_maleVoiceTokens.contains(token)) return "Male";
@@ -296,9 +301,15 @@ class TtsService {
     String lang,
     String gender,
   ) async {
+    if (_cachedDeviceVoices != null) {
+      return selectVoiceFromAvailable(_cachedDeviceVoices, lang, gender);
+    }
     try {
       final dynamic voices = await _flutterTts.getVoices;
       if (voices is List) {
+        if (voices.isNotEmpty) {
+          _cachedDeviceVoices = voices;
+        }
         return selectVoiceFromAvailable(voices, lang, gender);
       }
     } catch (e) {

@@ -264,12 +264,23 @@ class GetBibleAPI {
     return _getBuiltInVersions(lang.substring(0, 2).toLowerCase());
   }
 
-  // ⚡ Bolt: Bounded LRU-style in-memory chapter cache so switching verses in the same chapter is instant
+  // ⚡ Bolt: Bounded LRU in-memory chapter cache so switching verses in the same chapter is instant
   static const int _maxCachedChapters = 30;
   static final Map<String, List<dynamic>> _chapterCache = {};
+  static final Map<String, List<Map<String, String>>> _youVersionBiblesCache =
+      {};
+
+  static List<dynamic>? _getCachedChapter(String key) {
+    final List<dynamic>? hit = _chapterCache.remove(key);
+    if (hit != null) {
+      _chapterCache[key] = hit;
+    }
+    return hit;
+  }
 
   static void _cacheChapter(String key, List<dynamic> verses) {
-    if (_chapterCache.length >= _maxCachedChapters && !_chapterCache.containsKey(key)) {
+    _chapterCache.remove(key);
+    if (_chapterCache.length >= _maxCachedChapters) {
       _chapterCache.remove(_chapterCache.keys.first);
     }
     _chapterCache[key] = verses;
@@ -324,6 +335,12 @@ class GetBibleAPI {
     required String apiKey,
     http.Client? httpClient,
   }) async {
+    final String cacheKey = "$langPrefix:$apiKey";
+    if (httpClient == null) {
+      final List<Map<String, String>>? cached = _youVersionBiblesCache[cacheKey];
+      if (cached != null) return cached;
+    }
+
     final client = httpClient ?? _sharedHttpClient;
     final String iso3 = langPrefix == "pt"
         ? "por"
@@ -366,6 +383,9 @@ class GetBibleAPI {
                 : "$title (YouVersion)";
             result.add({"id": "yv:$id", "name": displayName});
           }
+        }
+        if (httpClient == null && result.isNotEmpty) {
+          _youVersionBiblesCache[cacheKey] = List<Map<String, String>>.unmodifiable(result);
         }
         return result;
       } else {
@@ -593,7 +613,7 @@ class GetBibleAPI {
     required http.Client client,
   }) async {
     final String cacheKey = "bolls:$translationCode:$bookNr:$chapter";
-    List<dynamic>? decoded = _chapterCache[cacheKey];
+    List<dynamic>? decoded = _getCachedChapter(cacheKey);
     if (decoded == null) {
       final Uri uri = Uri.parse(
         "$bollsBaseUrl/${Uri.encodeComponent(translationCode)}/$bookNr/${Uri.encodeComponent(chapter)}/",
@@ -666,7 +686,7 @@ class GetBibleAPI {
     required http.Client client,
   }) async {
     final String cacheKey = "getbible:$bibleId:$bookNr:$chapter";
-    List<dynamic>? verses = _chapterCache[cacheKey];
+    List<dynamic>? verses = _getCachedChapter(cacheKey);
     if (verses == null) {
       String safeBibleId = Uri.encodeComponent(bibleId);
       String safeBookNr = Uri.encodeComponent(bookNr);

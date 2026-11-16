@@ -145,6 +145,75 @@ class _MyHomePageState extends State<MyHomePage> {
   Map<String, String> _preferredBibleVersions = {};
   int _verseFetchSeq = 0;
 
+  // ⚡ Bolt: Memoize dropdown menu items so unrelated setState() calls don't
+  // allocate ~460+ DropdownMenuItem/Text widgets on every rebuild.
+  String? _cachedBooksLang;
+  List<DropdownMenuItem<String>> _cachedBookItems = const [];
+  int _cachedMaxChapters = -1;
+  List<DropdownMenuItem<int>> _cachedChapterItems = const [];
+  int _cachedMaxVerses = -1;
+  List<DropdownMenuItem<int>> _cachedVerseItems = const [];
+  String? _cachedEndVerseKey;
+  List<DropdownMenuItem<int?>> _cachedEndVerseItems = const [];
+
+  List<DropdownMenuItem<String>> _getBookDropdownItems(
+    String langKey,
+    List<String> canonicalBooks,
+  ) {
+    if (_cachedBooksLang != langKey ||
+        _cachedBookItems.length != canonicalBooks.length) {
+      _cachedBooksLang = langKey;
+      _cachedBookItems = canonicalBooks
+          .map((b) => DropdownMenuItem<String>(value: b, child: Text(b)))
+          .toList(growable: false);
+    }
+    return _cachedBookItems;
+  }
+
+  List<DropdownMenuItem<int>> _getChapterDropdownItems(int maxChapters) {
+    if (_cachedMaxChapters != maxChapters) {
+      _cachedMaxChapters = maxChapters;
+      _cachedChapterItems = List<DropdownMenuItem<int>>.generate(
+        maxChapters,
+        (i) => DropdownMenuItem<int>(value: i + 1, child: Text("${i + 1}")),
+        growable: false,
+      );
+    }
+    return _cachedChapterItems;
+  }
+
+  List<DropdownMenuItem<int>> _getVerseDropdownItems(int maxVerses) {
+    if (_cachedMaxVerses != maxVerses) {
+      _cachedMaxVerses = maxVerses;
+      _cachedVerseItems = List<DropdownMenuItem<int>>.generate(
+        maxVerses,
+        (i) => DropdownMenuItem<int>(value: i + 1, child: Text("${i + 1}")),
+        growable: false,
+      );
+    }
+    return _cachedVerseItems;
+  }
+
+  List<DropdownMenuItem<int?>> _getEndVerseDropdownItems(
+    String uiLang,
+    int startVerse,
+    int maxVerses,
+  ) {
+    final String key = "$uiLang:$startVerse:$maxVerses";
+    if (_cachedEndVerseKey != key) {
+      _cachedEndVerseKey = key;
+      _cachedEndVerseItems = [
+        DropdownMenuItem<int?>(
+          value: null,
+          child: Text(generator.getLocaleString(uiLang, "verse_end_single")),
+        ),
+        for (int endNum = startVerse + 1; endNum <= maxVerses; endNum++)
+          DropdownMenuItem<int?>(value: endNum, child: Text("$endNum")),
+      ];
+    }
+    return _cachedEndVerseItems;
+  }
+
   String? selectedBook;
   int selectedChapter = 119;
   int selectedVerse = 105;
@@ -437,6 +506,19 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _loadBibleVersions({bool reloadVotd = false}) async {
     final String requestedLang = bibleLang;
+    final bool hasYouVersionKey =
+        youVersionApiKey.trim().isNotEmpty ||
+        GetBibleAPI.defaultYouVersionApiKey.trim().isNotEmpty;
+
+    // ⚡ Bolt: Avoid redundant "Loading..." -> "" setState churn when only synchronous
+    // built-in versions are used (no YouVersion API key configured).
+    if (!hasYouVersionKey) {
+      if (reloadVotd) {
+        await _fetchVerseOfTheDay();
+      }
+      return;
+    }
+
     setState(() {
       _updateStatus("Loading Bible versions...");
     });
@@ -1088,14 +1170,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           label: generator.getLocaleString(lang, "book_label"),
                           child: DropdownButton<String>(
                             value: selectedBook,
-                            items: canonicalBooks
-                                .map(
-                                  (b) => DropdownMenuItem(
-                                    value: b,
-                                    child: Text(b),
-                                  ),
-                                )
-                                .toList(),
+                            items: _getBookDropdownItems(
+                              bibleLang,
+                              canonicalBooks,
+                            ),
                             onChanged: (b) {
                               setState(() {
                                 selectedBook = b;
@@ -1133,13 +1211,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           child: DropdownButton<int>(
                             value: selectedChapter,
                             menuMaxHeight: 320,
-                            items: List<DropdownMenuItem<int>>.generate(
-                              maxChapters,
-                              (i) => DropdownMenuItem<int>(
-                                value: i + 1,
-                                child: Text("${i + 1}"),
-                              ),
-                            ),
+                            items: _getChapterDropdownItems(maxChapters),
                             onChanged: (ch) {
                               if (ch != null) {
                                 setState(() {
@@ -1169,13 +1241,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           child: DropdownButton<int>(
                             value: selectedVerse,
                             menuMaxHeight: 320,
-                            items: List<DropdownMenuItem<int>>.generate(
-                              maxVerses,
-                              (i) => DropdownMenuItem<int>(
-                                value: i + 1,
-                                child: Text("${i + 1}"),
-                              ),
-                            ),
+                            items: _getVerseDropdownItems(maxVerses),
                             onChanged: (v) {
                               if (v != null) {
                                 setState(() {
@@ -1208,27 +1274,11 @@ class _MyHomePageState extends State<MyHomePage> {
                             child: DropdownButton<int?>(
                               value: selectedEndVerse,
                               menuMaxHeight: 320,
-                              items: [
-                                DropdownMenuItem<int?>(
-                                  value: null,
-                                  child: Text(
-                                    generator.getLocaleString(
-                                      lang,
-                                      "verse_end_single",
-                                    ),
-                                  ),
-                                ),
-                                ...List<DropdownMenuItem<int?>>.generate(
-                                  maxVerses - selectedVerse,
-                                  (i) {
-                                    final int endNum = selectedVerse + 1 + i;
-                                    return DropdownMenuItem<int?>(
-                                      value: endNum,
-                                      child: Text("$endNum"),
-                                    );
-                                  },
-                                ),
-                              ],
+                              items: _getEndVerseDropdownItems(
+                                lang,
+                                selectedVerse,
+                                maxVerses,
+                              ),
                               onChanged: (endV) {
                                 setState(() {
                                   selectedEndVerse = endV;
@@ -2229,30 +2279,24 @@ class _MyHomePageState extends State<MyHomePage> {
         Flexible(
           child: FittedBox(
             fit: BoxFit.contain,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([
-                _backgroundDimNotifier,
-                _fontSizeNotifier,
-                _yOffsetNotifier,
-              ]),
-              builder: (context, _) {
-                return VersePreviewCard(
-                  repaintKey: _globalKey,
-                  aspectRatioStr: aspectRatioStr,
-                  customImagePath: customImagePath,
-                  selectedBackground: selectedBackground,
-                  previewListenable: _previewListenable,
-                  verseController: verseController,
-                  referenceController: referenceController,
-                  fontColor: fontColor,
-                  fontSize: _fontSizeNotifier.value,
-                  yOffset: _yOffsetNotifier.value,
-                  backgroundDim: _backgroundDimNotifier.value,
-                  onYOffsetChanged: (updated) => _yOffsetNotifier.value = updated,
-                  lang: lang,
-                  generator: generator,
-                );
-              },
+            child: VersePreviewCard(
+              repaintKey: _globalKey,
+              aspectRatioStr: aspectRatioStr,
+              customImagePath: customImagePath,
+              selectedBackground: selectedBackground,
+              previewListenable: _previewListenable,
+              verseController: verseController,
+              referenceController: referenceController,
+              fontColor: fontColor,
+              fontSize: _fontSizeNotifier.value,
+              yOffset: _yOffsetNotifier.value,
+              backgroundDim: _backgroundDimNotifier.value,
+              fontSizeListenable: _fontSizeNotifier,
+              yOffsetListenable: _yOffsetNotifier,
+              backgroundDimListenable: _backgroundDimNotifier,
+              onYOffsetChanged: (updated) => _yOffsetNotifier.value = updated,
+              lang: lang,
+              generator: generator,
             ),
           ),
         ),

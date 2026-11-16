@@ -249,19 +249,25 @@ const Map<String, Map<String, int>> bookMapping = {
   },
 };
 
+final Map<String, List<String>> _canonicalBooksCache = {};
+
 /// Returns the 66 canonical Bible book names (ordered 1..66) for the given language.
 List<String> getCanonicalBooks(String lang) {
   final String prefix = lang.length >= 2
       ? lang.substring(0, 2).toLowerCase()
       : "pt";
-  final Map<String, int> map = bookMapping[prefix] ?? bookMapping["pt"]!;
-  final Map<int, String> byNumber = {};
-  for (final entry in map.entries) {
-    // Keep the first (properly accented) book name for each book number 1..66
-    byNumber.putIfAbsent(entry.value, () => entry.key);
-  }
-  final List<int> sortedKeys = byNumber.keys.toList()..sort();
-  return [for (final k in sortedKeys) byNumber[k]!];
+  final String resolvedPrefix = bookMapping.containsKey(prefix) ? prefix : "pt";
+  // ⚡ Bolt: Cache canonical book list per language so callers don't rebuild & sort 66 entries on every build.
+  return _canonicalBooksCache.putIfAbsent(resolvedPrefix, () {
+    final Map<String, int> map = bookMapping[resolvedPrefix]!;
+    final Map<int, String> byNumber = {};
+    for (final entry in map.entries) {
+      // Keep the first (properly accented) book name for each book number 1..66
+      byNumber.putIfAbsent(entry.value, () => entry.key);
+    }
+    final List<int> sortedKeys = byNumber.keys.toList()..sort();
+    return List<String>.unmodifiable([for (final k in sortedKeys) byNumber[k]!]);
+  });
 }
 
 const Map<int, String> bookNrToUsfm = {
