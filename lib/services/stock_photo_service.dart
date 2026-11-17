@@ -29,12 +29,17 @@ class StockPhotoService {
   static const Map<String, String> _requestHeaders = {
     'User-Agent': 'InclusiveBibleGenerator/1.0 (https://github.com)',
   };
+  static final RegExp _controlCharsRegExp = RegExp(r'[\x00-\x1F\x7F]+');
+  static final RegExp _whitespaceRegExp = RegExp(r'\s+');
 
   /// Parses [rawUrl] and returns it only if it uses HTTPS and an allowlisted
   /// Wikimedia host.
   static Uri? parseAllowedWikimediaUri(String rawUrl) {
     final Uri? uri = Uri.tryParse(rawUrl.trim());
     if (uri == null || !uri.hasScheme || uri.scheme.toLowerCase() != 'https') {
+      return null;
+    }
+    if (uri.userInfo.isNotEmpty || (uri.hasPort && uri.port != 443)) {
       return null;
     }
     if (!_allowedHosts.contains(uri.host.toLowerCase())) {
@@ -60,8 +65,14 @@ class StockPhotoService {
 
   /// Searches Wikimedia Commons for free bitmap photography matching [query].
   Future<List<StockPhotoResult>> searchPhotos(String query) async {
-    final String trimmed = query.trim();
-    if (trimmed.isEmpty) return const [];
+    final String cleaned = query
+        .replaceAll(_controlCharsRegExp, ' ')
+        .replaceAll(_whitespaceRegExp, ' ')
+        .trim();
+    if (cleaned.isEmpty) return const [];
+    final String trimmed = cleaned.length > 100
+        ? cleaned.substring(0, 100)
+        : cleaned;
 
     final Uri uri = Uri.parse(_commonsApiBase).replace(
       queryParameters: {

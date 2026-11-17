@@ -115,6 +115,12 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
                 : rawHeader)
             .replaceAll("{ratio}", widget.aspectRatioStr);
 
+    final String safeBgName = widget.selectedBackground
+        .split('/')
+        .last
+        .split('\\')
+        .last;
+
     // ⚡ Bolt: Isolate static background image from 60Hz drag/slider layers so
     // dragging text or adjusting dim/font size never rebuilds the image provider.
     final Widget backgroundImage = RepaintBoundary(
@@ -124,7 +130,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
           null,
           widget.customImagePath != null
               ? FileImage(File(widget.customImagePath!)) as ImageProvider
-              : AssetImage("assets/backgrounds/${widget.selectedBackground}"),
+              : AssetImage("assets/backgrounds/$safeBgName"),
         ),
         fit: BoxFit.cover,
         width: width,

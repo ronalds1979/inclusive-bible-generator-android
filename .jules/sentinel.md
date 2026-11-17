@@ -46,3 +46,10 @@
 - Added early reference length caps (`<= 100` chars) in `GetBibleAPI._parseReference` and replaced buffered HTTP requests in `GetBibleAPI` and `GeminiService` with streamed bounded helpers (`_getBoundedResponse`, `_postBounded`) that disable automatic redirects (`followRedirects = false`) and enforce `maxResponseBytes` during chunk streaming.
 - Added `GeminiService.isValidRasterImageBytes` (PNG/JPEG/WebP magic-byte verification) for gallery background picks and Gemini responses in `main.dart`.
 - Fixed relative `storeFile` resolution in `android/app/build.gradle.kts` (`rootProject.file` fallback) and added `android/key.properties.example` documenting env-var release signing.
+
+## 2026-11-17 - Input Bounds, Service-Level Key Normalization & Dialog Hardening
+**Vulnerabilities Remediated:**
+- Added `îûÎÛ` accent parity to `GetBibleAPI._referenceRegExp`, enforced `_bibleIdRegExp` and chapter/verse bounds (`1..150` and `1..200`), and normalized `youVersionApiKey` across all `GetBibleAPI` entrypoints (`getVersions`, `fetchYouVersionBibles`, `getPassage`, `getVerseOfTheDay`).
+- Hardened `StockPhotoService.parseAllowedWikimediaUri` to reject embedded `userInfo` and non-443 ports, and stripped control characters / capped queries at 100 chars in `searchPhotos()` and `StockPhotoSearchCard`.
+- Disabled keyboard suggestions and autocorrect (`enableSuggestions: false`, `autocorrect: false`) on API key `TextField`s in `GeminiAuthDialog` and `YouVersionAuthDialog`.
+- Bounded book search input (`maxLength: 100`), hardened `_loadPreferredBibleVersions()` (64 KB size limit and allowed-language/length filtering), and sanitized asset background names in `VersePreviewCard` and `main.dart`.

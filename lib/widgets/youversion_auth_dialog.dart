@@ -180,6 +180,8 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
             TextField(
               controller: _keyController,
               obscureText: _obscure,
+              enableSuggestions: false,
+              autocorrect: false,
               maxLength: 256,
               decoration: InputDecoration(
                 counterText: "",

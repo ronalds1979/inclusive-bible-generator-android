@@ -161,10 +161,12 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                     builder: (context, value, child) {
                       return TextField(
                         controller: _searchController,
+                        maxLength: 100,
                         textInputAction: TextInputAction.search,
                         onSubmitted: (_) => _runSearch(),
                         decoration: InputDecoration(
                           isDense: true,
+                          counterText: "",
                           labelText: generator.getLocaleString(
                             lang,
                             'stock_search_hint',

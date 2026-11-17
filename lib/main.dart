@@ -500,11 +500,20 @@ class _MyHomePageState extends State<MyHomePage> {
       final dir = await getApplicationSupportDirectory();
       final file = File('${dir.path}/preferred_bible_versions.json');
       if (await file.exists()) {
+        final int fileLen = await file.length();
+        if (fileLen <= 0 || fileLen > 64 * 1024) return;
         final dynamic decoded = jsonDecode(await file.readAsString());
         if (decoded is Map) {
-          _preferredBibleVersions = decoded.map(
-            (key, value) => MapEntry(key.toString(), value.toString()),
-          );
+          const Set<String> allowedLangs = {'pt', 'en', 'es'};
+          final Map<String, String> sanitized = {};
+          for (final entry in decoded.entries) {
+            final String key = entry.key.toString();
+            final String value = entry.value.toString();
+            if (allowedLangs.contains(key) && value.length <= 120) {
+              sanitized[key] = value;
+            }
+          }
+          _preferredBibleVersions = sanitized;
         }
       }
     } catch (e) {
@@ -1078,7 +1087,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       TextField(
                         controller: searchController,
                         autofocus: true,
+                        maxLength: 100,
                         decoration: InputDecoration(
+                          counterText: "",
                           prefixIcon: const Icon(Icons.search),
                           hintText: generator.getLocaleString(
                             lang,
@@ -1687,9 +1698,14 @@ class _MyHomePageState extends State<MyHomePage> {
               }
               final String bgName =
                   backgrounds[customImagePath != null ? index - 1 : index];
+              final String safeBgName = bgName
+                  .split('/')
+                  .last
+                  .split('\\')
+                  .last;
               final bool isSelected =
                   customImagePath == null && selectedBackground == bgName;
-              final String label = _getBackgroundLabel(bgName);
+              final String label = _getBackgroundLabel(safeBgName);
               return Semantics(
                 button: true,
                 selected: isSelected,
@@ -1717,7 +1733,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         image: DecorationImage(
                           // ⚡ Bolt: Decode 68x68 background strip thumbnails at 3x display width
                           image: ResizeImage(
-                            AssetImage("assets/backgrounds/$bgName"),
+                            AssetImage("assets/backgrounds/$safeBgName"),
                             width: 204,
                           ),
                           fit: BoxFit.cover,

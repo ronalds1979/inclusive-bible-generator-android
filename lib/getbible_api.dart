@@ -57,9 +57,10 @@ class GetBibleAPI {
       FlutterSecureStorage();
 
   static final RegExp _yvKeyRegExp = RegExp(r'^[A-Za-z0-9\-_.:]{8,128}$');
+  static final RegExp _bibleIdRegExp = RegExp(r'^[a-zA-Z0-9:_-]{1,32}$');
 
   static final RegExp _referenceRegExp = RegExp(
-    r'^((?:\d\s+)?[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
+    r'^((?:\d\s+)?[a-zA-ZáéíóúâêîôûãõçñÁÉÍÓÚÂÊÎÔÛÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêîôûãõçñÁÉÍÓÚÂÊÎÔÛÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
   );
   // ⚡ Bolt: Pre-compile verse cleanup patterns once and reuse a persistent HTTP client
   static final RegExp _footnoteTagRegExp = RegExp(
@@ -383,9 +384,9 @@ class GetBibleAPI {
       final String langPrefix = lang.substring(0, 2).toLowerCase();
       final List<Map<String, String>> builtIn = _getBuiltInVersions(langPrefix);
       final String effectiveKey =
-          (youVersionApiKey != null && youVersionApiKey.trim().isNotEmpty)
-              ? youVersionApiKey.trim()
-              : defaultYouVersionApiKey;
+          normalizeYouVersionApiKey(youVersionApiKey) ??
+          normalizeYouVersionApiKey(defaultYouVersionApiKey) ??
+          "";
 
       if (effectiveKey.isNotEmpty) {
         final List<Map<String, String>> yvVersions =
@@ -422,7 +423,10 @@ class GetBibleAPI {
     required String apiKey,
     http.Client? httpClient,
   }) async {
-    final String cacheKey = "$langPrefix:$apiKey";
+    final String? safeApiKey = normalizeYouVersionApiKey(apiKey);
+    if (safeApiKey == null) return [];
+
+    final String cacheKey = "$langPrefix:$safeApiKey";
     if (httpClient == null) {
       final List<Map<String, String>>? cached = _youVersionBiblesCache[cacheKey];
       if (cached != null) return cached;
@@ -441,7 +445,7 @@ class GetBibleAPI {
         client,
         uri,
         headers: {
-          "X-YVP-App-Key": apiKey,
+          "X-YVP-App-Key": safeApiKey,
           "Accept": "application/json",
         },
         timeout: const Duration(seconds: 10),
@@ -528,6 +532,38 @@ class GetBibleAPI {
     String? startVerse = match.group(3);
     String? endVerse = match.group(4);
 
+    final int? chapterNum = int.tryParse(chapter);
+    if (chapterNum == null || chapterNum < 1 || chapterNum > 150) {
+      return {
+        "book_nr": null,
+        "chapter": null,
+        "start_verse": null,
+        "end_verse": null,
+      };
+    }
+    if (startVerse != null) {
+      final int? startNum = int.tryParse(startVerse);
+      if (startNum == null || startNum < 1 || startNum > 200) {
+        return {
+          "book_nr": null,
+          "chapter": null,
+          "start_verse": null,
+          "end_verse": null,
+        };
+      }
+    }
+    if (endVerse != null) {
+      final int? endNum = int.tryParse(endVerse);
+      if (endNum == null || endNum < 1 || endNum > 200) {
+        return {
+          "book_nr": null,
+          "chapter": null,
+          "start_verse": null,
+          "end_verse": null,
+        };
+      }
+    }
+
     int? bookNr = mapping[bookName];
     if (bookNr == null) {
       // Check across all languages so a user can type or switch languages seamlessly
@@ -571,6 +607,11 @@ class GetBibleAPI {
     String? youVersionApiKey,
     http.Client? httpClient,
   }) async {
+    final String safeBibleId = bibleId.trim();
+    if (!_bibleIdRegExp.hasMatch(safeBibleId)) {
+      return null;
+    }
+
     final Map<String, String?> parsed = _parseReference(reference, lang: lang);
     final String? bookNrStr = parsed["book_nr"];
     final String? chapter = parsed["chapter"];
@@ -582,7 +623,7 @@ class GetBibleAPI {
     }
 
     final int? bookNr = int.tryParse(bookNrStr);
-    if (bookNr == null) return null;
+    if (bookNr == null || bookNr < 1 || bookNr > 66) return null;
 
     // Validate range early to prevent invalid start > end requests
     if (startVerse != null && endVerse != null) {
@@ -594,11 +635,11 @@ class GetBibleAPI {
     }
 
     final client = httpClient ?? _sharedHttpClient;
-    final String normalizedId = bibleId.trim().toLowerCase();
+    final String normalizedId = safeBibleId.toLowerCase();
     final String effectiveYvKey =
-        (youVersionApiKey != null && youVersionApiKey.trim().isNotEmpty)
-            ? youVersionApiKey.trim()
-            : defaultYouVersionApiKey;
+        normalizeYouVersionApiKey(youVersionApiKey) ??
+        normalizeYouVersionApiKey(defaultYouVersionApiKey) ??
+        "";
 
     // 1. Try YouVersion Platform API (`/v1/bibles/{id}/passages/{usfm}?format=text`)
     // if `bibleId` is a `yv:<id>` version OR if `effectiveYvKey` is set for a mapped version
@@ -839,9 +880,9 @@ class GetBibleAPI {
     String? usfmPassage;
 
     final String effectiveYvKey =
-        (youVersionApiKey != null && youVersionApiKey.trim().isNotEmpty)
-            ? youVersionApiKey.trim()
-            : defaultYouVersionApiKey;
+        normalizeYouVersionApiKey(youVersionApiKey) ??
+        normalizeYouVersionApiKey(defaultYouVersionApiKey) ??
+        "";
 
     // 1. Query YouVersion `/v1/verse-of-the-days/{day}` using the embedded/configured API key
     if (effectiveYvKey.isNotEmpty) {

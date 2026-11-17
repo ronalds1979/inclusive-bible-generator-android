@@ -491,4 +491,160 @@ void main() {
       );
     },
   );
+
+  test(
+    'StockPhotoService.parseAllowedWikimediaUri rejects userinfo and non-443 ports',
+    () {
+      expect(
+        StockPhotoService.parseAllowedWikimediaUri(
+          'https://user:pass@upload.wikimedia.org/a.jpg',
+        ),
+        isNull,
+      );
+      expect(
+        StockPhotoService.parseAllowedWikimediaUri(
+          'https://upload.wikimedia.org:8443/a.jpg',
+        ),
+        isNull,
+      );
+      expect(
+        StockPhotoService.parseAllowedWikimediaUri(
+          'https://upload.wikimedia.org:443/a.jpg',
+        ),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'GetBibleAPI.getPassage validates bibleId, chapter/verse bounds, and accent regex parity',
+    () async {
+      final mockClient = MockClient((request) async {
+        fail('Unexpected HTTP request for invalid query: ${request.url}');
+      });
+
+      expect(
+        await GetBibleAPI.getPassage(
+          '../evil',
+          'John 3:16',
+          lang: 'en',
+          httpClient: mockClient,
+        ),
+        isNull,
+      );
+      expect(
+        await GetBibleAPI.getPassage(
+          'web',
+          'Psalms 151:1',
+          lang: 'en',
+          httpClient: mockClient,
+        ),
+        isNull,
+      );
+      expect(
+        await GetBibleAPI.getPassage(
+          'web',
+          'Psalms 119:201',
+          lang: 'en',
+          httpClient: mockClient,
+        ),
+        isNull,
+      );
+
+      final accentClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'verses': [
+                {'text': 'Paraíso de Deus'},
+              ],
+            }),
+          ),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final accentVerse = await GetBibleAPI.getPassage(
+        'almeida',
+        'Levítico 1:1',
+        lang: 'pt',
+        httpClient: accentClient,
+      );
+      expect(accentVerse, equals('Paraíso de Deus'));
+    },
+  );
+
+  test(
+    'GetBibleAPI.fetchYouVersionBibles ignores malformed API keys passed directly',
+    () async {
+      final mockClient = MockClient((request) async {
+        fail('Malformed YouVersion key should not issue an HTTP request');
+      });
+      final res = await GetBibleAPI.fetchYouVersionBibles(
+        langPrefix: 'en',
+        apiKey: "bad\r\nkey",
+        httpClient: mockClient,
+      );
+      expect(res, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'Auth dialogs disable keyboard suggestions and autocorrect on API key fields',
+    (WidgetTester tester) async {
+      final generator = Generator();
+      generator.locales = {
+        'en': {
+          'gemini_dialog_title': 'Connect Gemini AI',
+          'gemini_dialog_hint': 'Hint',
+          'gemini_open_aistudio_btn': 'Open',
+          'gemini_paste_clipboard_btn': 'Paste',
+          'gemini_api_key_label': 'Key',
+          'gemini_save_btn': 'Save',
+          'gemini_disconnect_btn': 'Disconnect',
+          'gemini_cancel_btn': 'Cancel',
+          'show_api_key_tooltip': 'Show',
+          'hide_api_key_tooltip': 'Hide',
+          'yv_dialog_title': 'Connect YouVersion',
+          'yv_dialog_hint': 'Hint',
+          'yv_open_portal_btn': 'Portal',
+          'yv_api_key_label': 'Key',
+        },
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GeminiAuthDialog(
+              lang: 'en',
+              generator: generator,
+              initialApiKey: null,
+              onSave: (_) async {},
+              onDisconnect: () async {},
+            ),
+          ),
+        ),
+      );
+      TextField field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.enableSuggestions, isFalse);
+      expect(field.autocorrect, isFalse);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: YouVersionAuthDialog(
+              lang: 'en',
+              generator: generator,
+              initialApiKey: null,
+              onSave: (_) async {},
+              onDisconnect: () async {},
+            ),
+          ),
+        ),
+      );
+      field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.enableSuggestions, isFalse);
+      expect(field.autocorrect, isFalse);
+    },
+  );
 }
