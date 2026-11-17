@@ -387,4 +387,108 @@ void main() {
       expect(GetBibleAPI.cachedYouVersionBiblesCount, equals(0));
     },
   );
+
+  test(
+    'GetBibleAPI.normalizeYouVersionApiKey rejects whitespace, control chars, and invalid lengths',
+    () {
+      expect(
+        GetBibleAPI.normalizeYouVersionApiKey('  yv-test-key_123.abc:456  '),
+        equals('yv-test-key_123.abc:456'),
+      );
+      expect(GetBibleAPI.normalizeYouVersionApiKey('short'), isNull);
+      expect(GetBibleAPI.normalizeYouVersionApiKey('key with spaces123'), isNull);
+      expect(GetBibleAPI.normalizeYouVersionApiKey("yv-key\n12345678"), isNull);
+      expect(GetBibleAPI.normalizeYouVersionApiKey('a' * 129), isNull);
+    },
+  );
+
+  test(
+    'GetBibleAPI.getPassage rejects oversized Bible reference strings (>100 chars)',
+    () async {
+      final longRef = 'Psalm ${'1' * 110}:1';
+      final result = await GetBibleAPI.getPassage('web', longRef, lang: 'en');
+      expect(result, isNull);
+    },
+  );
+
+  testWidgets(
+    'YouVersionAuthDialog rejects keys containing spaces or newlines',
+    (WidgetTester tester) async {
+      final generator = Generator();
+      generator.locales = {
+        'en': {
+          'yv_dialog_title': 'Connect YouVersion',
+          'yv_dialog_hint': 'Enter YouVersion API key',
+          'yv_open_portal_btn': 'Open Portal',
+          'gemini_paste_clipboard_btn': 'Paste',
+          'yv_api_key_label': 'YouVersion API Key',
+          'gemini_disconnect_btn': 'Disconnect',
+          'gemini_cancel_btn': 'Cancel',
+          'gemini_save_btn': 'Save',
+          'show_api_key_tooltip': 'Show',
+          'hide_api_key_tooltip': 'Hide',
+        },
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: YouVersionAuthDialog(
+              lang: 'en',
+              generator: generator,
+              initialApiKey: null,
+              onSave: (_) async {},
+              onDisconnect: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'bad key with spaces');
+      await tester.pump();
+
+      final ElevatedButton saveButton = tester.widget<ElevatedButton>(
+        find.byType(ElevatedButton),
+      );
+      expect(saveButton.onPressed, isNull);
+    },
+  );
+
+  test(
+    'GeminiService.isValidRasterImageBytes validates PNG, JPEG, and WebP headers',
+    () {
+      expect(
+        GeminiService.isValidRasterImageBytes(
+          Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+        ),
+        isTrue,
+      );
+      expect(
+        GeminiService.isValidRasterImageBytes(
+          Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]),
+        ),
+        isTrue,
+      );
+      expect(
+        GeminiService.isValidRasterImageBytes(
+          Uint8List.fromList([
+            0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00,
+            0x57, 0x45, 0x42, 0x50,
+          ]),
+        ),
+        isTrue,
+      );
+      expect(
+        GeminiService.isValidRasterImageBytes(
+          Uint8List.fromList(utf8.encode('<svg xmlns="http://www.w3.org/2000/svg"/>')),
+        ),
+        isFalse,
+      );
+      expect(
+        GeminiService.isValidRasterImageBytes(Uint8List.fromList([0x01, 0x02])),
+        isFalse,
+      );
+    },
+  );
 }

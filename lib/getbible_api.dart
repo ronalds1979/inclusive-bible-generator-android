@@ -56,6 +56,8 @@ class GetBibleAPI {
   static const FlutterSecureStorage _defaultSecureStorage =
       FlutterSecureStorage();
 
+  static final RegExp _yvKeyRegExp = RegExp(r'^[A-Za-z0-9\-_.:]{8,128}$');
+
   static final RegExp _referenceRegExp = RegExp(
     r'^((?:\d\s+)?[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêôãõçñÁÉÍÓÚÂÊÔÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
   );
@@ -176,15 +178,61 @@ class GetBibleAPI {
     } catch (_) {}
   }
 
+  static String? normalizeYouVersionApiKey(String? text) {
+    if (text == null) return null;
+    final String trimmed = text.trim();
+    if (trimmed.isEmpty) return null;
+    if (_yvKeyRegExp.hasMatch(trimmed)) return trimmed;
+    return null;
+  }
+
+  static Future<({int statusCode, String body})> _getBoundedResponse(
+    http.Client client,
+    Uri uri, {
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final http.Request request = http.Request('GET', uri)..followRedirects = false;
+    if (headers != null) {
+      request.headers.addAll(headers);
+    }
+    final http.StreamedResponse streamed = await client
+        .send(request)
+        .timeout(timeout);
+    final int? contentLength = streamed.contentLength;
+    if (contentLength != null && contentLength > maxResponseBytes) {
+      await streamed.stream.drain<void>().catchError((_) {});
+      throw const HttpException('Response exceeded maximum allowed size.');
+    }
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    Future<void> collectChunks() async {
+      await for (final List<int> chunk in streamed.stream) {
+        if (builder.length + chunk.length > maxResponseBytes) {
+          throw const HttpException('Response exceeded maximum allowed size.');
+        }
+        builder.add(chunk);
+      }
+    }
+    await collectChunks().timeout(timeout);
+    return (
+      statusCode: streamed.statusCode,
+      body: utf8.decode(builder.takeBytes(), allowMalformed: true),
+    );
+  }
+
   static Future<String?> loadYouVersionApiKey({
     FlutterSecureStorage? secureStorage,
   }) async {
     final storage = secureStorage ?? _defaultSecureStorage;
     try {
       final stored = await storage.read(key: _yvSecureKeyName);
-      if (stored != null && stored.trim().isNotEmpty) {
+      final validStored = normalizeYouVersionApiKey(stored);
+      if (validStored != null) {
         await _deleteLegacyYvKeyFile();
-        return stored.trim();
+        return validStored;
+      }
+      if (stored != null) {
+        await storage.delete(key: _yvSecureKeyName);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -197,10 +245,11 @@ class GetBibleAPI {
       final file = await _getLegacyYvKeyFile();
       if (await file.exists()) {
         final raw = (await file.readAsString()).trim();
+        final validKey = normalizeYouVersionApiKey(raw);
         await file.delete();
-        if (raw.isNotEmpty) {
-          await storage.write(key: _yvSecureKeyName, value: raw);
-          return raw;
+        if (validKey != null) {
+          await storage.write(key: _yvSecureKeyName, value: validKey);
+          return validKey;
         }
       }
     } catch (e) {
@@ -218,11 +267,12 @@ class GetBibleAPI {
     _youVersionBiblesCache.clear();
     final storage = secureStorage ?? _defaultSecureStorage;
     try {
-      final trimmed = apiKey.trim();
-      if (trimmed.isEmpty) {
+      final String trimmed = apiKey.trim();
+      final String? normalized = normalizeYouVersionApiKey(trimmed);
+      if (trimmed.isEmpty || normalized == null) {
         await storage.delete(key: _yvSecureKeyName);
       } else {
-        await storage.write(key: _yvSecureKeyName, value: trimmed);
+        await storage.write(key: _yvSecureKeyName, value: normalized);
       }
       await _deleteLegacyYvKeyFile();
     } catch (e) {
@@ -235,10 +285,7 @@ class GetBibleAPI {
   static Future<String?> detectYouVersionKeyFromClipboard() async {
     try {
       final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-      final String? text = data?.text?.trim();
-      if (text != null && text.length >= 16 && text.length <= 128 && !text.contains(' ')) {
-        return text;
-      }
+      return normalizeYouVersionApiKey(data?.text);
     } catch (_) {}
     return null;
   }
@@ -390,18 +437,17 @@ class GetBibleAPI {
     );
 
     try {
-      final response = await client
-          .get(
-            uri,
-            headers: {
-              "X-YVP-App-Key": apiKey,
-              "Accept": "application/json",
-            },
-          )
-          .timeout(const Duration(seconds: 10));
+      final response = await _getBoundedResponse(
+        client,
+        uri,
+        headers: {
+          "X-YVP-App-Key": apiKey,
+          "Accept": "application/json",
+        },
+        timeout: const Duration(seconds: 10),
+      );
 
-      if (response.statusCode == 200 &&
-          response.bodyBytes.length <= maxResponseBytes) {
+      if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final List<dynamic> items = (decoded is Map<String, dynamic> && decoded["data"] is List)
             ? decoded["data"] as List<dynamic>
@@ -451,12 +497,22 @@ class GetBibleAPI {
     String reference, {
     String lang = "en",
   }) {
+    final String trimmedRef = reference.trim();
+    if (trimmedRef.isEmpty || trimmedRef.length > 100) {
+      return {
+        "book_nr": null,
+        "chapter": null,
+        "start_verse": null,
+        "end_verse": null,
+      };
+    }
+
     String langPrefix = lang.length >= 2
         ? lang.substring(0, 2).toLowerCase()
         : "en";
     Map<String, int> mapping = bookMapping[langPrefix] ?? bookMapping["en"]!;
 
-    Match? match = _referenceRegExp.firstMatch(reference.trim());
+    Match? match = _referenceRegExp.firstMatch(trimmedRef);
 
     if (match == null) {
       return {
@@ -611,18 +667,17 @@ class GetBibleAPI {
       "$youVersionBaseUrl/bibles/$bibleId/passages/${Uri.encodeComponent(usfmRef)}?format=text",
     );
     try {
-      final response = await client
-          .get(
-            uri,
-            headers: {
-              "X-YVP-App-Key": apiKey,
-              "Accept": "application/json",
-            },
-          )
-          .timeout(const Duration(seconds: 10));
+      final response = await _getBoundedResponse(
+        client,
+        uri,
+        headers: {
+          "X-YVP-App-Key": apiKey,
+          "Accept": "application/json",
+        },
+        timeout: const Duration(seconds: 10),
+      );
 
-      if (response.statusCode == 200 &&
-          response.bodyBytes.length <= maxResponseBytes) {
+      if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map<String, dynamic>) {
           final dynamic content =
@@ -664,11 +719,12 @@ class GetBibleAPI {
         "$bollsBaseUrl/${Uri.encodeComponent(translationCode)}/$bookNr/${Uri.encodeComponent(chapter)}/",
       );
       try {
-        final response = await client
-            .get(uri)
-            .timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200 &&
-            response.bodyBytes.length <= maxResponseBytes) {
+        final response = await _getBoundedResponse(
+          client,
+          uri,
+          timeout: const Duration(seconds: 10),
+        );
+        if (response.statusCode == 200) {
           final parsed = jsonDecode(response.body);
           if (parsed is List && parsed.isNotEmpty) {
             final Map<int, String> byVerse = {};
@@ -725,11 +781,12 @@ class GetBibleAPI {
       String url = "$baseUrl/$safeBibleId/$safeBookNr/$safeChapter.json";
 
       try {
-        final response = await client
-            .get(Uri.parse(url))
-            .timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200 &&
-            response.bodyBytes.length <= maxResponseBytes) {
+        final response = await _getBoundedResponse(
+          client,
+          Uri.parse(url),
+          timeout: const Duration(seconds: 10),
+        );
+        if (response.statusCode == 200) {
           var data = jsonDecode(response.body);
           final parsedVerses = data["verses"];
           if (parsedVerses is List && parsedVerses.isNotEmpty) {
@@ -792,17 +849,16 @@ class GetBibleAPI {
         "$youVersionBaseUrl/verse-of-the-days/${dayOfYear.clamp(1, 366)}",
       );
       try {
-        final response = await client
-            .get(
-              votdUri,
-              headers: {
-                "X-YVP-App-Key": effectiveYvKey,
-                "Accept": "application/json",
-              },
-            )
-            .timeout(const Duration(seconds: 8));
-        if (response.statusCode == 200 &&
-            response.bodyBytes.length <= maxResponseBytes) {
+        final response = await _getBoundedResponse(
+          client,
+          votdUri,
+          headers: {
+            "X-YVP-App-Key": effectiveYvKey,
+            "Accept": "application/json",
+          },
+          timeout: const Duration(seconds: 8),
+        );
+        if (response.statusCode == 200) {
           final decoded = jsonDecode(response.body);
           if (decoded is Map<String, dynamic>) {
             final dynamic rawUsfm =

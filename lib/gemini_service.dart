@@ -97,6 +97,69 @@ class GeminiService {
     return null;
   }
 
+  /// Verifies PNG, JPEG, or WebP raster image magic bytes before decoding/saving.
+  static bool isValidRasterImageBytes(Uint8List bytes) {
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return true;
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return true;
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<({int statusCode, String body})> _postBounded(
+    Uri uri, {
+    required Map<String, String> headers,
+    required String body,
+    required Duration timeout,
+  }) async {
+    final http.Request request = http.Request('POST', uri)
+      ..followRedirects = false
+      ..headers.addAll(headers)
+      ..body = body;
+    final http.StreamedResponse streamed = await _httpClient
+        .send(request)
+        .timeout(timeout);
+    final int? contentLength = streamed.contentLength;
+    if (contentLength != null && contentLength > maxResponseBytes) {
+      await streamed.stream.drain<void>().catchError((_) {});
+      throw const HttpException('Gemini response exceeded maximum allowed size.');
+    }
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    Future<void> collectChunks() async {
+      await for (final List<int> chunk in streamed.stream) {
+        if (builder.length + chunk.length > maxResponseBytes) {
+          throw const HttpException('Gemini response exceeded maximum allowed size.');
+        }
+        builder.add(chunk);
+      }
+    }
+    await collectChunks().timeout(timeout);
+    return (
+      statusCode: streamed.statusCode,
+      body: utf8.decode(builder.takeBytes(), allowMalformed: true),
+    );
+  }
+
   static String _sanitizePromptField(String input, {int maxLength = 1000}) {
     final cleaned = input
         .replaceAll(_controlCharsRegExp, ' ')
@@ -422,22 +485,16 @@ class GeminiService {
     });
 
     try {
-      final response = await _httpClient
-          .post(
-            _endpointUri,
-            headers: {
-              "x-goog-api-key": trimmedKey,
-              "Content-Type": "application/json",
-              "Api-Revision": apiRevision,
-            },
-            body: primaryBody,
-          )
-          .timeout(const Duration(seconds: 60));
-
-      if (response.bodyBytes.length > maxResponseBytes) {
-        lastError = "Gemini response exceeded maximum allowed size.";
-        return null;
-      }
+      final response = await _postBounded(
+        _endpointUri,
+        headers: {
+          "x-goog-api-key": trimmedKey,
+          "Content-Type": "application/json",
+          "Api-Revision": apiRevision,
+        },
+        body: primaryBody,
+        timeout: const Duration(seconds: 60),
+      );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
@@ -479,7 +536,9 @@ class GeminiService {
         }
       }
     } catch (e) {
-      lastError = "Network or service error while contacting Gemini.";
+      lastError = e is HttpException
+          ? e.message
+          : "Network or service error while contacting Gemini.";
       if (kDebugMode) {
         debugPrint("Error generating Gemini background image: $e");
       }
@@ -512,22 +571,17 @@ class GeminiService {
       });
 
       try {
-        final response = await _httpClient
-            .post(
-              _endpointUri,
-              headers: {
-                "x-goog-api-key": apiKey,
-                "Content-Type": "application/json",
-                "Api-Revision": apiRevision,
-              },
-              body: body,
-            )
-            .timeout(const Duration(seconds: 30));
+        final response = await _postBounded(
+          _endpointUri,
+          headers: {
+            "x-goog-api-key": apiKey,
+            "Content-Type": "application/json",
+            "Api-Revision": apiRevision,
+          },
+          body: body,
+          timeout: const Duration(seconds: 30),
+        );
 
-        if (response.bodyBytes.length > maxResponseBytes) {
-          allZeroQuota = false;
-          continue;
-        }
         if (response.statusCode == 200) {
           final Map<String, dynamic> decoded = jsonDecode(response.body);
           final Uint8List? bytes = extractImageBytesFromResponse(decoded);
@@ -628,22 +682,17 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
       });
 
       try {
-        final response = await _httpClient
-            .post(
-              _endpointUri,
-              headers: {
-                "x-goog-api-key": apiKey,
-                "Content-Type": "application/json",
-                "Api-Revision": apiRevision,
-              },
-              body: body,
-            )
-            .timeout(const Duration(seconds: 30));
+        final response = await _postBounded(
+          _endpointUri,
+          headers: {
+            "x-goog-api-key": apiKey,
+            "Content-Type": "application/json",
+            "Api-Revision": apiRevision,
+          },
+          body: body,
+          timeout: const Duration(seconds: 30),
+        );
 
-        if (response.bodyBytes.length > maxResponseBytes) {
-          lastError = "Gemini response exceeded maximum allowed size.";
-          continue;
-        }
         if (response.statusCode == 200) {
           final Map<String, dynamic> decoded = jsonDecode(response.body);
           final String? rawText = extractTextFromResponse(decoded);

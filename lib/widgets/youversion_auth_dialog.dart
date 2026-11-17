@@ -43,10 +43,10 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
   Future<void> _pasteFromClipboard() async {
     try {
       final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-      final String? text = data?.text?.trim();
-      if (text != null && text.isNotEmpty && mounted) {
+      final String? normalized = GetBibleAPI.normalizeYouVersionApiKey(data?.text);
+      if (normalized != null && mounted) {
         setState(() {
-          _keyController.text = text;
+          _keyController.text = normalized;
         });
       }
     } catch (_) {}
@@ -160,16 +160,20 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
         ValueListenableBuilder<TextEditingValue>(
           valueListenable: _keyController,
           builder: (context, value, child) {
-            final bool canSave = value.text.trim().isNotEmpty;
+            final bool canSave =
+                GetBibleAPI.normalizeYouVersionApiKey(value.text) != null;
             return ElevatedButton.icon(
               style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
               icon: const Icon(Icons.check),
               label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
               onPressed: canSave
                   ? () async {
-                      final String entered = _keyController.text.trim();
-                      if (entered.isEmpty) return;
-                      await widget.onSave(entered);
+                      final String? normalized =
+                          GetBibleAPI.normalizeYouVersionApiKey(
+                            _keyController.text,
+                          );
+                      if (normalized == null) return;
+                      await widget.onSave(normalized);
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
                       }

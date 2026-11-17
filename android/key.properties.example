@@ -1,0 +1,12 @@
+# Copy this template to android/key.properties only for local release signing,
+# or prefer setting environment variables in CI/local shells so secrets are never stored on disk:
+#   ANDROID_KEYSTORE_PATH=/absolute/path/to/upload-keystore.jks
+#   ANDROID_KEYSTORE_PASSWORD=your-store-password
+#   ANDROID_KEY_ALIAS=upload
+#   ANDROID_KEY_PASSWORD=your-key-password
+#
+# Never commit android/key.properties or *.jks files to version control.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=upload
+storeFile=../upload-keystore.jks

@@ -48,7 +48,8 @@ android {
             val storeFilePath = envStoreFile?.takeIf { it.isNotBlank() }
                 ?: keystoreProperties.getProperty("storeFile")
             if (!storeFilePath.isNullOrBlank()) {
-                storeFile = file(storeFilePath)
+                val rootResolved = rootProject.file(storeFilePath)
+                storeFile = if (rootResolved.exists()) rootResolved else file(storeFilePath)
             }
             storePassword = envStorePassword?.takeIf { it.isNotBlank() }
                 ?: keystoreProperties.getProperty("storePassword")

@@ -720,9 +720,15 @@ class _MyHomePageState extends State<MyHomePage> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      // 🛡️ Sentinel: Validate file size (max 20MB) to prevent Memory Exhaustion DoS in UI rendering
-      final int fileSize = await File(image.path).length();
-      if (fileSize > 20 * 1024 * 1024) {
+      // 🛡️ Sentinel: Validate file size (1B..20MB) and raster image magic bytes before UI rendering
+      final File selectedFile = File(image.path);
+      final int fileSize = await selectedFile.length();
+      final List<int> headerBytes = await selectedFile
+          .openRead(0, 12)
+          .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+      if (fileSize <= 0 ||
+          fileSize > 20 * 1024 * 1024 ||
+          !GeminiService.isValidRasterImageBytes(Uint8List.fromList(headerBytes))) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -791,13 +797,17 @@ class _MyHomePageState extends State<MyHomePage> {
           generator: generator,
           initialApiKey: youVersionApiKey,
           onSave: (String entered) async {
-            await GetBibleAPI.saveYouVersionApiKey(entered);
+            final String normalized =
+                GetBibleAPI.normalizeYouVersionApiKey(entered) ?? "";
+            await GetBibleAPI.saveYouVersionApiKey(normalized);
             if (!mounted) return;
             setState(() {
-              youVersionApiKey = entered;
+              youVersionApiKey = normalized;
               _updateStatus(
-                generator.getLocaleString(lang, "yv_key_saved_msg"),
-                forceSuccess: true,
+                normalized.isNotEmpty
+                    ? generator.getLocaleString(lang, "yv_key_saved_msg")
+                    : generator.getLocaleString(lang, "yv_key_removed_msg"),
+                forceSuccess: normalized.isNotEmpty,
               );
             });
             await _loadBibleVersions(reloadVotd: false);
@@ -847,6 +857,16 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     if (imageBytes != null) {
+      if (!GeminiService.isValidRasterImageBytes(imageBytes)) {
+        setState(() {
+          isGeneratingGeminiBg = false;
+          _updateStatus(
+            generator.getLocaleString(lang, "gemini_bg_error_msg"),
+            forceError: true,
+          );
+        });
+        return;
+      }
       try {
         final Directory tempDir = await getTemporaryDirectory();
         // ⚡ Bolt: Prune old transient files in the background without blocking UI update

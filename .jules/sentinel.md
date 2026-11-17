@@ -39,3 +39,10 @@
 - Bounded HTTP response payloads (20 MB in `GeminiService`, 2 MB in `GetBibleAPI`), hardened base64 decoding against `FormatException` and oversized payloads, sanitized prompt inputs (`_sanitizePromptField`), and stripped raw HTML/exception details from `lastError`.
 - Disabled runtime Google Fonts fetching (`GoogleFonts.config.allowRuntimeFetching = false`), moved transient export/background PNGs to `getTemporaryDirectory()` with startup pruning, and updated locale paste instructions.
 - Removed redundant `READ_EXTERNAL_STORAGE` permission from `AndroidManifest.xml`, enabled `filterTouchesWhenObscured = true` in `MainActivity.kt`, pinned `distributionSha256Sum` in `gradle-wrapper.properties`, and added `.env*`/`*.jks`/`*.keystore`/`key.properties` to `.gitignore`.
+
+## 2026-11-17 - Follow-up Audit Hardening
+**Vulnerabilities Remediated:**
+- Added `GetBibleAPI.normalizeYouVersionApiKey` validation across `loadYouVersionApiKey`, `saveYouVersionApiKey`, `detectYouVersionKeyFromClipboard`, `YouVersionAuthDialog`, and `main.dart` to reject malformed header tokens.
+- Added early reference length caps (`<= 100` chars) in `GetBibleAPI._parseReference` and replaced buffered HTTP requests in `GetBibleAPI` and `GeminiService` with streamed bounded helpers (`_getBoundedResponse`, `_postBounded`) that disable automatic redirects (`followRedirects = false`) and enforce `maxResponseBytes` during chunk streaming.
+- Added `GeminiService.isValidRasterImageBytes` (PNG/JPEG/WebP magic-byte verification) for gallery background picks and Gemini responses in `main.dart`.
+- Fixed relative `storeFile` resolution in `android/app/build.gradle.kts` (`rootProject.file` fallback) and added `android/key.properties.example` documenting env-var release signing.
