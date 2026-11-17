@@ -46,6 +46,8 @@ class GetBibleAPI {
   static const String bollsBaseUrl = "https://bolls.life/get-text";
   static const String youVersionBaseUrl = "https://api.youversion.com/v1";
   static const String youVersionPortalUrl = "https://platform.youversion.com/";
+  static const int maxResponseBytes = 2 * 1024 * 1024;
+  static const int _maxYouVersionCacheEntries = 16;
   static const String defaultYouVersionApiKey = String.fromEnvironment(
     'YOUVERSION_API_KEY',
   );
@@ -213,6 +215,7 @@ class GetBibleAPI {
     String apiKey, {
     FlutterSecureStorage? secureStorage,
   }) async {
+    _youVersionBiblesCache.clear();
     final storage = secureStorage ?? _defaultSecureStorage;
     try {
       final trimmed = apiKey.trim();
@@ -304,6 +307,9 @@ class GetBibleAPI {
   static final Map<String, List<Map<String, String>>> _youVersionBiblesCache =
       {};
 
+  @visibleForTesting
+  static int get cachedYouVersionBiblesCount => _youVersionBiblesCache.length;
+
   static _CachedChapter? _getCachedChapter(String key) {
     final _CachedChapter? hit = _chapterCache.remove(key);
     if (hit != null) {
@@ -394,7 +400,8 @@ class GetBibleAPI {
           )
           .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 &&
+          response.bodyBytes.length <= maxResponseBytes) {
         final decoded = jsonDecode(response.body);
         final List<dynamic> items = (decoded is Map<String, dynamic> && decoded["data"] is List)
             ? decoded["data"] as List<dynamic>
@@ -419,6 +426,9 @@ class GetBibleAPI {
           }
         }
         if (httpClient == null && result.isNotEmpty) {
+          if (_youVersionBiblesCache.length >= _maxYouVersionCacheEntries) {
+            _youVersionBiblesCache.remove(_youVersionBiblesCache.keys.first);
+          }
           _youVersionBiblesCache[cacheKey] = List<Map<String, String>>.unmodifiable(result);
         }
         return result;
@@ -611,7 +621,8 @@ class GetBibleAPI {
           )
           .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 &&
+          response.bodyBytes.length <= maxResponseBytes) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map<String, dynamic>) {
           final dynamic content =
@@ -656,7 +667,8 @@ class GetBibleAPI {
         final response = await client
             .get(uri)
             .timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 &&
+            response.bodyBytes.length <= maxResponseBytes) {
           final parsed = jsonDecode(response.body);
           if (parsed is List && parsed.isNotEmpty) {
             final Map<int, String> byVerse = {};
@@ -716,7 +728,8 @@ class GetBibleAPI {
         final response = await client
             .get(Uri.parse(url))
             .timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 &&
+            response.bodyBytes.length <= maxResponseBytes) {
           var data = jsonDecode(response.body);
           final parsedVerses = data["verses"];
           if (parsedVerses is List && parsedVerses.isNotEmpty) {
@@ -788,7 +801,8 @@ class GetBibleAPI {
               },
             )
             .timeout(const Duration(seconds: 8));
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 &&
+            response.bodyBytes.length <= maxResponseBytes) {
           final decoded = jsonDecode(response.body);
           if (decoded is Map<String, dynamic>) {
             final dynamic rawUsfm =

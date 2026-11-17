@@ -28,12 +28,24 @@ class GeminiService {
   static const String aiStudioUrl = "https://aistudio.google.com/app/apikey";
   static const String _secureKeyName = "gemini_api_key";
   static const String _legacyKeyFileName = ".gemini_api_key";
+  static const int maxResponseBytes = 20 * 1024 * 1024;
+  static const int _maxZeroQuotaCacheSize = 16;
 
   static final RegExp _apiKeyRegExp = RegExp(r'AIza[0-9A-Za-z\-_]{30,45}');
+  static final RegExp _fallbackTokenRegExp = RegExp(r'^[A-Za-z0-9\-_]{16,128}$');
+  static final RegExp _controlCharsRegExp = RegExp(r'[\x00-\x1F\x7F]+');
+  static final RegExp _whitespaceRegExp = RegExp(r'\s+');
+  static final RegExp _htmlTagRegExp = RegExp(r'<[^>]*>');
   static final http.Client _sharedHttpClient = http.Client();
   // ⚡ Bolt: Remember keys whose raster image models returned Free-Tier 0-quota (limit: 0)
   // so subsequent generations skip 3 dead 429 round-trips and go straight to Flash scene synthesis.
   static final Set<String> _zeroQuotaImageKeys = <String>{};
+
+  @visibleForTesting
+  static int get cachedZeroQuotaKeyCount => _zeroQuotaImageKeys.length;
+
+  @visibleForTesting
+  static void clearZeroQuotaCacheForTest() => _zeroQuotaImageKeys.clear();
 
   static const List<String> styleKeys = [
     "style_nature",
@@ -74,6 +86,27 @@ class GeminiService {
     return match?.group(0);
   }
 
+  /// Normalizes and validates an entered/stored API key token.
+  static String? normalizeApiKey(String? text) {
+    if (text == null) return null;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return null;
+    final extracted = extractApiKeyFromText(trimmed);
+    if (extracted != null) return extracted;
+    if (_fallbackTokenRegExp.hasMatch(trimmed)) return trimmed;
+    return null;
+  }
+
+  static String _sanitizePromptField(String input, {int maxLength = 1000}) {
+    final cleaned = input
+        .replaceAll(_controlCharsRegExp, ' ')
+        .replaceAll('"', "'")
+        .replaceAll(_whitespaceRegExp, ' ')
+        .trim();
+    if (cleaned.length <= maxLength) return cleaned;
+    return cleaned.substring(0, maxLength);
+  }
+
   /// Checks the system clipboard for a valid Gemini API key (`AIza...`).
   Future<String?> detectApiKeyFromClipboard() async {
     try {
@@ -104,7 +137,7 @@ class GeminiService {
   Future<String?> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _secureKeyName);
-      final validStored = extractApiKeyFromText(stored);
+      final validStored = normalizeApiKey(stored);
       if (validStored != null) {
         await _deleteLegacyKeyFile();
         return validStored;
@@ -123,7 +156,7 @@ class GeminiService {
       final file = await _getLegacyKeyFile();
       if (await file.exists()) {
         final raw = (await file.readAsString()).trim();
-        final validKey = extractApiKeyFromText(raw);
+        final validKey = normalizeApiKey(raw);
         await file.delete();
         if (validKey != null) {
           await _secureStorage.write(key: _secureKeyName, value: validKey);
@@ -139,13 +172,14 @@ class GeminiService {
   }
 
   Future<void> saveApiKey(String apiKey) async {
+    _zeroQuotaImageKeys.clear();
     try {
       final trimmed = apiKey.trim();
-      final extracted = extractApiKeyFromText(trimmed) ?? trimmed;
-      if (extracted.isEmpty) {
+      final normalized = normalizeApiKey(trimmed);
+      if (trimmed.isEmpty || normalized == null) {
         await _secureStorage.delete(key: _secureKeyName);
       } else {
-        await _secureStorage.write(key: _secureKeyName, value: extracted);
+        await _secureStorage.write(key: _secureKeyName, value: normalized);
       }
       await _deleteLegacyKeyFile();
     } catch (e) {
@@ -161,19 +195,25 @@ class GeminiService {
     String styleKey = "style_nature",
     String customPrompt = "",
   }) {
+    final String safeVerse = _sanitizePromptField(verse, maxLength: 1500);
+    final String safeReference = _sanitizePromptField(reference, maxLength: 120);
+    final String safeCustomPrompt = _sanitizePromptField(
+      customPrompt,
+      maxLength: 500,
+    );
     final String styleDescription =
         _stylePrompts[styleKey] ?? _stylePrompts["style_nature"]!;
     final StringBuffer buffer = StringBuffer();
     buffer.write(
       "Create an inspiring, respectful background illustration symbolically aligned with the Bible passage ",
     );
-    if (reference.trim().isNotEmpty) {
-      buffer.write('"$reference": ');
+    if (safeReference.isNotEmpty) {
+      buffer.write('"$safeReference": ');
     }
-    buffer.write('"$verse". ');
+    buffer.write('"$safeVerse". ');
     buffer.write("Visual style: $styleDescription. ");
-    if (customPrompt.trim().isNotEmpty) {
-      buffer.write("Additional visual details: ${customPrompt.trim()}. ");
+    if (safeCustomPrompt.isNotEmpty) {
+      buffer.write("Additional visual details: $safeCustomPrompt. ");
     }
     buffer.write(
       "Important: Do NOT include any text, letters, words, numbers, typography, or watermarks in the image, as text will be overlaid later.",
@@ -181,12 +221,27 @@ class GeminiService {
     return buffer.toString();
   }
 
+  static Uint8List? _safeBase64Decode(String b64) {
+    if (b64.isEmpty || b64.length > (maxResponseBytes * 4) ~/ 3 + 4) {
+      return null;
+    }
+    try {
+      final Uint8List bytes = base64Decode(b64);
+      if (bytes.isEmpty || bytes.length > maxResponseBytes) {
+        return null;
+      }
+      return bytes;
+    } on FormatException {
+      return null;
+    }
+  }
+
   static Uint8List? extractImageBytesFromResponse(Map<String, dynamic> data) {
     final outputImage = data["output_image"];
     if (outputImage is Map<String, dynamic>) {
       final b64 = outputImage["data"];
       if (b64 is String && b64.isNotEmpty) {
-        return base64Decode(b64);
+        return _safeBase64Decode(b64);
       }
     }
 
@@ -202,7 +257,7 @@ class GeminiService {
               if (block is Map<String, dynamic> && block["type"] == "image") {
                 final b64 = block["data"];
                 if (b64 is String && b64.isNotEmpty) {
-                  return base64Decode(b64);
+                  return _safeBase64Decode(b64);
                 }
               }
             }
@@ -218,7 +273,7 @@ class GeminiService {
         if (block is Map<String, dynamic> && block["type"] == "image") {
           final b64 = block["data"];
           if (b64 is String && b64.isNotEmpty) {
-            return base64Decode(b64);
+            return _safeBase64Decode(b64);
           }
         }
       }
@@ -269,19 +324,28 @@ class GeminiService {
     return null;
   }
 
+  static String _sanitizeErrorSnippet(String raw) {
+    final stripped = raw
+        .replaceAll(_htmlTagRegExp, ' ')
+        .replaceAll(_whitespaceRegExp, ' ')
+        .trim();
+    if (stripped.length <= 100) return stripped;
+    return '${stripped.substring(0, 100)}...';
+  }
+
   static String extractErrorMessage(int statusCode, String body) {
     try {
       final decoded = jsonDecode(body);
       if (decoded is Map<String, dynamic>) {
         final err = decoded["error"];
         if (err is Map<String, dynamic> && err["message"] is String) {
-          return "HTTP $statusCode: ${err["message"]}";
+          return "HTTP $statusCode: ${_sanitizeErrorSnippet(err["message"] as String)}";
         }
         final errors = decoded["errors"];
         if (errors is List && errors.isNotEmpty) {
           final first = errors.first;
           if (first is Map<String, dynamic> && first["message"] is String) {
-            return "HTTP $statusCode: ${first["message"]}";
+            return "HTTP $statusCode: ${_sanitizeErrorSnippet(first["message"] as String)}";
           }
         }
       } else if (decoded is List && decoded.isNotEmpty) {
@@ -289,14 +353,14 @@ class GeminiService {
         if (first is Map<String, dynamic>) {
           final err = first["error"];
           if (err is Map<String, dynamic> && err["message"] is String) {
-            return "HTTP $statusCode: ${err["message"]}";
+            return "HTTP $statusCode: ${_sanitizeErrorSnippet(err["message"] as String)}";
           }
         }
       }
     } catch (_) {}
-    final snippet = body.trim();
+    final snippet = _sanitizeErrorSnippet(body);
     if (snippet.isNotEmpty) {
-      return "HTTP $statusCode: ${snippet.length > 120 ? '${snippet.substring(0, 120)}...' : snippet}";
+      return "HTTP $statusCode: $snippet";
     }
     return "HTTP $statusCode";
   }
@@ -310,7 +374,7 @@ class GeminiService {
     String customPrompt = "",
   }) async {
     lastError = null;
-    final trimmedKey = extractApiKeyFromText(apiKey) ?? apiKey.trim();
+    final trimmedKey = normalizeApiKey(apiKey) ?? "";
     if (trimmedKey.isEmpty || verse.trim().isEmpty) {
       lastError = "Missing API key or verse.";
       return null;
@@ -370,6 +434,11 @@ class GeminiService {
           )
           .timeout(const Duration(seconds: 60));
 
+      if (response.bodyBytes.length > maxResponseBytes) {
+        lastError = "Gemini response exceeded maximum allowed size.";
+        return null;
+      }
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> decoded = jsonDecode(response.body);
         final Uint8List? bytes = extractImageBytesFromResponse(decoded);
@@ -410,7 +479,7 @@ class GeminiService {
         }
       }
     } catch (e) {
-      lastError = e.toString();
+      lastError = "Network or service error while contacting Gemini.";
       if (kDebugMode) {
         debugPrint("Error generating Gemini background image: $e");
       }
@@ -455,6 +524,10 @@ class GeminiService {
             )
             .timeout(const Duration(seconds: 30));
 
+        if (response.bodyBytes.length > maxResponseBytes) {
+          allZeroQuota = false;
+          continue;
+        }
         if (response.statusCode == 200) {
           final Map<String, dynamic> decoded = jsonDecode(response.body);
           final Uint8List? bytes = extractImageBytesFromResponse(decoded);
@@ -485,6 +558,9 @@ class GeminiService {
     }
 
     if (allZeroQuota) {
+      if (_zeroQuotaImageKeys.length >= _maxZeroQuotaCacheSize) {
+        _zeroQuotaImageKeys.clear();
+      }
       _zeroQuotaImageKeys.add(apiKey);
     }
 
@@ -512,13 +588,19 @@ class GeminiService {
     // text models have generous Free Tier quota. We ask Gemini Flash to compose a bespoke
     // visual scene specification for the verse and render it on a high-res Canvas.
     final int randomSalt = DateTime.now().millisecondsSinceEpoch % 100000;
+    final String safeReference = _sanitizePromptField(reference, maxLength: 120);
+    final String safeVerse = _sanitizePromptField(verse, maxLength: 1500);
+    final String safeCustomPrompt = _sanitizePromptField(
+      customPrompt,
+      maxLength: 500,
+    );
     final String sceneRequestPrompt =
         '''
 Design a BRIGHT, LUMINOUS, uplifting background illustration scene inspired by this Bible passage:
-Reference: "$reference"
-Verse: "$verse"
+Reference: "$safeReference"
+Verse: "$safeVerse"
 Visual Style: "$styleKey" (${_stylePrompts[styleKey] ?? ""})
-Extra scene details: "$customPrompt"
+Extra scene details: "$safeCustomPrompt"
 Variation seed: $randomSalt
 
 Return ONLY a JSON object with these keys:
@@ -558,6 +640,10 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
             )
             .timeout(const Duration(seconds: 30));
 
+        if (response.bodyBytes.length > maxResponseBytes) {
+          lastError = "Gemini response exceeded maximum allowed size.";
+          continue;
+        }
         if (response.statusCode == 200) {
           final Map<String, dynamic> decoded = jsonDecode(response.body);
           final String? rawText = extractTextFromResponse(decoded);

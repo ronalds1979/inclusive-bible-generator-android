@@ -18,7 +18,7 @@
   "gemini_connect_btn": "Conectar Gemini IA",
   "gemini_connected_btn": "Gemini Listo",
   "gemini_dialog_title": "Conectar Gemini IA (1 Toque)",
-  "gemini_dialog_hint": "1. Toca 'Obtener Clave Gratis' abajo para abrir Google AI Studio e iniciar sesión con tu cuenta de Google.\n2. Toca 'Create API key' y cópiala.\n3. Vuelve a la app — ¡tu clave se detectará automáticamente del portapapeles!",
+  "gemini_dialog_hint": "1. Toca 'Obtener Clave Gratis' abajo para abrir Google AI Studio e iniciar sesión con tu cuenta de Google.\n2. Toca 'Create API key' y cópiala.\n3. Vuelve a la app y toca el botón Pegar de abajo para insertar tu clave.",
   "gemini_open_aistudio_btn": "1. Obtener Clave Gratis (Google AI Studio)",
   "gemini_paste_clipboard_btn": "Pegar Clave del Portapapeles",
   "gemini_clipboard_detected_msg": "¡Clave API de Gemini detectada del portapapeles!",

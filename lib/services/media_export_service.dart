@@ -33,9 +33,9 @@ class MediaExportService {
       if (byteData == null) return;
       final Uint8List pngBytes = byteData.buffer.asUint8List();
 
-      final Directory docsDir = await getApplicationDocumentsDirectory();
+      final Directory tempDir = await getTemporaryDirectory();
       final File imgFile = File(
-        '${docsDir.path}/verse_${DateTime.now().millisecondsSinceEpoch}.png',
+        '${tempDir.path}/verse_${DateTime.now().millisecondsSinceEpoch}.png',
       );
       await imgFile.writeAsBytes(pngBytes);
 
@@ -55,7 +55,7 @@ class MediaExportService {
         ShareParams(files: filesToShare, text: "$altText\n\n$caption"),
       );
       // ⚡ Bolt: Defer transient file cleanup until after share sheet opens so directory I/O is off the critical path
-      await pruneTransientFiles(docsDir, prefix: 'verse_', suffix: '.png');
+      await pruneTransientFiles(tempDir, prefix: 'verse_', suffix: '.png');
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error capturing image: $e");

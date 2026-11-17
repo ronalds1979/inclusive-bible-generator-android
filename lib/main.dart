@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -34,6 +35,7 @@ String resolveAppLanguageForLocale(Locale locale) {
 }
 
 void main() {
+  GoogleFonts.config.allowRuntimeFetching = false;
   runApp(const MyApp());
 }
 
@@ -316,7 +318,20 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
+  Future<void> _cleanupStartupTransientFiles() async {
+    try {
+      final Directory tempDir = await getTemporaryDirectory();
+      await Future.wait([
+        pruneTransientFiles(tempDir, prefix: 'verse_', suffix: '.png'),
+        pruneTransientFiles(tempDir, prefix: 'gemini_bg_', suffix: '.png'),
+        pruneTransientFiles(tempDir, prefix: 'stock_bg_', suffix: '.jpg'),
+        pruneTransientFiles(tempDir, prefix: 'verse_audio_', suffix: '.wav'),
+      ]);
+    } catch (_) {}
+  }
+
   Future<void> _initApp() async {
+    unawaited(_cleanupStartupTransientFiles());
     // ⚡ Bolt: Parallelize independent startup I/O (locales, secure storage keys, asset manifest)
     final results = await Future.wait<dynamic>([
       generator.loadLocales(),
@@ -700,14 +715,15 @@ class _MyHomePageState extends State<MyHomePage> {
           generator: generator,
           initialApiKey: geminiApiKey,
           onSave: (String entered) async {
-            await geminiService.saveApiKey(entered);
+            final String? normalized = GeminiService.normalizeApiKey(entered);
+            await geminiService.saveApiKey(normalized ?? "");
             setState(() {
-              geminiApiKey = entered.isNotEmpty ? entered : null;
+              geminiApiKey = normalized;
               _updateStatus(
-                entered.isNotEmpty
+                normalized != null
                     ? generator.getLocaleString(lang, "gemini_key_saved_msg")
                     : generator.getLocaleString(lang, "gemini_key_removed_msg"),
-                forceSuccess: entered.isNotEmpty,
+                forceSuccess: normalized != null,
               );
             });
           },
@@ -756,18 +772,18 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (imageBytes != null) {
       try {
-        final Directory docsDir = await getApplicationDocumentsDirectory();
+        final Directory tempDir = await getTemporaryDirectory();
         // ⚡ Bolt: Prune old transient files in the background without blocking UI update
         unawaited(
           pruneTransientFiles(
-            docsDir,
+            tempDir,
             prefix: 'gemini_bg_',
             suffix: '.png',
             excludePath: customImagePath,
           ),
         );
         final File bgFile = File(
-          '${docsDir.path}/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
+          '${tempDir.path}/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
         );
         await bgFile.writeAsBytes(imageBytes);
 

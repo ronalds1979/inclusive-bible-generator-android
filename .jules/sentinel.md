@@ -29,3 +29,13 @@
 **Vulnerability:** A Denial of Service (DoS) vulnerability existed in `_selectCustomImage` where user-selected custom images were loaded into memory via `FileImage` without validating their size, potentially leading to Out-Of-Memory (OOM) crashes if a user selected an excessively large file.
 **Learning:** File size validation must occur immediately at the UI layer when files are selected, before passing file paths to frontend rendering components like `FileImage` which will attempt to decode the entire file into memory.
 **Prevention:** Always check `await File(path).length()` against a reasonable limit (e.g., 20MB) upon file selection and before initiating file rendering or processing in the UI.
+
+
+## 2026-11-17 - Comprehensive Security Hardening (Sentinel Audit Remediation)
+**Vulnerabilities Remediated:**
+- Disabled automatic HTTP redirect following in `StockPhotoService` (`followRedirects = false`) with per-hop allowlist validation (`parseAllowedWikimediaUri`) up to 3 hops, bounded API responses, and JPEG/PNG magic-byte verification before saving downloads.
+- Added consistent API key validation (`GeminiService.normalizeApiKey`) across `loadApiKey()`, `saveApiKey()`, `GeminiAuthDialog`, and `main.dart`.
+- Cleared in-memory key caches (`_zeroQuotaImageKeys` and `_youVersionBiblesCache`) inside `saveApiKey()` and `saveYouVersionApiKey()`, and bounded cache sizes to 16 entries.
+- Bounded HTTP response payloads (20 MB in `GeminiService`, 2 MB in `GetBibleAPI`), hardened base64 decoding against `FormatException` and oversized payloads, sanitized prompt inputs (`_sanitizePromptField`), and stripped raw HTML/exception details from `lastError`.
+- Disabled runtime Google Fonts fetching (`GoogleFonts.config.allowRuntimeFetching = false`), moved transient export/background PNGs to `getTemporaryDirectory()` with startup pruning, and updated locale paste instructions.
+- Removed redundant `READ_EXTERNAL_STORAGE` permission from `AndroidManifest.xml`, enabled `filterTouchesWhenObscured = true` in `MainActivity.kt`, pinned `distributionSha256Sum` in `gradle-wrapper.properties`, and added `.env*`/`*.jks`/`*.keystore`/`key.properties` to `.gitignore`.

@@ -211,16 +211,19 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
         ValueListenableBuilder<TextEditingValue>(
           valueListenable: _keyController,
           builder: (context, value, child) {
-            final bool canSave = value.text.trim().isNotEmpty;
+            final bool canSave = GeminiService.normalizeApiKey(value.text) != null;
             return ElevatedButton.icon(
               icon: const Icon(Icons.check),
               label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
               onPressed: canSave
                   ? () async {
-                      final String entered = _keyController.text.trim();
-                      await widget.onSave(entered);
+                      final String? normalized = GeminiService.normalizeApiKey(
+                        _keyController.text,
+                      );
+                      if (normalized == null) return;
+                      await widget.onSave(normalized);
                       if (context.mounted) {
-                        Navigator.of(context).pop(entered.isNotEmpty);
+                        Navigator.of(context).pop(true);
                       }
                     }
                   : null,

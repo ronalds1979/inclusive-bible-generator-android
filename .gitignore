@@ -27,3 +27,9 @@ migrate_working_dir/
 .pub/
 /build/
 coverage/
+
+# Security: Secrets & Android release signing material
+.env*
+*.jks
+*.keystore
+key.properties

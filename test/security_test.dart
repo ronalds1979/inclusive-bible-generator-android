@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -273,6 +274,117 @@ void main() {
 
       final TextField field = tester.widget<TextField>(find.byType(TextField));
       expect(field.controller?.text, isEmpty);
+    },
+  );
+
+  test(
+    'StockPhotoService.downloadPhotoToTemp blocks HTTP redirects to disallowed hosts or HTTP downgrade',
+    () async {
+      final evilRedirectService = StockPhotoService(
+        httpClient: MockClient.streaming((request, bodyStream) async {
+          return http.StreamedResponse(
+            const Stream<List<int>>.empty(),
+            302,
+            headers: {'location': 'https://evil.example.com/payload.jpg'},
+          );
+        }),
+      );
+
+      await expectLater(
+        evilRedirectService.downloadPhotoToTemp(
+          const StockPhotoResult(
+            title: 'RedirectEvil',
+            thumbUrl: 'https://upload.wikimedia.org/a.jpg',
+            fullUrl: 'https://upload.wikimedia.org/a.jpg',
+          ),
+        ),
+        throwsA(isA<HttpException>()),
+      );
+
+      final httpDowngradeService = StockPhotoService(
+        httpClient: MockClient.streaming((request, bodyStream) async {
+          return http.StreamedResponse(
+            const Stream<List<int>>.empty(),
+            301,
+            headers: {'location': 'http://upload.wikimedia.org/a.jpg'},
+          );
+        }),
+      );
+
+      await expectLater(
+        httpDowngradeService.downloadPhotoToTemp(
+          const StockPhotoResult(
+            title: 'RedirectHttp',
+            thumbUrl: 'https://upload.wikimedia.org/a.jpg',
+            fullUrl: 'https://upload.wikimedia.org/a.jpg',
+          ),
+        ),
+        throwsA(isA<HttpException>()),
+      );
+    },
+  );
+
+  test(
+    'GeminiService.normalizeApiKey rejects spaces/control characters and extracts AIza tokens',
+    () {
+      const validAiZa = 'AIzaSyTestSecureStorageKey12345678901234';
+      expect(
+        GeminiService.normalizeApiKey('  Key: $validAiZa  '),
+        equals(validAiZa),
+      );
+      expect(
+        GeminiService.normalizeApiKey('mock-gemini-key-for-unit-test'),
+        equals('mock-gemini-key-for-unit-test'),
+      );
+      expect(GeminiService.normalizeApiKey('invalid key with spaces'), isNull);
+      expect(GeminiService.normalizeApiKey("bad\nnewline-token-12345"), isNull);
+      expect(GeminiService.normalizeApiKey('   '), isNull);
+    },
+  );
+
+  test(
+    'saveApiKey and saveYouVersionApiKey clear static in-memory key caches',
+    () async {
+      FlutterSecureStorage.setMockInitialValues({});
+      GeminiService.clearZeroQuotaCacheForTest();
+
+      final mockClient = MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final model = body['model'] as String;
+        if (model != 'gemini-3.8-flash') {
+          return http.Response(
+            jsonEncode({
+              'error': {'message': 'Quota exceeded, limit: 0'},
+            }),
+            429,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'outputs': [
+              {
+                'type': 'text',
+                'text': jsonEncode({'skyTop': '#102030'}),
+              },
+            ],
+          }),
+          200,
+        );
+      });
+
+      final service = GeminiService(httpClient: mockClient);
+      await service.generateBackgroundImage(
+        apiKey: 'mock-zero-quota-key-clear-test',
+        verse: 'Be still',
+        reference: 'Psalm 46:10',
+      );
+      expect(GeminiService.cachedZeroQuotaKeyCount, greaterThan(0));
+
+      await service.saveApiKey('');
+      expect(GeminiService.cachedZeroQuotaKeyCount, equals(0));
+
+      await GetBibleAPI.saveYouVersionApiKey('');
+      expect(GetBibleAPI.cachedYouVersionBiblesCount, equals(0));
     },
   );
 }
