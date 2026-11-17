@@ -28,6 +28,7 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
   late final TextEditingController _keyController;
   bool _obscure = true;
   bool _detectedFromClipboard = false;
+  bool _clipboardEmpty = false;
 
   @override
   void initState() {
@@ -47,10 +48,12 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
       final String? detectedKey = GeminiService.extractApiKeyFromText(
         data?.text,
       );
-      if (detectedKey != null && mounted) {
+      if (!mounted) return;
+      if (detectedKey != null) {
         setState(() {
           _keyController.text = detectedKey;
           _detectedFromClipboard = true;
+          _clipboardEmpty = false;
         });
         if (autoConnectIfFound) {
           await widget.onSave(detectedKey);
@@ -58,8 +61,20 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
             Navigator.of(context).pop(true);
           }
         }
+      } else {
+        setState(() {
+          _detectedFromClipboard = false;
+          _clipboardEmpty = true;
+        });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _detectedFromClipboard = false;
+          _clipboardEmpty = true;
+        });
+      }
+    }
   }
 
   Future<void> _openGoogleAiStudio() async {
@@ -106,41 +121,58 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
                 ),
               ),
             ),
-            if (_detectedFromClipboard) ...[
+            if (_detectedFromClipboard || _clipboardEmpty) ...[
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      size: 18,
+              Semantics(
+                liveRegion: true,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _detectedFromClipboard
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : Theme.of(context).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _detectedFromClipboard
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.error,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        generator.getLocaleString(
-                          lang,
-                          "gemini_clipboard_detected_msg",
-                        ),
-                        style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _detectedFromClipboard
+                            ? Icons.check_circle
+                            : Icons.info_outline,
+                        color: _detectedFromClipboard
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : Theme.of(context).colorScheme.onErrorContainer,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          generator.getLocaleString(
+                            lang,
+                            _detectedFromClipboard
+                                ? "gemini_clipboard_detected_msg"
+                                : "yv_clipboard_empty_msg",
+                          ),
+                          style: TextStyle(
+                            color: _detectedFromClipboard
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onErrorContainer,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -194,6 +226,7 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
       actions: [
         if (hasExistingKey)
           TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
             onPressed: () async {
               await widget.onDisconnect();
               if (context.mounted) {
@@ -205,6 +238,7 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
             ),
           ),
         TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
@@ -213,6 +247,7 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
           builder: (context, value, child) {
             final bool canSave = GeminiService.normalizeApiKey(value.text) != null;
             return ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
               icon: const Icon(Icons.check),
               label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
               onPressed: canSave

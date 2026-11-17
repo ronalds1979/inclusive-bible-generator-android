@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:app/main.dart';
@@ -564,5 +565,114 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(offset, equals(0.0));
+  });
+
+  testWidgets('GeminiAuthDialog meets tap target guidelines and shows clipboard feedback', (
+    WidgetTester tester,
+  ) async {
+    final SemanticsHandle handle = tester.ensureSemantics();
+    try {
+      final generator = Generator();
+      generator.locales = {
+        "en": {
+          "gemini_dialog_title": "Connect Gemini AI",
+          "gemini_dialog_hint": "Get a free Gemini API key",
+          "gemini_open_aistudio_btn": "1. Get Free Gemini Key (Google AI Studio)",
+          "gemini_paste_clipboard_btn": "Paste Key from Clipboard",
+          "gemini_clipboard_detected_msg": "Gemini API Key detected from clipboard!",
+          "yv_clipboard_empty_msg": "Clipboard does not contain a valid key.",
+          "gemini_api_key_label": "Gemini API Key (AIza...)",
+          "show_api_key_tooltip": "Show API key",
+          "hide_api_key_tooltip": "Hide API key",
+          "gemini_save_btn": "Save & Connect",
+          "gemini_disconnect_btn": "Disconnect Key",
+          "gemini_cancel_btn": "Close",
+        },
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GeminiAuthDialog(
+              lang: "en",
+              generator: generator,
+              initialApiKey: "AIzaSyTestExistingKey12345",
+              onSave: (_) async {},
+              onDisconnect: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'Clipboard.getData') {
+            return <String, dynamic>{'text': 'not-a-valid-key'};
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await tester.tap(find.byTooltip("Paste Key from Clipboard"));
+      await tester.pumpAndSettle();
+      expect(find.text("Clipboard does not contain a valid key."), findsOneWidget);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('Audio & Text tab shows live Alt-Text & Caption and Style tab resets font size', (
+    WidgetTester tester,
+  ) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await tester.binding.setSurfaceSize(const Size(412, 915));
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(const MyApp());
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+
+    final textFields = find.byType(TextField);
+    await tester.enterText(textFields.at(0), "John 3:16");
+    await tester.enterText(textFields.at(1), "For God so loved the world.");
+    await tester.pump();
+
+    // Navigate to Style tab, change font size slider, and verify Reset button restores 22
+    await tester.tap(find.text("Style"));
+    await tester.pumpAndSettle();
+    expect(find.text("Font Size: 22"), findsOneWidget);
+
+    final sliderFinder = find.byType(Slider).first;
+    await tester.ensureVisible(sliderFinder);
+    await tester.pumpAndSettle();
+    await tester.drag(sliderFinder, const Offset(80, 0));
+    await tester.pumpAndSettle();
+    expect(find.text("Reset"), findsOneWidget);
+
+    await tester.ensureVisible(find.text("Reset"));
+    await tester.tap(find.text("Reset"));
+    await tester.pumpAndSettle();
+    expect(find.text("Font Size: 22"), findsOneWidget);
+
+    // Navigate to Audio & Text tab and verify live Alt-Text & Caption are generated immediately
+    await tester.tap(find.text("Audio & Text"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Copy Alt-Text"), findsOneWidget);
+    expect(find.text("Copy Caption"), findsOneWidget);
+    expect(find.textContaining("For God so loved the world."), findsWidgets);
   });
 }

@@ -2059,9 +2059,27 @@ class _MyHomePageState extends State<MyHomePage> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "${generator.getLocaleString(lang, "font_size_label")}: ${sizeValue.round()}",
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "${generator.getLocaleString(lang, "font_size_label")}: ${sizeValue.round()}",
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (sizeValue.round() != 22)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: () => _fontSizeNotifier.value = 22.0,
+                        icon: const Icon(Icons.restart_alt, size: 16),
+                        label: Text(
+                          generator.getLocaleString(lang, "reset_font_size_btn"),
+                        ),
+                      ),
+                  ],
                 ),
                 Slider(
                   value: sizeValue,
@@ -2315,80 +2333,143 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
         ),
-        if (altText.isEmpty && caption.isEmpty) ...[
-          const SizedBox(height: 16),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(14.0),
-              child: MergeSemantics(
-                child: Row(
-                  children: [
-                    ExcludeSemantics(
-                      child: Icon(
-                        Icons.accessibility_new,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        generator.getLocaleString(lang, "text_empty_state"),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        AnimatedBuilder(
+          animation: _previewListenable,
+          builder: (context, _) {
+            if (_selectedTabIndex != 3) {
+              return const SizedBox.shrink();
+            }
+            final String verseText = verseController.text.trim();
+            final String refText = referenceController.text.trim();
+            if (verseText.isEmpty || refText.isEmpty) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14.0),
+                      child: MergeSemantics(
+                        child: Row(
+                          children: [
+                            ExcludeSemantics(
+                              child: Icon(
+                                Icons.accessibility_new,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                generator.getLocaleString(
+                                  lang,
+                                  "text_empty_state",
+                                ),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-        if (altText.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(
-            generator.getLocaleString(lang, "alt_text_label"),
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          SelectableText(altText),
-          const SizedBox(height: 4),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 48),
-            ),
-            onPressed: () => _copyToClipboard(altText, fieldKey: "alt"),
-            icon: Icon(
-              _copiedField == "alt" ? Icons.check : Icons.copy,
-              size: 16,
-              color: _copiedField == "alt" ? _successColor(context) : null,
-            ),
-            label: Text(generator.getLocaleString(lang, "copy_alt_text_btn")),
-          ),
-        ],
-        if (caption.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            generator.getLocaleString(lang, "caption_label"),
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          SelectableText(caption),
-          const SizedBox(height: 4),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 48),
-            ),
-            onPressed: () => _copyToClipboard(caption, fieldKey: "caption"),
-            icon: Icon(
-              _copiedField == "caption" ? Icons.check : Icons.copy,
-              size: 16,
-              color: _copiedField == "caption" ? _successColor(context) : null,
-            ),
-            label: Text(generator.getLocaleString(lang, "copy_caption_btn")),
-          ),
-        ],
+                  ),
+                ],
+              );
+            }
+            String description = generator.getLocaleString(
+              lang,
+              "default_description",
+            );
+            if (isGeminiBackground && customImagePath != null) {
+              final String styleLabel = generator.getLocaleString(
+                lang,
+                selectedGeminiStyle,
+              );
+              final String extraDetails = geminiPromptController.text.trim();
+              description = extraDetails.isNotEmpty
+                  ? "AI-generated background ($styleLabel: $extraDetails)."
+                  : "AI-generated background ($styleLabel).";
+            }
+            final String liveAltText = generator.getLocaleString(
+              lang,
+              "alt_text_template",
+              kwargs: {
+                "description": description,
+                "verse": verseText,
+                "reference": refText,
+              },
+            );
+            final String liveCaption = generator.getLocaleString(
+              lang,
+              "caption_template",
+              kwargs: {"verse": verseText, "reference": refText},
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (liveAltText.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    generator.getLocaleString(lang, "alt_text_label"),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(liveAltText),
+                  const SizedBox(height: 4),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: () =>
+                        _copyToClipboard(liveAltText, fieldKey: "alt"),
+                    icon: Icon(
+                      _copiedField == "alt" ? Icons.check : Icons.copy,
+                      size: 16,
+                      color:
+                          _copiedField == "alt" ? _successColor(context) : null,
+                    ),
+                    label: Text(
+                      generator.getLocaleString(lang, "copy_alt_text_btn"),
+                    ),
+                  ),
+                ],
+                if (liveCaption.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    generator.getLocaleString(lang, "caption_label"),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(liveCaption),
+                  const SizedBox(height: 4),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: () =>
+                        _copyToClipboard(liveCaption, fieldKey: "caption"),
+                    icon: Icon(
+                      _copiedField == "caption" ? Icons.check : Icons.copy,
+                      size: 16,
+                      color: _copiedField == "caption"
+                          ? _successColor(context)
+                          : null,
+                    ),
+                    label: Text(
+                      generator.getLocaleString(lang, "copy_caption_btn"),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
         _buildStepNavigationRow(lang, 3),
       ],
     );

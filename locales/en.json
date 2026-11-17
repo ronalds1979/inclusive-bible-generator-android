@@ -124,5 +124,6 @@
   "custom_bg_active_label": "Custom Photo",
   "gemini_bg_active_label": "AI Background",
   "yv_clipboard_detected_msg": "YouVersion key pasted from clipboard!",
-  "yv_clipboard_empty_msg": "Clipboard does not contain a valid key."
+  "yv_clipboard_empty_msg": "Clipboard does not contain a valid key.",
+  "reset_font_size_btn": "Reset"
 }

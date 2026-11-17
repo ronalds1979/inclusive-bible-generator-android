@@ -124,5 +124,6 @@
   "custom_bg_active_label": "Foto Personalizada",
   "gemini_bg_active_label": "Fondo con IA",
   "yv_clipboard_detected_msg": "¡Clave de YouVersion pegada del portapapeles!",
-  "yv_clipboard_empty_msg": "El portapapeles no contiene una clave válida."
+  "yv_clipboard_empty_msg": "El portapapeles no contiene una clave válida.",
+  "reset_font_size_btn": "Restablecer"
 }

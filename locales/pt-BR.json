@@ -124,5 +124,6 @@
   "custom_bg_active_label": "Foto da Galeria",
   "gemini_bg_active_label": "Fundo com IA",
   "yv_clipboard_detected_msg": "Chave do YouVersion colada da área de transferência!",
-  "yv_clipboard_empty_msg": "A área de transferência não contém uma chave válida."
+  "yv_clipboard_empty_msg": "A área de transferência não contém uma chave válida.",
+  "reset_font_size_btn": "Padrão"
 }
