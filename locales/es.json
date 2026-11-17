@@ -120,5 +120,9 @@
   "contrast_warning_msg": "Bajo contraste en fondos claros. Considera aumentar Oscurecer Fondo.",
   "contrast_fix_btn": "Ajustar Contraste",
   "yv_key_saved_msg": "¡Clave API de YouVersion conectada!",
-  "yv_key_removed_msg": "Clave API de YouVersion desconectada."
+  "yv_key_removed_msg": "Clave API de YouVersion desconectada.",
+  "custom_bg_active_label": "Foto Personalizada",
+  "gemini_bg_active_label": "Fondo con IA",
+  "yv_clipboard_detected_msg": "¡Clave de YouVersion pegada del portapapeles!",
+  "yv_clipboard_empty_msg": "El portapapeles no contiene una clave válida."
 }

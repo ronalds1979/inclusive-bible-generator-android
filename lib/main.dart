@@ -1601,7 +1601,15 @@ class _MyHomePageState extends State<MyHomePage> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             DropdownButton<String>(
-              value: selectedBackground,
+              value: customImagePath == null ? selectedBackground : null,
+              hint: Text(
+                generator.getLocaleString(
+                  lang,
+                  isGeminiBackground
+                      ? "gemini_bg_active_label"
+                      : "custom_bg_active_label",
+                ),
+              ),
               items: _getBackgroundDropdownItems(),
               onChanged: (v) => setState(() {
                 selectedBackground = v!;
@@ -1624,10 +1632,61 @@ class _MyHomePageState extends State<MyHomePage> {
           height: 68,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: backgrounds.length,
+            itemCount: backgrounds.length + (customImagePath != null ? 1 : 0),
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              final String bgName = backgrounds[index];
+              if (customImagePath != null && index == 0) {
+                final String activeLabel = generator.getLocaleString(
+                  lang,
+                  isGeminiBackground
+                      ? "gemini_bg_active_label"
+                      : "custom_bg_active_label",
+                );
+                return Semantics(
+                  button: true,
+                  selected: true,
+                  label: activeLabel,
+                  child: Tooltip(
+                    message: activeLabel,
+                    child: Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 3,
+                        ),
+                        image: DecorationImage(
+                          image: ResizeImage(
+                            FileImage(File(customImagePath!)),
+                            width: 204,
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.check,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              final String bgName =
+                  backgrounds[customImagePath != null ? index - 1 : index];
               final bool isSelected =
                   customImagePath == null && selectedBackground == bgName;
               final String label = _getBackgroundLabel(bgName);

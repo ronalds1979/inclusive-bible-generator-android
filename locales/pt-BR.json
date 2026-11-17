@@ -120,5 +120,9 @@
   "contrast_warning_msg": "Baixo contraste em fundos claros. Considere aumentar o Escurecer Fundo.",
   "contrast_fix_btn": "Ajustar Contraste",
   "yv_key_saved_msg": "Chave da API YouVersion conectada!",
-  "yv_key_removed_msg": "Chave da API YouVersion desconectada."
+  "yv_key_removed_msg": "Chave da API YouVersion desconectada.",
+  "custom_bg_active_label": "Foto da Galeria",
+  "gemini_bg_active_label": "Fundo com IA",
+  "yv_clipboard_detected_msg": "Chave do YouVersion colada da área de transferência!",
+  "yv_clipboard_empty_msg": "A área de transferência não contém uma chave válida."
 }

@@ -251,12 +251,29 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
             onVerticalDragUpdate: (details) {
               final double baseOffset =
                   widget.yOffsetListenable?.value ?? widget.yOffset;
-              final double updated = (baseOffset + details.delta.dy * 1.5)
-                  .clamp(-400.0, 400.0);
+              final double rawUpdated =
+                  (baseOffset + details.delta.dy * 1.5).clamp(-400.0, 400.0);
+              final bool crossedCenter =
+                  (baseOffset < 0 && rawUpdated >= 0) ||
+                  (baseOffset > 0 && rawUpdated <= 0);
+              final double updated =
+                  (crossedCenter || rawUpdated.abs() < 3.0) && baseOffset != 0.0
+                      ? 0.0
+                      : rawUpdated;
+              if ((updated == 0.0 && baseOffset != 0.0) ||
+                  (baseOffset > -400.0 && updated == -400.0) ||
+                  (baseOffset < 400.0 && updated == 400.0)) {
+                HapticFeedback.selectionClick();
+              }
               widget.onYOffsetChanged!(updated);
             },
             child: responsiveCard,
           );
+
+    final String resetHint = widget.generator.getLocaleString(
+      widget.lang,
+      "reset_position_btn",
+    );
 
     return AnimatedBuilder(
       animation: widget.previewListenable,
@@ -271,6 +288,9 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
           container: true,
           image: true,
           excludeSemantics: true,
+          onTapHint: widget.onYOffsetChanged != null && resetHint.isNotEmpty
+              ? resetHint
+              : null,
           label: "$semanticHeader: \"$verseText\" — $refText",
           child: child,
         );

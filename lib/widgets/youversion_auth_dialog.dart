@@ -27,6 +27,8 @@ class YouVersionAuthDialog extends StatefulWidget {
 class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
   late final TextEditingController _keyController;
   bool _obscure = true;
+  bool _pastedFromClipboard = false;
+  bool _clipboardEmpty = false;
 
   @override
   void initState() {
@@ -44,12 +46,27 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
     try {
       final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
       final String? normalized = GetBibleAPI.normalizeYouVersionApiKey(data?.text);
-      if (normalized != null && mounted) {
+      if (!mounted) return;
+      if (normalized != null) {
         setState(() {
           _keyController.text = normalized;
+          _pastedFromClipboard = true;
+          _clipboardEmpty = false;
+        });
+      } else {
+        setState(() {
+          _pastedFromClipboard = false;
+          _clipboardEmpty = true;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _pastedFromClipboard = false;
+          _clipboardEmpty = true;
+        });
+      }
+    }
   }
 
   Future<void> _openYouVersionPortal() async {
@@ -108,12 +125,64 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                 ),
               ),
             ),
+            if (_pastedFromClipboard || _clipboardEmpty) ...[
+              const SizedBox(height: 10),
+              Semantics(
+                liveRegion: true,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _pastedFromClipboard
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : Theme.of(context).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _pastedFromClipboard
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _pastedFromClipboard
+                            ? Icons.check_circle
+                            : Icons.info_outline,
+                        color: _pastedFromClipboard
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : Theme.of(context).colorScheme.onErrorContainer,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          generator.getLocaleString(
+                            lang,
+                            _pastedFromClipboard
+                                ? "yv_clipboard_detected_msg"
+                                : "yv_clipboard_empty_msg",
+                          ),
+                          style: TextStyle(
+                            color: _pastedFromClipboard
+                                ? Theme.of(context).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onErrorContainer,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _keyController,
               obscureText: _obscure,
               maxLength: 256,
               decoration: InputDecoration(
+                counterText: "",
                 labelText: generator.getLocaleString(
                   lang,
                   "yv_api_key_label",

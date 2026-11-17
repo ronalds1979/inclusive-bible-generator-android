@@ -36,3 +36,8 @@
 ## 2024-05-18 - Fix Multiline TextField Label Alignment
 **Learning:** By default in Flutter, `TextField` labels are vertically centered. For multiline text fields (`maxLines` > 1), this causes the label to float awkwardly in the middle of the input area. Setting `alignLabelWithHint: true` forces the label to align with the top of the input.
 **Action:** Always set `alignLabelWithHint: true` on `InputDecoration` when using multiline `TextField`s to ensure a proper visual hierarchy and a standard user experience.
+
+
+## 2026-11-17 - Tactile Center-Snap, Custom Background Reflection & Clipboard Feedback
+**Learning:** When a user chooses a custom photo or AI-generated image, leaving the built-in background dropdown displaying an unrelated preset and hiding all selection highlights in the thumbnail strip creates cognitive dissonance. Similarly, paste buttons without inline feedback leave users unsure whether the clipboard contained a valid key, and dragging text without center-snap feedback makes re-centering imprecise.
+**Action:** Clear the preset dropdown selection with a contextual `hint` and prepend an active thumbnail badge when a custom/AI background is active, show live-region feedback banners for clipboard paste attempts, and provide gentle center-snap and boundary haptics on direct drag gestures.
