@@ -818,6 +818,9 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
       // 3. Style-specific soft watercolor / oil washes in the backdrop
       if (styleKey == "style_watercolor" || styleKey == "style_oil_painting") {
         final int washCount = styleKey == "style_watercolor" ? 14 : 10;
+        // ⚡ Bolt: Reuse a single Paint & MaskFilter across backdrop wash circles
+        final Paint washPaint = Paint()
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 55);
         for (int i = 0; i < washCount; i++) {
           final Color washColor = Color.lerp(
             skyColors[i % skyColors.length],
@@ -827,9 +830,7 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
           final double rx = rng.nextDouble() * w;
           final double ry = rng.nextDouble() * h * 0.75;
           final double radius = w * (0.18 + rng.nextDouble() * 0.25);
-          final Paint washPaint = Paint()
-            ..color = washColor
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 55);
+          washPaint.color = washColor;
           canvas.drawCircle(Offset(rx, ry), radius, washPaint);
         }
       }
@@ -857,6 +858,18 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
             .clamp(0, 24);
         if (rayCount > 0 && styleKey != "style_minimalist") {
           final double maxRayLen = math.max(w, h) * 1.3;
+          // ⚡ Bolt: Hoist invariant radial gradient Paint out of the ray loop
+          final Paint rayPaint = Paint()
+            ..shader = ui.Gradient.radial(
+              lightCenter,
+              maxRayLen * 0.85,
+              [
+                Colors.white.withAlpha(65),
+                glowColor.withAlpha(28),
+                glowColor.withAlpha(0),
+              ],
+              [0.0, 0.48, 1.0],
+            );
           for (int i = 0; i < rayCount; i++) {
             final double baseAngle =
                 (i / rayCount) * math.pi * 2 + (rng.nextDouble() * 0.12);
@@ -874,17 +887,6 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
               ..lineTo(p1.dx, p1.dy)
               ..lineTo(p2.dx, p2.dy)
               ..close();
-            final Paint rayPaint = Paint()
-              ..shader = ui.Gradient.radial(
-                lightCenter,
-                maxRayLen * 0.85,
-                [
-                  Colors.white.withAlpha(65),
-                  glowColor.withAlpha(28),
-                  glowColor.withAlpha(0),
-                ],
-                [0.0, 0.48, 1.0],
-              );
             canvas.drawPath(rayPath, rayPaint);
           }
         }
@@ -962,6 +964,8 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
           (sceneSpec["landscapeType"] as String?)?.toLowerCase() ?? "hills";
 
       final int numLayers = landscapeType == "minimal" ? 2 : 4;
+      final Paint layerPaint = Paint();
+      final Paint mistPaint = Paint();
       for (int layerIdx = 0; layerIdx < numLayers; layerIdx++) {
         final double progress = layerIdx / math.max(1, numLayers - 1);
         final double baseHeightY = h * (0.58 + progress * 0.27);
@@ -1006,12 +1010,11 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
           0.22,
         )!;
 
-        final Paint layerPaint = Paint()
-          ..shader = ui.Gradient.linear(
-            Offset(w * 0.5, baseHeightY - amplitude),
-            Offset(w * 0.5, h),
-            [topLayerColor.withAlpha(235), bottomLayerColor],
-          );
+        layerPaint.shader = ui.Gradient.linear(
+          Offset(w * 0.5, baseHeightY - amplitude),
+          Offset(w * 0.5, h),
+          [topLayerColor.withAlpha(235), bottomLayerColor],
+        );
         canvas.drawPath(layerPath, layerPaint);
 
         // Warm sunlit mist between layers
@@ -1022,17 +1025,16 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
             w,
             h * 0.12,
           );
-          final Paint mistPaint = Paint()
-            ..shader = ui.Gradient.linear(
-              Offset(w * 0.5, mistRect.top),
-              Offset(w * 0.5, mistRect.bottom),
-              [
-                glowColor.withAlpha(0),
-                Colors.white.withAlpha(45),
-                glowColor.withAlpha(0),
-              ],
-              [0.0, 0.5, 1.0],
-            );
+          mistPaint.shader = ui.Gradient.linear(
+            Offset(w * 0.5, mistRect.top),
+            Offset(w * 0.5, mistRect.bottom),
+            [
+              glowColor.withAlpha(0),
+              Colors.white.withAlpha(45),
+              glowColor.withAlpha(0),
+            ],
+            [0.0, 0.5, 1.0],
+          );
           canvas.drawRect(mistRect, mistPaint);
         }
       }
@@ -1062,12 +1064,13 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
       // 7. Bokeh / atmospheric light particles
       final int bokehCount =
           ((sceneSpec["bokehCount"] as num?)?.toInt() ?? 22).clamp(0, 45);
+      final Paint bokehPaint = Paint();
       for (int i = 0; i < bokehCount; i++) {
         final double bx = rng.nextDouble() * w;
         final double by = rng.nextDouble() * h * 0.85;
         final double br = 2.5 + rng.nextDouble() * (w * 0.014);
         final int alpha = 55 + rng.nextInt(120);
-        final Paint bokehPaint = Paint()
+        bokehPaint
           ..color = Colors.white.withAlpha(alpha)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, br * 0.75);
         canvas.drawCircle(Offset(bx, by), br, bokehPaint);

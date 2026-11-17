@@ -39,3 +39,7 @@
 ## 2024-05-18 - [Avoid Multiple Inline Widget Builders for Static Checks]
 **Learning:** In Flutter, wrapping components in multiple inline `Builder` widgets to compute derived state flags (like `.contains("error")`) based on a single `setState` variable creates unnecessary widget tree depth and redundant string allocations on every single frame rebuild. This pattern scales poorly as the UI complexity increases.
 **Action:** Extract the derived boolean states directly to the State class, calculate them once during `setState`, and use them natively without intermediate `Builder` widgets to keep the widget tree shallow and fast.
+
+## 2026-11-17 - ValueNotifier for Font Color, Cached Background Labels & Canvas Paint Reuse
+**Learning:** Calling `setState` inside `ColorPicker.onColorChanged` triggers full-page rebuilds at pointer drag frequency, while rebuilding background dropdown items / `_formatBackgroundName` with an inline `RegExp` and calling `.toLowerCase()` across all 66 books per keystroke adds needless frame allocations. In `renderSceneToPng`, allocating new `Paint` and `ui.Gradient.radial` objects inside ray/wash/layer/bokeh loops wastes native Skia/shader allocations.
+**Action:** Move `fontColor` to a `ValueNotifier<Color>` wired to `VersePreviewCard.fontColorListenable` and the contrast banner; cache formatted background labels and `DropdownMenuItem`s in `_MyHomePageState`; pre-index lowercase book names when opening `_showBookSearchSheet`; and hoist reusable `Paint` objects out of `renderSceneToPng` loops.

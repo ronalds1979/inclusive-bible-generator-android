@@ -20,6 +20,7 @@ class VersePreviewCard extends StatefulWidget {
   final double fontSize;
   final double yOffset;
   final double backgroundDim;
+  final ValueListenable<Color>? fontColorListenable;
   final ValueListenable<double>? fontSizeListenable;
   final ValueListenable<double>? yOffsetListenable;
   final ValueListenable<double>? backgroundDimListenable;
@@ -40,6 +41,7 @@ class VersePreviewCard extends StatefulWidget {
     required this.fontSize,
     required this.yOffset,
     this.backgroundDim = 0.15,
+    this.fontColorListenable,
     this.fontSizeListenable,
     this.yOffsetListenable,
     this.backgroundDimListenable,
@@ -57,6 +59,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
 
   Listenable _buildTextAnimation() => Listenable.merge([
     widget.previewListenable,
+    ?widget.fontColorListenable,
     ?widget.fontSizeListenable,
     ?widget.yOffsetListenable,
   ]);
@@ -71,6 +74,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
   void didUpdateWidget(covariant VersePreviewCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewListenable != widget.previewListenable ||
+        oldWidget.fontColorListenable != widget.fontColorListenable ||
         oldWidget.fontSizeListenable != widget.fontSizeListenable ||
         oldWidget.yOffsetListenable != widget.yOffsetListenable) {
       _textAnimation = _buildTextAnimation();
@@ -144,6 +148,8 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
     final Widget textOverlay = AnimatedBuilder(
       animation: _textAnimation,
       builder: (context, child) {
+        final Color currentFontColor =
+            widget.fontColorListenable?.value ?? widget.fontColor;
         final double currentFontSize =
             widget.fontSizeListenable?.value ?? widget.fontSize;
         final double currentYOffset =
@@ -171,7 +177,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
                         verseText.isEmpty ? versePlaceholder : verseText,
                         textAlign: TextAlign.center,
                         style: VersePreviewCard._baseRobotoStyle.copyWith(
-                          color: widget.fontColor,
+                          color: currentFontColor,
                           fontSize: currentFontSize / 2,
                           fontWeight: FontWeight.bold,
                           shadows: const [
@@ -190,7 +196,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
                         refText.isEmpty ? refPlaceholder : refText,
                         textAlign: TextAlign.center,
                         style: VersePreviewCard._baseRobotoStyle.copyWith(
-                          color: widget.fontColor,
+                          color: currentFontColor,
                           fontSize: (currentFontSize * 0.66) / 2,
                           shadows: const [
                             Shadow(

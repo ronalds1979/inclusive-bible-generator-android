@@ -225,8 +225,12 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController verseController = TextEditingController();
   final TextEditingController geminiPromptController = TextEditingController();
 
+  static final RegExp _fileExtensionRegExp = RegExp(r'\.[^.]+$');
+
   String selectedBackground = "default.png";
   List<String> backgrounds = ["default.png"];
+  Map<String, String> _backgroundLabels = const {};
+  List<DropdownMenuItem<String>> _cachedBackgroundItems = const [];
   String? customImagePath;
   // ⚡ Bolt: Use ValueNotifiers for continuous slider/drag values to avoid full-tree rebuilds
   final ValueNotifier<double> _backgroundDimNotifier = ValueNotifier<double>(0.15);
@@ -239,7 +243,11 @@ class _MyHomePageState extends State<MyHomePage> {
   bool isGeminiBackground = false;
   bool _showExperimentalGemini = false;
 
-  Color fontColor = Colors.white;
+  final ValueNotifier<Color> _fontColorNotifier = ValueNotifier<Color>(
+    Colors.white,
+  );
+  Color get fontColor => _fontColorNotifier.value;
+  set fontColor(Color c) => _fontColorNotifier.value = c;
   final ValueNotifier<double> _fontSizeNotifier = ValueNotifier<double>(22.0);
   double get fontSize => _fontSizeNotifier.value;
   set fontSize(double v) => _fontSizeNotifier.value = v;
@@ -286,6 +294,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool isFetching = false;
   bool isGenerating = false;
   late final Listenable _previewListenable;
+  late final Listenable _contrastListenable;
 
   @override
   void initState() {
@@ -302,6 +311,10 @@ class _MyHomePageState extends State<MyHomePage> {
       referenceController,
       verseController,
     ]);
+    _contrastListenable = Listenable.merge([
+      _backgroundDimNotifier,
+      _fontColorNotifier,
+    ]);
     _initApp();
   }
 
@@ -310,6 +323,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _copyFeedbackTimer?.cancel();
     _workspaceScrollController.dispose();
     _backgroundDimNotifier.dispose();
+    _fontColorNotifier.dispose();
     _fontSizeNotifier.dispose();
     _yOffsetNotifier.dispose();
     referenceController.dispose();
@@ -421,6 +435,29 @@ class _MyHomePageState extends State<MyHomePage> {
     _fetchVerse();
   }
 
+  void _rebuildBackgroundCaches() {
+    final Map<String, String> labels = {};
+    final List<DropdownMenuItem<String>> items = [];
+    for (final bgName in backgrounds) {
+      final String label = _formatBackgroundName(bgName);
+      labels[bgName] = label;
+      items.add(DropdownMenuItem<String>(value: bgName, child: Text(label)));
+    }
+    _backgroundLabels = labels;
+    _cachedBackgroundItems = List<DropdownMenuItem<String>>.unmodifiable(items);
+  }
+
+  String _getBackgroundLabel(String bgName) {
+    return _backgroundLabels[bgName] ?? _formatBackgroundName(bgName);
+  }
+
+  List<DropdownMenuItem<String>> _getBackgroundDropdownItems() {
+    if (_cachedBackgroundItems.length != backgrounds.length) {
+      _rebuildBackgroundCaches();
+    }
+    return _cachedBackgroundItems;
+  }
+
   Future<void> _loadBackgrounds() async {
     try {
       final AssetManifest assetManifest =
@@ -443,6 +480,7 @@ class _MyHomePageState extends State<MyHomePage> {
       backgrounds = ["default.png"];
       selectedBackground = "default.png";
     }
+    _rebuildBackgroundCaches();
   }
 
   String getLangKey() {
@@ -988,6 +1026,10 @@ class _MyHomePageState extends State<MyHomePage> {
     List<String> canonicalBooks,
   ) async {
     final TextEditingController searchController = TextEditingController();
+    // ⚡ Bolt: Precompute lowercase book titles once per modal open instead of 66x per keystroke
+    final List<MapEntry<String, String>> indexedBooks = [
+      for (final b in canonicalBooks) MapEntry(b, b.toLowerCase()),
+    ];
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -998,9 +1040,10 @@ class _MyHomePageState extends State<MyHomePage> {
             final String query = searchController.text.trim().toLowerCase();
             final List<String> filtered = query.isEmpty
                 ? canonicalBooks
-                : canonicalBooks
-                    .where((b) => b.toLowerCase().contains(query))
-                    .toList();
+                : [
+                    for (final entry in indexedBooks)
+                      if (entry.value.contains(query)) entry.key,
+                  ];
 
             return DraggableScrollableSheet(
               initialChildSize: 0.7,
@@ -1516,7 +1559,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   String _formatBackgroundName(String fileName) {
-    final String base = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final String base = fileName.replaceAll(_fileExtensionRegExp, '');
     return base
         .split('_')
         .where((part) => part.isNotEmpty)
@@ -1539,14 +1582,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             DropdownButton<String>(
               value: selectedBackground,
-              items: backgrounds
-                  .map(
-                    (v) => DropdownMenuItem(
-                      value: v,
-                      child: Text(_formatBackgroundName(v)),
-                    ),
-                  )
-                  .toList(),
+              items: _getBackgroundDropdownItems(),
               onChanged: (v) => setState(() {
                 selectedBackground = v!;
                 customImagePath = null;
@@ -1574,7 +1610,7 @@ class _MyHomePageState extends State<MyHomePage> {
               final String bgName = backgrounds[index];
               final bool isSelected =
                   customImagePath == null && selectedBackground == bgName;
-              final String label = _formatBackgroundName(bgName);
+              final String label = _getBackgroundLabel(bgName);
               return Semantics(
                 button: true,
                 selected: isSelected,
@@ -1762,107 +1798,114 @@ class _MyHomePageState extends State<MyHomePage> {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            for (final entry in _presetColors)
-              Builder(
-                builder: (context) {
-                  final Color preset = entry.key;
-                  final bool isSelected =
-                      fontColor.toARGB32() == preset.toARGB32();
-                  final String colorName = generator.getLocaleString(
-                    lang,
-                    entry.value,
-                  );
-                  return Semantics(
-                    button: true,
-                    selected: isSelected,
-                    label: colorName,
-                    child: Tooltip(
-                      message: colorName,
-                      child: InkResponse(
-                        onTap: () => setState(() => fontColor = preset),
-                        radius: 24,
-                        child: SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: preset,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isSelected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.grey.shade400,
-                                  width: isSelected ? 3 : 1,
+        ValueListenableBuilder<Color>(
+          valueListenable: _fontColorNotifier,
+          builder: (context, currentColor, _) {
+            return Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final entry in _presetColors)
+                  Builder(
+                    builder: (context) {
+                      final Color preset = entry.key;
+                      final bool isSelected =
+                          currentColor.toARGB32() == preset.toARGB32();
+                      final String colorName = generator.getLocaleString(
+                        lang,
+                        entry.value,
+                      );
+                      return Semantics(
+                        button: true,
+                        selected: isSelected,
+                        label: colorName,
+                        child: Tooltip(
+                          message: colorName,
+                          child: InkResponse(
+                            onTap: () => _fontColorNotifier.value = preset,
+                            radius: 24,
+                            child: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: preset,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Theme.of(context).colorScheme.primary
+                                          : Colors.grey.shade400,
+                                      width: isSelected ? 3 : 1,
+                                    ),
+                                  ),
+                                  child: isSelected
+                                      ? Icon(
+                                          Icons.check,
+                                          size: 18,
+                                          color: preset.computeLuminance() > 0.5
+                                              ? Colors.black
+                                              : Colors.white,
+                                        )
+                                      : null,
                                 ),
                               ),
-                              child: isSelected
-                                  ? Icon(
-                                      Icons.check,
-                                      size: 18,
-                                      color: preset.computeLuminance() > 0.5
-                                          ? Colors.black
-                                          : Colors.white,
-                                    )
-                                  : null,
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(0, 48),
-                backgroundColor: fontColor,
-                foregroundColor: fontColor.computeLuminance() > 0.5
-                    ? Colors.black
-                    : Colors.white,
-              ),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: Text(
-                        generator.getLocaleString(lang, "pick_color_title"),
-                      ),
-                      content: SingleChildScrollView(
-                        child: ColorPicker(
-                          pickerColor: fontColor,
-                          onColorChanged: (c) => setState(() => fontColor = c),
-                        ),
-                      ),
-                      actions: <Widget>[
-                        ElevatedButton(
-                          child: Text(
-                            generator.getLocaleString(lang, "got_it_btn"),
+                      );
+                    },
+                  ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    backgroundColor: currentColor,
+                    foregroundColor: currentColor.computeLuminance() > 0.5
+                        ? Colors.black
+                        : Colors.white,
+                  ),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: Text(
+                            generator.getLocaleString(lang, "pick_color_title"),
                           ),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
+                          content: SingleChildScrollView(
+                            child: ColorPicker(
+                              pickerColor: currentColor,
+                              onColorChanged: (c) =>
+                                  _fontColorNotifier.value = c,
+                            ),
+                          ),
+                          actions: <Widget>[
+                            ElevatedButton(
+                              child: Text(
+                                generator.getLocaleString(lang, "got_it_btn"),
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ],
+                        );
+                      },
                     );
                   },
-                );
-              },
-              icon: const Icon(Icons.color_lens, size: 18),
-              label: Text(generator.getLocaleString(lang, "select_color_btn")),
-            ),
-          ],
+                  icon: const Icon(Icons.color_lens, size: 18),
+                  label: Text(generator.getLocaleString(lang, "select_color_btn")),
+                ),
+              ],
+            );
+          },
         ),
-        ValueListenableBuilder<double>(
-          valueListenable: _backgroundDimNotifier,
-          builder: (context, dimValue, _) {
-            final double luminance = fontColor.computeLuminance();
+        AnimatedBuilder(
+          animation: _contrastListenable,
+          builder: (context, _) {
+            final double dimValue = _backgroundDimNotifier.value;
+            final double luminance = _fontColorNotifier.value.computeLuminance();
             final bool isDarkPreset =
                 customImagePath == null &&
                 (selectedBackground == "minimal_slate.png" ||
@@ -2488,10 +2531,11 @@ class _MyHomePageState extends State<MyHomePage> {
               previewListenable: _previewListenable,
               verseController: verseController,
               referenceController: referenceController,
-              fontColor: fontColor,
+              fontColor: _fontColorNotifier.value,
               fontSize: _fontSizeNotifier.value,
               yOffset: _yOffsetNotifier.value,
               backgroundDim: _backgroundDimNotifier.value,
+              fontColorListenable: _fontColorNotifier,
               fontSizeListenable: _fontSizeNotifier,
               yOffsetListenable: _yOffsetNotifier,
               backgroundDimListenable: _backgroundDimNotifier,
