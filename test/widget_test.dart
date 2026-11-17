@@ -8,6 +8,7 @@ import 'package:app/generator.dart';
 import 'package:app/widgets/gemini_auth_dialog.dart';
 import 'package:app/widgets/gemini_background_card.dart';
 import 'package:app/widgets/verse_preview_card.dart';
+import 'package:app/widgets/youversion_auth_dialog.dart';
 
 void main() {
   setUpAll(() {
@@ -461,5 +462,107 @@ void main() {
 
     expect(verseRect.bottom, lessThan(referenceRect.top));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('YouVersionAuthDialog provides toggle tooltip and saves trimmed key', (
+    WidgetTester tester,
+  ) async {
+    final generator = Generator();
+    generator.locales = {
+      "en": {
+        "yv_dialog_title": "YouVersion Platform API",
+        "yv_dialog_hint": "Enter your key",
+        "yv_open_portal_btn": "Open Portal",
+        "gemini_paste_clipboard_btn": "Paste Key",
+        "yv_api_key_label": "YouVersion App Key",
+        "show_api_key_tooltip": "Show API key",
+        "hide_api_key_tooltip": "Hide API key",
+        "gemini_save_btn": "Save & Connect",
+        "gemini_cancel_btn": "Close",
+      },
+    };
+    String? savedKey;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: YouVersionAuthDialog(
+            lang: "en",
+            generator: generator,
+            initialApiKey: null,
+            onSave: (key) async {
+              savedKey = key;
+            },
+            onDisconnect: () async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip("Show API key"), findsOneWidget);
+    await tester.tap(find.byTooltip("Show API key"));
+    await tester.pump();
+    expect(find.byTooltip("Hide API key"), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), "  yv-test-key-123  ");
+    await tester.pump();
+    await tester.tap(find.text("Save & Connect"));
+    await tester.pumpAndSettle();
+
+    expect(savedKey, equals("yv-test-key-123"));
+  });
+
+  testWidgets('VersePreviewCard double-tap resets vertical offset to zero', (
+    WidgetTester tester,
+  ) async {
+    final generator = Generator();
+    generator.locales = {
+      "en": {
+        "preview_verse_placeholder": "Preview Verse",
+        "reference_placeholder": "Reference",
+      },
+    };
+    final verseController = TextEditingController(text: "God is love.");
+    final referenceController = TextEditingController(text: "1 John 4:8");
+    double offset = 120.0;
+    addTearDown(() {
+      verseController.dispose();
+      referenceController.dispose();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: VersePreviewCard(
+            repaintKey: GlobalKey(),
+            aspectRatioStr: "1:1",
+            customImagePath: null,
+            selectedBackground: "default.png",
+            previewListenable: Listenable.merge([
+              verseController,
+              referenceController,
+            ]),
+            verseController: verseController,
+            referenceController: referenceController,
+            fontColor: Colors.white,
+            fontSize: 40,
+            yOffset: offset,
+            onYOffsetChanged: (updated) {
+              offset = updated;
+            },
+            lang: "en",
+            generator: generator,
+          ),
+        ),
+      ),
+    );
+
+    final Finder cardFinder = find.byType(VersePreviewCard);
+    await tester.tap(cardFinder);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(cardFinder);
+    await tester.pumpAndSettle();
+
+    expect(offset, equals(0.0));
   });
 }

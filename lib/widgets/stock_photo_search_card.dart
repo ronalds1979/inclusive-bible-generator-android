@@ -35,6 +35,7 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
   bool _hasSearched = false;
   String? _errorMessage;
   int? _downloadingIndex;
+  int? _selectedIndex;
 
   @override
   void dispose() {
@@ -53,6 +54,7 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
       _isSearching = true;
       _errorMessage = null;
       _hasSearched = true;
+      _selectedIndex = null;
     });
 
     try {
@@ -89,6 +91,9 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
         _results[index],
       );
       if (!mounted) return;
+      setState(() {
+        _selectedIndex = index;
+      });
       widget.onPhotoSelected(path);
     } catch (_) {
       if (!mounted) return;
@@ -250,56 +255,91 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                   itemBuilder: (context, index) {
                     final StockPhotoResult item = _results[index];
                     final bool isBusy = _downloadingIndex == index;
+                    final bool isSelected = _selectedIndex == index;
                     return Semantics(
                       button: true,
+                      selected: isSelected,
                       label: item.title,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: _downloadingIndex != null
-                            ? null
-                            : () => _selectPhoto(index),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            ClipRRect(
+                      child: Tooltip(
+                        message: item.title,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: _downloadingIndex != null
+                              ? null
+                              : () => _selectPhoto(index),
+                          child: Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                item.thumbUrl,
-                                width: 76,
-                                height: 76,
-                                // ⚡ Bolt: Decode 1080px thumbnails at 3x display size instead of full resolution
-                                cacheWidth: 228,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(
-                                  width: 76,
-                                  height: 76,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainerHighest,
-                                  child: const Icon(Icons.broken_image),
-                                ),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.transparent,
+                                width: 3,
                               ),
                             ),
-                            if (isBusy)
-                              Container(
-                                width: 76,
-                                height: 76,
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(5),
+                                    child: Image.network(
+                                      item.thumbUrl,
+                                      // ⚡ Bolt: Decode 1080px thumbnails at 3x display size instead of full resolution
+                                      cacheWidth: 228,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => Container(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.surfaceContainerHighest,
+                                        child: const Icon(Icons.broken_image),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
+                                if (isSelected && !isBusy)
+                                  Align(
+                                    alignment: Alignment.topRight,
+                                    child: Container(
+                                      margin: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: Icon(
+                                        Icons.check,
+                                        size: 14,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                if (isBusy)
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: const Center(
+                                      child: SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     );

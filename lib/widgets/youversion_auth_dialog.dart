@@ -88,6 +88,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                 onPressed: _openYouVersionPortal,
                 icon: const Icon(Icons.open_in_new, size: 18),
                 label: Text(
@@ -99,6 +100,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
                 onPressed: _pasteFromClipboard,
                 icon: const Icon(Icons.content_paste, size: 18),
                 label: Text(
@@ -121,6 +123,10 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                   icon: Icon(
                     _obscure ? Icons.visibility : Icons.visibility_off,
                   ),
+                  tooltip: generator.getLocaleString(
+                    lang,
+                    _obscure ? "show_api_key_tooltip" : "hide_api_key_tooltip",
+                  ),
                   onPressed: () {
                     setState(() {
                       _obscure = !_obscure;
@@ -135,6 +141,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
       actions: [
         if (hasExistingKey)
           TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
             onPressed: () async {
               await widget.onDisconnect();
               if (context.mounted) {
@@ -146,6 +153,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
             ),
           ),
         TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
@@ -154,6 +162,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
           builder: (context, value, child) {
             final bool canSave = value.text.trim().isNotEmpty;
             return ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
               icon: const Icon(Icons.check),
               label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
               onPressed: canSave

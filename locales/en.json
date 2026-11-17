@@ -115,5 +115,10 @@
   "preview_semantic_label": "Verse card preview ({ratio})",
   "audio_transcript_label": "Audio Transcript",
   "audio_playing_caption": "Playing Audio (Captions)",
-  "selected_badge_label": "Selected"
+  "selected_badge_label": "Selected",
+  "book_search_empty": "No matching books found.",
+  "contrast_warning_msg": "Low text contrast on bright backgrounds. Consider increasing Background Dim.",
+  "contrast_fix_btn": "Auto-Dim",
+  "yv_key_saved_msg": "YouVersion API key connected!",
+  "yv_key_removed_msg": "YouVersion API key disconnected."
 }

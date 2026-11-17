@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../generator.dart';
 
@@ -237,6 +238,10 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
     final Widget interactiveCard = widget.onYOffsetChanged == null
         ? responsiveCard
         : GestureDetector(
+            onDoubleTap: () {
+              HapticFeedback.lightImpact();
+              widget.onYOffsetChanged!(0.0);
+            },
             onVerticalDragUpdate: (details) {
               final double baseOffset =
                   widget.yOffsetListenable?.value ?? widget.yOffset;

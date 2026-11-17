@@ -21,6 +21,7 @@ import 'widgets/gemini_auth_dialog.dart';
 import 'widgets/gemini_background_card.dart';
 import 'widgets/stock_photo_search_card.dart';
 import 'widgets/verse_preview_card.dart';
+import 'widgets/youversion_auth_dialog.dart';
 
 String resolveAppLanguageForLocale(Locale locale) {
   switch (locale.languageCode.toLowerCase()) {
@@ -742,6 +743,43 @@ class _MyHomePageState extends State<MyHomePage> {
     return connected ?? false;
   }
 
+  Future<void> _showYouVersionAuthDialog() async {
+    final String lang = getLangKey();
+    await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return YouVersionAuthDialog(
+          lang: lang,
+          generator: generator,
+          initialApiKey: youVersionApiKey,
+          onSave: (String entered) async {
+            await GetBibleAPI.saveYouVersionApiKey(entered);
+            if (!mounted) return;
+            setState(() {
+              youVersionApiKey = entered;
+              _updateStatus(
+                generator.getLocaleString(lang, "yv_key_saved_msg"),
+                forceSuccess: true,
+              );
+            });
+            await _loadBibleVersions(reloadVotd: false);
+          },
+          onDisconnect: () async {
+            await GetBibleAPI.saveYouVersionApiKey("");
+            if (!mounted) return;
+            setState(() {
+              youVersionApiKey = GetBibleAPI.defaultYouVersionApiKey;
+              _updateStatus(
+                generator.getLocaleString(lang, "yv_key_removed_msg"),
+              );
+            });
+            await _loadBibleVersions(reloadVotd: false);
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _generateGeminiBackground() async {
     final String verse = verseController.text.trim();
     final String reference = referenceController.text.trim();
@@ -1002,42 +1040,93 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                       const SizedBox(height: 12),
                       Expanded(
-                        child: ListView.builder(
-                          controller: scrollController,
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            final String book = filtered[index];
-                            final bool isSelected = book == selectedBook;
-                            return ListTile(
-                              title: Text(
-                                book,
-                                style: TextStyle(
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
+                        child: filtered.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off,
+                                        size: 40,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        generator.getLocaleString(
+                                          lang,
+                                          "book_search_empty",
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
+                                      ),
+                                      if (query.isNotEmpty) ...[
+                                        const SizedBox(height: 12),
+                                        OutlinedButton.icon(
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(0, 48),
+                                          ),
+                                          onPressed: () {
+                                            searchController.clear();
+                                            setSheetState(() {});
+                                          },
+                                          icon: const Icon(
+                                            Icons.clear,
+                                            size: 18,
+                                          ),
+                                          label: Text(
+                                            generator.getLocaleString(
+                                              lang,
+                                              "clear_btn",
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
+                              )
+                            : ListView.builder(
+                                controller: scrollController,
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final String book = filtered[index];
+                                  final bool isSelected = book == selectedBook;
+                                  return ListTile(
+                                    title: Text(
+                                      book,
+                                      style: TextStyle(
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                    trailing: isSelected
+                                        ? Icon(
+                                            Icons.check,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          )
+                                        : null,
+                                    onTap: () {
+                                      setState(() {
+                                        selectedBook = book;
+                                        selectedChapter = 1;
+                                        selectedVerse = 1;
+                                        selectedEndVerse = null;
+                                        _onQuickReferenceChanged();
+                                      });
+                                      Navigator.of(sheetContext).pop();
+                                    },
+                                  );
+                                },
                               ),
-                              trailing: isSelected
-                                  ? Icon(
-                                      Icons.check,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    )
-                                  : null,
-                              onTap: () {
-                                setState(() {
-                                  selectedBook = book;
-                                  selectedChapter = 1;
-                                  selectedVerse = 1;
-                                  selectedEndVerse = null;
-                                  _onQuickReferenceChanged();
-                                });
-                                Navigator.of(sheetContext).pop();
-                              },
-                            );
-                          },
-                        ),
                       ),
                     ],
                   ),
@@ -1142,6 +1231,24 @@ class _MyHomePageState extends State<MyHomePage> {
                   }
                 },
               ),
+            ),
+            IconButton(
+              tooltip: generator.getLocaleString(
+                lang,
+                youVersionApiKey.isNotEmpty
+                    ? "yv_connected_btn"
+                    : "yv_connect_btn",
+              ),
+              icon: Icon(
+                youVersionApiKey.isNotEmpty
+                    ? Icons.verified_user
+                    : Icons.vpn_key_outlined,
+                size: 20,
+                color: youVersionApiKey.isNotEmpty
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+              onPressed: _showYouVersionAuthDialog,
             ),
           ],
         ),
@@ -1751,6 +1858,77 @@ class _MyHomePageState extends State<MyHomePage> {
               label: Text(generator.getLocaleString(lang, "select_color_btn")),
             ),
           ],
+        ),
+        ValueListenableBuilder<double>(
+          valueListenable: _backgroundDimNotifier,
+          builder: (context, dimValue, _) {
+            final double luminance = fontColor.computeLuminance();
+            final bool isDarkPreset =
+                customImagePath == null &&
+                (selectedBackground == "minimal_slate.png" ||
+                    selectedBackground == "starry_night.png");
+            final bool lowContrast =
+                (luminance > 0.7 && dimValue < 0.25 && !isDarkPreset) ||
+                (luminance < 0.15 && dimValue >= 0.4);
+            if (!lowContrast) {
+              return const SizedBox.shrink();
+            }
+            return Padding(
+              padding: const EdgeInsets.only(top: 10.0),
+              child: Card(
+                margin: EdgeInsets.zero,
+                color: Theme.of(context).colorScheme.tertiaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12.0,
+                    vertical: 6.0,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.contrast,
+                        size: 20,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onTertiaryContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          generator.getLocaleString(
+                            lang,
+                            "contrast_warning_msg",
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onTertiaryContainer,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onTertiaryContainer,
+                        ),
+                        onPressed: () {
+                          _backgroundDimNotifier.value =
+                              luminance > 0.7 ? 0.35 : 0.0;
+                        },
+                        child: Text(
+                          generator.getLocaleString(lang, "contrast_fix_btn"),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 12),
         ValueListenableBuilder<double>(
