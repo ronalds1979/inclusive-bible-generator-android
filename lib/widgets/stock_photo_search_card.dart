@@ -245,21 +245,25 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
               const SizedBox(height: 8),
               Semantics(
                 liveRegion: true,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.image_search_outlined,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        generator.getLocaleString(lang, 'stock_search_empty'),
-                        style: Theme.of(context).textTheme.bodySmall,
+                child: MergeSemantics(
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(
+                        child: Icon(
+                          Icons.image_search_outlined,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          generator.getLocaleString(lang, 'stock_search_empty'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ] else if (_results.isNotEmpty) ...[
@@ -306,13 +310,26 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                                 Positioned.fill(
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(5),
-                                    child: Image.network(
-                                      item.thumbUrl,
-                                      // ⚡ Bolt: Decode 1080px thumbnails at 3x display size instead of full resolution
-                                      cacheWidth: 228,
-                                      fit: BoxFit.cover,
-                                      loadingBuilder: (context, child, progress) {
-                                        if (progress == null) return child;
+                                    child: FutureBuilder<Uint8List>(
+                                      future: widget.stockPhotoService
+                                          .fetchThumbnailBytes(item.thumbUrl),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.hasData) {
+                                          return Image.memory(
+                                            snapshot.data!,
+                                            // ⚡ Bolt: Decode 1080px thumbnails at 3x display size instead of full resolution
+                                            cacheWidth: 228,
+                                            fit: BoxFit.cover,
+                                          );
+                                        }
+                                        if (snapshot.hasError) {
+                                          return Container(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.surfaceContainerHighest,
+                                            child: const Icon(Icons.broken_image),
+                                          );
+                                        }
                                         return Container(
                                           color: Theme.of(
                                             context,
@@ -328,12 +345,6 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                                           ),
                                         );
                                       },
-                                      errorBuilder: (_, _, _) => Container(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.surfaceContainerHighest,
-                                        child: const Icon(Icons.broken_image),
-                                      ),
                                     ),
                                   ),
                                 ),

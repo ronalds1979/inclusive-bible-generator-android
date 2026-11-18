@@ -1292,15 +1292,20 @@ class _MyHomePageState extends State<MyHomePage> {
           spacing: 10,
           runSpacing: 8,
           children: [
-            Text(
-              generator.getLocaleString(lang, "bible_version_label"),
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            ExcludeSemantics(
+              child: Text(
+                generator.getLocaleString(lang, "bible_version_label"),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 300),
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: selectedBibleVersion,
+            Semantics(
+              label: generator.getLocaleString(lang, "bible_version_label"),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48, maxWidth: 300),
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  itemHeight: null,
+                  value: selectedBibleVersion,
                 items: bibleVersions
                     .map(
                       (v) => DropdownMenuItem(
@@ -1318,6 +1323,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   }
                 },
               ),
+            ),
             ),
             IconButton(
               tooltip: generator.getLocaleString(
@@ -1381,21 +1387,25 @@ class _MyHomePageState extends State<MyHomePage> {
                       children: [
                         Semantics(
                           label: generator.getLocaleString(lang, "book_label"),
-                          child: DropdownButton<String>(
-                            value: selectedBook,
-                            items: _getBookDropdownItems(
-                              bibleLang,
-                              canonicalBooks,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            child: DropdownButton<String>(
+                              itemHeight: null,
+                              value: selectedBook,
+                              items: _getBookDropdownItems(
+                                bibleLang,
+                                canonicalBooks,
+                              ),
+                              onChanged: (b) {
+                                setState(() {
+                                  selectedBook = b;
+                                  selectedChapter = 1;
+                                  selectedVerse = 1;
+                                  selectedEndVerse = null;
+                                  _onQuickReferenceChanged();
+                                });
+                              },
                             ),
-                            onChanged: (b) {
-                              setState(() {
-                                selectedBook = b;
-                                selectedChapter = 1;
-                                selectedVerse = 1;
-                                selectedEndVerse = null;
-                                _onQuickReferenceChanged();
-                              });
-                            },
                           ),
                         ),
                         IconButton(
@@ -1412,29 +1422,35 @@ class _MyHomePageState extends State<MyHomePage> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          "${generator.getLocaleString(lang, "chapter_label")}: ",
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ExcludeSemantics(
+                          child: Text(
+                            "${generator.getLocaleString(lang, "chapter_label")}: ",
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                         Semantics(
                           label: generator.getLocaleString(
                             lang,
                             "chapter_label",
                           ),
-                          child: DropdownButton<int>(
-                            value: selectedChapter,
-                            menuMaxHeight: 320,
-                            items: _getChapterDropdownItems(maxChapters),
-                            onChanged: (ch) {
-                              if (ch != null) {
-                                setState(() {
-                                  selectedChapter = ch;
-                                  selectedVerse = 1;
-                                  selectedEndVerse = null;
-                                  _onQuickReferenceChanged();
-                                });
-                              }
-                            },
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            child: DropdownButton<int>(
+                              itemHeight: null,
+                              value: selectedChapter,
+                              menuMaxHeight: 320,
+                              items: _getChapterDropdownItems(maxChapters),
+                              onChanged: (ch) {
+                                if (ch != null) {
+                                  setState(() {
+                                    selectedChapter = ch;
+                                    selectedVerse = 1;
+                                    selectedEndVerse = null;
+                                    _onQuickReferenceChanged();
+                                  });
+                                }
+                              },
+                            ),
                           ),
                         ),
                       ],
@@ -1442,31 +1458,37 @@ class _MyHomePageState extends State<MyHomePage> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          "${generator.getLocaleString(lang, "verse_num_label")}: ",
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ExcludeSemantics(
+                          child: Text(
+                            "${generator.getLocaleString(lang, "verse_num_label")}: ",
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                         Semantics(
                           label: generator.getLocaleString(
                             lang,
                             "verse_num_label",
                           ),
-                          child: DropdownButton<int>(
-                            value: selectedVerse,
-                            menuMaxHeight: 320,
-                            items: _getVerseDropdownItems(maxVerses),
-                            onChanged: (v) {
-                              if (v != null) {
-                                setState(() {
-                                  selectedVerse = v;
-                                  if (selectedEndVerse != null &&
-                                      selectedEndVerse! <= v) {
-                                    selectedEndVerse = null;
-                                  }
-                                  _onQuickReferenceChanged();
-                                });
-                              }
-                            },
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            child: DropdownButton<int>(
+                              itemHeight: null,
+                              value: selectedVerse,
+                              menuMaxHeight: 320,
+                              items: _getVerseDropdownItems(maxVerses),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() {
+                                    selectedVerse = v;
+                                    if (selectedEndVerse != null &&
+                                        selectedEndVerse! <= v) {
+                                      selectedEndVerse = null;
+                                    }
+                                    _onQuickReferenceChanged();
+                                  });
+                                }
+                              },
+                            ),
                           ),
                         ),
                       ],
@@ -1475,17 +1497,22 @@ class _MyHomePageState extends State<MyHomePage> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            "${generator.getLocaleString(lang, "verse_end_label")}: ",
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ExcludeSemantics(
+                            child: Text(
+                              "${generator.getLocaleString(lang, "verse_end_label")}: ",
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
                           ),
                           Semantics(
                             label: generator.getLocaleString(
                               lang,
                               "verse_end_label",
                             ),
-                            child: DropdownButton<int?>(
-                              value: selectedEndVerse,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 48),
+                              child: DropdownButton<int?>(
+                                itemHeight: null,
+                                value: selectedEndVerse,
                               menuMaxHeight: 320,
                               items: _getEndVerseDropdownItems(
                                 lang,
@@ -1499,6 +1526,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 });
                               },
                             ),
+                          ),
                           ),
                         ],
                       ),
@@ -1626,26 +1654,35 @@ class _MyHomePageState extends State<MyHomePage> {
           spacing: 10,
           runSpacing: 10,
           children: [
-            Text(
-              generator.getLocaleString(lang, "background_label"),
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            ExcludeSemantics(
+              child: Text(
+                generator.getLocaleString(lang, "background_label"),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
-            DropdownButton<String>(
-              value: customImagePath == null ? selectedBackground : null,
-              hint: Text(
-                generator.getLocaleString(
-                  lang,
-                  isGeminiBackground
-                      ? "gemini_bg_active_label"
-                      : "custom_bg_active_label",
+            Semantics(
+              label: generator.getLocaleString(lang, "background_label"),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: DropdownButton<String>(
+                  itemHeight: null,
+                  value: customImagePath == null ? selectedBackground : null,
+                  hint: Text(
+                    generator.getLocaleString(
+                      lang,
+                      isGeminiBackground
+                          ? "gemini_bg_active_label"
+                          : "custom_bg_active_label",
+                    ),
+                  ),
+                  items: _getBackgroundDropdownItems(),
+                  onChanged: (v) => setState(() {
+                    selectedBackground = v!;
+                    customImagePath = null;
+                    isGeminiBackground = false;
+                  }),
                 ),
               ),
-              items: _getBackgroundDropdownItems(),
-              onChanged: (v) => setState(() {
-                selectedBackground = v!;
-                customImagePath = null;
-                isGeminiBackground = false;
-              }),
             ),
             FilledButton.icon(
               style: FilledButton.styleFrom(
@@ -1811,7 +1848,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   max: 0.75,
                   divisions: 15,
                   label: "${(dimValue * 100).round()}%",
-                  semanticFormatterCallback: (v) => "${(v * 100).round()}%",
+                  semanticFormatterCallback: (v) =>
+                      "${generator.getLocaleString(lang, "background_dim_label")}: ${(v * 100).round()}%",
                   onChanged: (v) => _backgroundDimNotifier.value = v,
                 ),
               ],
@@ -2193,7 +2231,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   divisions: 800,
                   label: offsetValue.round().toString(),
                   semanticFormatterCallback: (v) =>
-                      "${generator.getLocaleString(lang, "font_size_label")}: ${v.round()}",
+                      "${generator.getLocaleString(lang, "y_offset_label")}: ${v.round()}",
                   onChanged: (v) => _yOffsetNotifier.value = v,
                 ),
               ],
@@ -2575,9 +2613,11 @@ class _MyHomePageState extends State<MyHomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LinearProgressIndicator(
-            value: (_selectedTabIndex + 1) / _stepTabKeys.length,
-            minHeight: 4,
+          ExcludeSemantics(
+            child: LinearProgressIndicator(
+              value: (_selectedTabIndex + 1) / _stepTabKeys.length,
+              minHeight: 4,
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
@@ -2680,8 +2720,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             statusMessage,
                             maxLines: 6,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: isError
                                   ? Theme.of(context).colorScheme.error
                                   : (isSuccess
@@ -2695,7 +2734,6 @@ class _MyHomePageState extends State<MyHomePage> {
                         IconButton(
                           icon: const Icon(Icons.close, size: 18),
                           tooltip: generator.getLocaleString(lang, "clear_btn"),
-                          visualDensity: VisualDensity.compact,
                           onPressed: () {
                             setState(() {
                               statusMessage = "";
@@ -2781,9 +2819,11 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          generator.getLocaleString(lang, "drag_hint"),
-          style: Theme.of(context).textTheme.labelSmall,
+        ExcludeSemantics(
+          child: Text(
+            generator.getLocaleString(lang, "drag_hint"),
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         ),
       ],
     );
