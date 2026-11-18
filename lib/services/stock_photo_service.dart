@@ -157,8 +157,32 @@ class StockPhotoService {
   }
 
   /// Downloads [photo] to a temporary file and returns its local path.
+  static const int maxThumbnailBytes = 5 * 1024 * 1024;
+
+  Future<Uint8List> fetchThumbnailBytes(String thumbUrl) {
+    return _fetchValidatedImageBytes(thumbUrl, maxBytes: maxThumbnailBytes);
+  }
+
   Future<String> downloadPhotoToTemp(StockPhotoResult photo) async {
-    Uri? currentUri = parseAllowedWikimediaUri(photo.fullUrl);
+    final Uint8List bytes = await _fetchValidatedImageBytes(
+      photo.fullUrl,
+      maxBytes: maxDownloadBytes,
+    );
+
+    final Directory tempDir = await getTemporaryDirectory();
+    await pruneTransientFiles(tempDir, prefix: 'stock_bg_', suffix: '.jpg');
+    final File outFile = File(
+      '${tempDir.path}/stock_bg_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+    await outFile.writeAsBytes(bytes, flush: true);
+    return outFile.path;
+  }
+
+  Future<Uint8List> _fetchValidatedImageBytes(
+    String url, {
+    required int maxBytes,
+  }) async {
+    Uri? currentUri = parseAllowedWikimediaUri(url);
     if (currentUri == null) {
       throw const HttpException('Disallowed stock photo URL');
     }
@@ -201,17 +225,17 @@ class StockPhotoService {
     }
 
     final int? contentLength = streamedResponse.contentLength;
-    if (contentLength != null && contentLength > maxDownloadBytes) {
+    if (contentLength != null && contentLength > maxBytes) {
       await streamedResponse.stream.drain<void>().catchError((_) {});
-      throw const HttpException('Stock photo exceeds 20 MB size limit');
+      throw const HttpException('Stock photo exceeds size limit');
     }
 
     final BytesBuilder builder = BytesBuilder(copy: false);
     await for (final List<int> chunk in streamedResponse.stream.timeout(
       const Duration(seconds: 15),
     )) {
-      if (builder.length + chunk.length > maxDownloadBytes) {
-        throw const HttpException('Stock photo exceeds 20 MB size limit');
+      if (builder.length + chunk.length > maxBytes) {
+        throw const HttpException('Stock photo exceeds size limit');
       }
       builder.add(chunk);
     }
@@ -233,12 +257,6 @@ class StockPhotoService {
       throw const HttpException('Downloaded file is not a valid JPEG or PNG image');
     }
 
-    final Directory tempDir = await getTemporaryDirectory();
-    await pruneTransientFiles(tempDir, prefix: 'stock_bg_', suffix: '.jpg');
-    final File outFile = File(
-      '${tempDir.path}/stock_bg_${DateTime.now().millisecondsSinceEpoch}.jpg',
-    );
-    await outFile.writeAsBytes(bytes, flush: true);
-    return outFile.path;
+    return bytes;
   }
 }

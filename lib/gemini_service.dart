@@ -47,6 +47,16 @@ class GeminiService {
   @visibleForTesting
   static void clearZeroQuotaCacheForTest() => _zeroQuotaImageKeys.clear();
 
+  static String _keyFingerprint(String apiKey) {
+    int h1 = 0x811c9dc5;
+    int h2 = 0x01000193;
+    for (final int unit in apiKey.codeUnits) {
+      h1 = ((h1 ^ unit) * 0x01000193) & 0xFFFFFFFF;
+      h2 = ((h2 ^ (unit + 31)) * 0x85ebca6b) & 0xFFFFFFFF;
+    }
+    return "${h1.toRadixString(16).padLeft(8, '0')}${h2.toRadixString(16).padLeft(8, '0')}";
+  }
+
   static const List<String> styleKeys = [
     "style_nature",
     "style_watercolor",
@@ -455,7 +465,7 @@ class GeminiService {
 
     // ⚡ Bolt: If this key already hit Free-Tier 0-quota on raster image models,
     // skip the 3 guaranteed-429 round-trips and go straight to Free-Tier scene synthesis.
-    if (_zeroQuotaImageKeys.contains(trimmedKey)) {
+    if (_zeroQuotaImageKeys.contains(_keyFingerprint(trimmedKey))) {
       final sceneBytes = await _tryFreeTierScene(
         apiKey: trimmedKey,
         verse: verse.trim(),
@@ -505,7 +515,7 @@ class GeminiService {
         lastError = extractErrorMessage(response.statusCode, response.body);
         if (kDebugMode) {
           debugPrint(
-            "Gemini primary API error (${response.statusCode}): ${response.body}",
+            "Gemini primary API error (${response.statusCode}): $lastError",
           );
         }
 
@@ -599,7 +609,7 @@ class GeminiService {
           }
           if (kDebugMode) {
             debugPrint(
-              "Gemini image fallback ($model) status (${response.statusCode}): ${response.body}",
+              "Gemini image fallback ($model) status (${response.statusCode}): ${extractErrorMessage(response.statusCode, response.body)}",
             );
           }
         }
@@ -615,7 +625,7 @@ class GeminiService {
       if (_zeroQuotaImageKeys.length >= _maxZeroQuotaCacheSize) {
         _zeroQuotaImageKeys.clear();
       }
-      _zeroQuotaImageKeys.add(apiKey);
+      _zeroQuotaImageKeys.add(_keyFingerprint(apiKey));
     }
 
     return _tryFreeTierScene(
@@ -718,7 +728,7 @@ IMPORTANT: Choose BRIGHT, WARM, VIBRANT, DAYLIGHT or GOLDEN-HOUR colors (such as
           }
           if (kDebugMode) {
             debugPrint(
-              "Gemini Free-Tier Scene ($textModel) error (${response.statusCode}): ${response.body}",
+              "Gemini Free-Tier Scene ($textModel) error (${response.statusCode}): ${extractErrorMessage(response.statusCode, response.body)}",
             );
           }
         }

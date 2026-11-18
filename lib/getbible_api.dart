@@ -416,6 +416,16 @@ class GetBibleAPI {
     }
   }
 
+  static String _keyFingerprint(String apiKey) {
+    int h1 = 0x811c9dc5;
+    int h2 = 0x01000193;
+    for (final int unit in apiKey.codeUnits) {
+      h1 = ((h1 ^ unit) * 0x01000193) & 0xFFFFFFFF;
+      h2 = ((h2 ^ (unit + 31)) * 0x85ebca6b) & 0xFFFFFFFF;
+    }
+    return "${h1.toRadixString(16).padLeft(8, '0')}${h2.toRadixString(16).padLeft(8, '0')}";
+  }
+
   /// Queries `GET https://api.youversion.com/v1/bibles?language_ranges[]={lang}`
   /// using the `X-YVP-App-Key` header.
   static Future<List<Map<String, String>>> fetchYouVersionBibles({
@@ -426,7 +436,7 @@ class GetBibleAPI {
     final String? safeApiKey = normalizeYouVersionApiKey(apiKey);
     if (safeApiKey == null) return [];
 
-    final String cacheKey = "$langPrefix:$safeApiKey";
+    final String cacheKey = "$langPrefix:${_keyFingerprint(safeApiKey)}";
     if (httpClient == null) {
       final List<Map<String, String>>? cached = _youVersionBiblesCache[cacheKey];
       if (cached != null) return cached;
@@ -485,7 +495,7 @@ class GetBibleAPI {
       } else {
         if (kDebugMode) {
           debugPrint(
-            "YouVersion /v1/bibles status (${response.statusCode}): ${response.body}",
+            "YouVersion /v1/bibles status (${response.statusCode})",
           );
         }
       }
@@ -733,7 +743,7 @@ class GetBibleAPI {
       } else {
         if (kDebugMode) {
           debugPrint(
-            "YouVersion passage error (${response.statusCode}): ${response.body}",
+            "YouVersion passage error (${response.statusCode})",
           );
         }
       }
