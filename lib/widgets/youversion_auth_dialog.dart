@@ -29,6 +29,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
   bool _obscure = true;
   bool _pastedFromClipboard = false;
   bool _clipboardEmpty = false;
+  bool _isBusy = false;
 
   @override
   void initState() {
@@ -190,18 +191,46 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                   "yv_api_key_label",
                 ),
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  tooltip: generator.getLocaleString(
-                    lang,
-                    _obscure ? "show_api_key_tooltip" : "hide_api_key_tooltip",
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _obscure = !_obscure;
-                    });
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _keyController,
+                  builder: (context, value, _) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (value.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            tooltip: () {
+                              final label = generator.getLocaleString(
+                                lang,
+                                "clear_btn",
+                              );
+                              return label.isEmpty ? "Clear" : label;
+                            }(),
+                            onPressed: _isBusy
+                                ? null
+                                : () {
+                                    _keyController.clear();
+                                  },
+                          ),
+                        IconButton(
+                          icon: Icon(
+                            _obscure ? Icons.visibility : Icons.visibility_off,
+                          ),
+                          tooltip: generator.getLocaleString(
+                            lang,
+                            _obscure
+                                ? "show_api_key_tooltip"
+                                : "hide_api_key_tooltip",
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscure = !_obscure;
+                            });
+                          },
+                        ),
+                      ],
+                    );
                   },
                 ),
               ),
@@ -212,30 +241,47 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
       actions: [
         if (hasExistingKey)
           TextButton(
-            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-            onPressed: () async {
-              await widget.onDisconnect();
-              if (context.mounted) {
-                Navigator.of(context).pop(false);
-              }
-            },
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: _isBusy
+                ? null
+                : () async {
+                    setState(() => _isBusy = true);
+                    try {
+                      await widget.onDisconnect();
+                      if (context.mounted) {
+                        Navigator.of(context).pop(false);
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isBusy = false);
+                    }
+                  },
             child: Text(
               generator.getLocaleString(lang, "gemini_disconnect_btn"),
             ),
           ),
         TextButton(
           style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: _isBusy ? null : () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
         ValueListenableBuilder<TextEditingValue>(
           valueListenable: _keyController,
           builder: (context, value, child) {
             final bool canSave =
+                !_isBusy &&
                 GetBibleAPI.normalizeYouVersionApiKey(value.text) != null;
             return ElevatedButton.icon(
               style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
-              icon: const Icon(Icons.check),
+              icon: _isBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check),
               label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
               onPressed: canSave
                   ? () async {
@@ -244,9 +290,14 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                             _keyController.text,
                           );
                       if (normalized == null) return;
-                      await widget.onSave(normalized);
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
+                      setState(() => _isBusy = true);
+                      try {
+                        await widget.onSave(normalized);
+                        if (context.mounted) {
+                          Navigator.of(context).pop(true);
+                        }
+                      } finally {
+                        if (mounted) setState(() => _isBusy = false);
                       }
                     }
                   : null,

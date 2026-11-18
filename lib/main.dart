@@ -1013,19 +1013,27 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     }
 
-    await mediaExportService.captureSaveAndShareImage(
+    final bool exported = await mediaExportService.captureSaveAndShareImage(
       boundaryKey: _globalKey,
       altText: altText,
       caption: caption,
       audioPath: audioPath,
     );
 
+    if (!mounted) return;
     setState(() {
       isGenerating = false;
-      _updateStatus(
-        generator.getLocaleString(lang, "success_msg"),
-        forceSuccess: true,
-      );
+      if (exported) {
+        _updateStatus(
+          generator.getLocaleString(lang, "success_msg"),
+          forceSuccess: true,
+        );
+      } else {
+        _updateStatus(
+          generator.getLocaleString(lang, "error_msg"),
+          forceError: true,
+        );
+      }
     });
   }
 
@@ -1041,6 +1049,7 @@ class _MyHomePageState extends State<MyHomePage> {
         }
       });
     }
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -1115,53 +1124,56 @@ class _MyHomePageState extends State<MyHomePage> {
                       const SizedBox(height: 12),
                       Expanded(
                         child: filtered.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24.0),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.search_off,
-                                        size: 40,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        generator.getLocaleString(
-                                          lang,
-                                          "book_search_empty",
+                            ? Semantics(
+                                liveRegion: true,
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.search_off,
+                                          size: 40,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
                                         ),
-                                        textAlign: TextAlign.center,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                      if (query.isNotEmpty) ...[
                                         const SizedBox(height: 12),
-                                        OutlinedButton.icon(
-                                          style: OutlinedButton.styleFrom(
-                                            minimumSize: const Size(0, 48),
+                                        Text(
+                                          generator.getLocaleString(
+                                            lang,
+                                            "book_search_empty",
                                           ),
-                                          onPressed: () {
-                                            searchController.clear();
-                                            setSheetState(() {});
-                                          },
-                                          icon: const Icon(
-                                            Icons.clear,
-                                            size: 18,
-                                          ),
-                                          label: Text(
-                                            generator.getLocaleString(
-                                              lang,
-                                              "clear_btn",
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
+                                        ),
+                                        if (query.isNotEmpty) ...[
+                                          const SizedBox(height: 12),
+                                          OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(0, 48),
+                                            ),
+                                            onPressed: () {
+                                              searchController.clear();
+                                              setSheetState(() {});
+                                            },
+                                            icon: const Icon(
+                                              Icons.clear,
+                                              size: 18,
+                                            ),
+                                            label: Text(
+                                              generator.getLocaleString(
+                                                lang,
+                                                "clear_btn",
+                                              ),
                                             ),
                                           ),
-                                        ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               )
@@ -1172,6 +1184,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   final String book = filtered[index];
                                   final bool isSelected = book == selectedBook;
                                   return ListTile(
+                                    selected: isSelected,
                                     title: Text(
                                       book,
                                       style: TextStyle(
@@ -1506,6 +1519,9 @@ class _MyHomePageState extends State<MyHomePage> {
               valueListenable: referenceController,
               builder: (context, value, child) {
                 return FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                  ),
                   onPressed:
                       isFetching ||
                           selectedBibleVersion == "-" ||
@@ -1526,6 +1542,9 @@ class _MyHomePageState extends State<MyHomePage> {
               },
             ),
             OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+              ),
               onPressed:
                   isFetching || selectedBibleVersion == "-"
                       ? null
@@ -1654,7 +1673,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       : "custom_bg_active_label",
                 );
                 return Semantics(
-                  button: true,
+                  image: true,
                   selected: true,
                   label: activeLabel,
                   child: Tooltip(
@@ -1714,11 +1733,14 @@ class _MyHomePageState extends State<MyHomePage> {
                   message: label,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: () => setState(() {
-                      selectedBackground = bgName;
-                      customImagePath = null;
-                      isGeminiBackground = false;
-                    }),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        selectedBackground = bgName;
+                        customImagePath = null;
+                        isGeminiBackground = false;
+                      });
+                    },
                     child: Container(
                       width: 68,
                       height: 68,
@@ -1918,7 +1940,10 @@ class _MyHomePageState extends State<MyHomePage> {
                         child: Tooltip(
                           message: colorName,
                           child: InkResponse(
-                            onTap: () => _fontColorNotifier.value = preset,
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              _fontColorNotifier.value = preset;
+                            },
                             radius: 24,
                             child: SizedBox(
                               width: 48,
@@ -1963,6 +1988,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         : Colors.white,
                   ),
                   onPressed: () {
+                    final Color previousColor = currentColor;
                     showDialog(
                       context: context,
                       builder: (BuildContext context) {
@@ -1978,7 +2004,25 @@ class _MyHomePageState extends State<MyHomePage> {
                             ),
                           ),
                           actions: <Widget>[
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                              onPressed: () {
+                                _fontColorNotifier.value = previousColor;
+                                Navigator.of(context).pop();
+                              },
+                              child: Text(
+                                generator.getLocaleString(
+                                  lang,
+                                  "gemini_cancel_btn",
+                                ),
+                              ),
+                            ),
                             ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
                               child: Text(
                                 generator.getLocaleString(lang, "got_it_btn"),
                               ),
@@ -2011,9 +2055,11 @@ class _MyHomePageState extends State<MyHomePage> {
             if (!lowContrast) {
               return const SizedBox.shrink();
             }
-            return Padding(
-              padding: const EdgeInsets.only(top: 10.0),
-              child: Card(
+            return Semantics(
+              liveRegion: true,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10.0),
+                child: Card(
                 margin: EdgeInsets.zero,
                 color: Theme.of(context).colorScheme.tertiaryContainer,
                 child: Padding(
@@ -2065,6 +2111,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                 ),
               ),
+              ),
             );
           },
         ),
@@ -2103,7 +2150,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   max: 120,
                   divisions: 100,
                   label: sizeValue.round().toString(),
-                  semanticFormatterCallback: (v) => v.round().toString(),
+                  semanticFormatterCallback: (v) =>
+                      "${generator.getLocaleString(lang, "font_size_label")}: ${v.round()}",
                   onChanged: (v) => _fontSizeNotifier.value = v,
                 ),
               ],
@@ -2144,7 +2192,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   max: 400,
                   divisions: 800,
                   label: offsetValue.round().toString(),
-                  semanticFormatterCallback: (v) => v.round().toString(),
+                  semanticFormatterCallback: (v) =>
+                      "${generator.getLocaleString(lang, "font_size_label")}: ${v.round()}",
                   onChanged: (v) => _yOffsetNotifier.value = v,
                 ),
               ],
@@ -2626,7 +2675,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Flexible(
+                        Expanded(
                           child: Text(
                             statusMessage,
                             maxLines: 6,
@@ -2642,6 +2691,16 @@ class _MyHomePageState extends State<MyHomePage> {
                                           ).colorScheme.primary),
                             ),
                           ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: generator.getLocaleString(lang, "clear_btn"),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            setState(() {
+                              statusMessage = "";
+                            });
+                          },
                         ),
                       ],
                     ),
@@ -2759,10 +2818,10 @@ class _MyHomePageState extends State<MyHomePage> {
     final Widget tabbedWorkspace = IndexedStack(
       index: _selectedTabIndex,
       children: [
-        _buildVerseTab(lang),
-        _buildBackgroundTab(lang, isGeminiConnected),
-        _buildStyleTab(lang),
-        _buildAudioAndTextTab(lang),
+        ExcludeFocus(excluding: _selectedTabIndex != 0, child: _buildVerseTab(lang)),
+        ExcludeFocus(excluding: _selectedTabIndex != 1, child: _buildBackgroundTab(lang, isGeminiConnected)),
+        ExcludeFocus(excluding: _selectedTabIndex != 2, child: _buildStyleTab(lang)),
+        ExcludeFocus(excluding: _selectedTabIndex != 3, child: _buildAudioAndTextTab(lang)),
       ],
     );
 

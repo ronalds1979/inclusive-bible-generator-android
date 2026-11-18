@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../generator.dart';
 import '../services/stock_photo_service.dart';
 
@@ -242,9 +243,24 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
               ),
             ] else if (_hasSearched && !_isSearching && _results.isEmpty) ...[
               const SizedBox(height: 8),
-              Text(
-                generator.getLocaleString(lang, 'stock_search_empty'),
-                style: Theme.of(context).textTheme.bodySmall,
+              Semantics(
+                liveRegion: true,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.image_search_outlined,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        generator.getLocaleString(lang, 'stock_search_empty'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ] else if (_results.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -268,7 +284,10 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                           borderRadius: BorderRadius.circular(8),
                           onTap: _downloadingIndex != null
                               ? null
-                              : () => _selectPhoto(index),
+                              : () {
+                                  HapticFeedback.selectionClick();
+                                  _selectPhoto(index);
+                                },
                           child: Container(
                             width: 76,
                             height: 76,
@@ -292,6 +311,23 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                                       // ⚡ Bolt: Decode 1080px thumbnails at 3x display size instead of full resolution
                                       cacheWidth: 228,
                                       fit: BoxFit.cover,
+                                      loadingBuilder: (context, child, progress) {
+                                        if (progress == null) return child;
+                                        return Container(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.surfaceContainerHighest,
+                                          child: const Center(
+                                            child: SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                       errorBuilder: (_, _, _) => Container(
                                         color: Theme.of(
                                           context,

@@ -675,4 +675,74 @@ void main() {
     expect(find.text("Copy Caption"), findsOneWidget);
     expect(find.textContaining("For God so loved the world."), findsWidgets);
   });
+
+  testWidgets(
+    'VersePreviewCard yOffsetListenable updates Transform without rebuilding Text',
+    (WidgetTester tester) async {
+      final generator = Generator();
+      generator.locales = {
+        "en": {
+          "preview_verse_placeholder": "Preview Verse",
+          "reference_placeholder": "Reference",
+        },
+      };
+      final verseController = TextEditingController(text: "God is love.");
+      final referenceController = TextEditingController(text: "1 John 4:8");
+      final yOffsetNotifier = ValueNotifier<double>(0.0);
+      addTearDown(() {
+        verseController.dispose();
+        referenceController.dispose();
+        yOffsetNotifier.dispose();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: VersePreviewCard(
+              repaintKey: GlobalKey(),
+              aspectRatioStr: "1:1",
+              customImagePath: null,
+              selectedBackground: "default.png",
+              previewListenable: Listenable.merge([
+                verseController,
+                referenceController,
+              ]),
+              verseController: verseController,
+              referenceController: referenceController,
+              fontColor: Colors.white,
+              fontSize: 40,
+              yOffset: 0.0,
+              yOffsetListenable: yOffsetNotifier,
+              lang: "en",
+              generator: generator,
+            ),
+          ),
+        ),
+      );
+
+      final Text verseWidgetBefore = tester.widget<Text>(
+        find.text("God is love."),
+      );
+      final Finder transformFinder = find.ancestor(
+        of: find.text("God is love."),
+        matching: find.byType(Transform),
+      );
+      expect(
+        tester.widget<Transform>(transformFinder).transform.getTranslation().y,
+        equals(0.0),
+      );
+
+      yOffsetNotifier.value = 75.0;
+      await tester.pump();
+
+      final Text verseWidgetAfter = tester.widget<Text>(
+        find.text("God is love."),
+      );
+      expect(identical(verseWidgetBefore, verseWidgetAfter), isTrue);
+      expect(
+        tester.widget<Transform>(transformFinder).transform.getTranslation().y,
+        equals(75.0),
+      );
+    },
+  );
 }

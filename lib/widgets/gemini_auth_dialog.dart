@@ -29,6 +29,7 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
   bool _obscure = true;
   bool _detectedFromClipboard = false;
   bool _clipboardEmpty = false;
+  bool _isBusy = false;
 
   @override
   void initState() {
@@ -190,35 +191,59 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
                   "gemini_api_key_label",
                 ),
                 border: const OutlineInputBorder(),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.content_paste),
-                      tooltip: generator.getLocaleString(
-                        lang,
-                        "gemini_paste_clipboard_btn",
-                      ),
-                      onPressed: () =>
-                          _checkClipboardForKey(autoConnectIfFound: false),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        _obscure ? Icons.visibility : Icons.visibility_off,
-                      ),
-                      tooltip: generator.getLocaleString(
-                        lang,
-                        _obscure
-                            ? "show_api_key_tooltip"
-                            : "hide_api_key_tooltip",
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _obscure = !_obscure;
-                        });
-                      },
-                    ),
-                  ],
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _keyController,
+                  builder: (context, value, _) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (value.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            tooltip: () {
+                              final label = generator.getLocaleString(
+                                lang,
+                                "clear_btn",
+                              );
+                              return label.isEmpty ? "Clear" : label;
+                            }(),
+                            onPressed: _isBusy
+                                ? null
+                                : () {
+                                    _keyController.clear();
+                                  },
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.content_paste),
+                          tooltip: generator.getLocaleString(
+                            lang,
+                            "gemini_paste_clipboard_btn",
+                          ),
+                          onPressed: _isBusy
+                              ? null
+                              : () => _checkClipboardForKey(
+                                  autoConnectIfFound: false,
+                                ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _obscure ? Icons.visibility : Icons.visibility_off,
+                          ),
+                          tooltip: generator.getLocaleString(
+                            lang,
+                            _obscure
+                                ? "show_api_key_tooltip"
+                                : "hide_api_key_tooltip",
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscure = !_obscure;
+                            });
+                          },
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -228,29 +253,46 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
       actions: [
         if (hasExistingKey)
           TextButton(
-            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-            onPressed: () async {
-              await widget.onDisconnect();
-              if (context.mounted) {
-                Navigator.of(context).pop(false);
-              }
-            },
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: _isBusy
+                ? null
+                : () async {
+                    setState(() => _isBusy = true);
+                    try {
+                      await widget.onDisconnect();
+                      if (context.mounted) {
+                        Navigator.of(context).pop(false);
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isBusy = false);
+                    }
+                  },
             child: Text(
               generator.getLocaleString(lang, "gemini_disconnect_btn"),
             ),
           ),
         TextButton(
           style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: _isBusy ? null : () => Navigator.of(context).pop(false),
           child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
         ),
         ValueListenableBuilder<TextEditingValue>(
           valueListenable: _keyController,
           builder: (context, value, child) {
-            final bool canSave = GeminiService.normalizeApiKey(value.text) != null;
+            final bool canSave =
+                !_isBusy && GeminiService.normalizeApiKey(value.text) != null;
             return ElevatedButton.icon(
               style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
-              icon: const Icon(Icons.check),
+              icon: _isBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check),
               label: Text(generator.getLocaleString(lang, "gemini_save_btn")),
               onPressed: canSave
                   ? () async {
@@ -258,9 +300,14 @@ class _GeminiAuthDialogState extends State<GeminiAuthDialog> {
                         _keyController.text,
                       );
                       if (normalized == null) return;
-                      await widget.onSave(normalized);
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
+                      setState(() => _isBusy = true);
+                      try {
+                        await widget.onSave(normalized);
+                        if (context.mounted) {
+                          Navigator.of(context).pop(true);
+                        }
+                      } finally {
+                        if (mounted) setState(() => _isBusy = false);
                       }
                     }
                   : null,

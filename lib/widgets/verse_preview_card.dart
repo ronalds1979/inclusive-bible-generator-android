@@ -61,7 +61,6 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
     widget.previewListenable,
     ?widget.fontColorListenable,
     ?widget.fontSizeListenable,
-    ?widget.yOffsetListenable,
   ]);
 
   @override
@@ -75,8 +74,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewListenable != widget.previewListenable ||
         oldWidget.fontColorListenable != widget.fontColorListenable ||
-        oldWidget.fontSizeListenable != widget.fontSizeListenable ||
-        oldWidget.yOffsetListenable != widget.yOffsetListenable) {
+        oldWidget.fontSizeListenable != widget.fontSizeListenable) {
       _textAnimation = _buildTextAnimation();
     }
   }
@@ -151,76 +149,102 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
             ),
           );
 
-    final Widget textOverlay = AnimatedBuilder(
-      animation: _textAnimation,
-      builder: (context, child) {
-        final Color currentFontColor =
-            widget.fontColorListenable?.value ?? widget.fontColor;
-        final double currentFontSize =
-            widget.fontSizeListenable?.value ?? widget.fontSize;
-        final double currentYOffset =
-            widget.yOffsetListenable?.value ?? widget.yOffset;
-        final String verseText = widget.verseController.text;
-        final String refText = widget.referenceController.text;
-        return Align(
-          alignment: Alignment.center,
-          child: Transform.translate(
-            offset: Offset(0, currentYOffset),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20.0,
-                vertical: 16.0,
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SizedBox(
-                  width: width - 40.0,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        verseText.isEmpty ? versePlaceholder : verseText,
-                        textAlign: TextAlign.center,
-                        style: VersePreviewCard._baseRobotoStyle.copyWith(
-                          color: currentFontColor,
-                          fontSize: currentFontSize / 2,
-                          fontWeight: FontWeight.bold,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
+    // ⚡ Bolt: Decouple 60Hz vertical drag/slider yOffset updates from text
+    // layout & shadow rasterization by caching textContent in a RepaintBoundary
+    // and passing it as the static `child` of ValueListenableBuilder<double>.
+    final Widget textContent = RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _textAnimation,
+        builder: (context, child) {
+          final Color currentFontColor =
+              widget.fontColorListenable?.value ?? widget.fontColor;
+          final double currentFontSize =
+              widget.fontSizeListenable?.value ?? widget.fontSize;
+          final String verseText = widget.verseController.text;
+          final String refText = widget.referenceController.text;
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: width - 40.0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      verseText.isEmpty ? versePlaceholder : verseText,
+                      textAlign: TextAlign.center,
+                      style: VersePreviewCard._baseRobotoStyle.copyWith(
+                        color: verseText.isEmpty
+                            ? currentFontColor.withValues(alpha: 0.6)
+                            : currentFontColor,
+                        fontSize: currentFontSize / 2,
+                        fontWeight: verseText.isEmpty
+                            ? FontWeight.w500
+                            : FontWeight.bold,
+                        fontStyle: verseText.isEmpty
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      SizedBox(
-                        height: (currentFontSize * 0.35).clamp(12.0, 24.0),
+                    ),
+                    SizedBox(
+                      height: (currentFontSize * 0.35).clamp(12.0, 24.0),
+                    ),
+                    Text(
+                      refText.isEmpty ? refPlaceholder : refText,
+                      textAlign: TextAlign.center,
+                      style: VersePreviewCard._baseRobotoStyle.copyWith(
+                        color: refText.isEmpty
+                            ? currentFontColor.withValues(alpha: 0.6)
+                            : currentFontColor,
+                        fontSize: (currentFontSize * 0.66) / 2,
+                        fontStyle: refText.isEmpty
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 6,
+                            offset: Offset(0, 1.5),
+                          ),
+                        ],
                       ),
-                      Text(
-                        refText.isEmpty ? refPlaceholder : refText,
-                        textAlign: TextAlign.center,
-                        style: VersePreviewCard._baseRobotoStyle.copyWith(
-                          color: currentFontColor,
-                          fontSize: (currentFontSize * 0.66) / 2,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 6,
-                              offset: Offset(0, 1.5),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
+    );
+
+    final Widget textOverlay = Align(
+      alignment: Alignment.center,
+      child: widget.yOffsetListenable != null
+          ? ValueListenableBuilder<double>(
+              valueListenable: widget.yOffsetListenable!,
+              builder: (context, currentYOffset, child) => Transform.translate(
+                offset: Offset(0, currentYOffset),
+                child: child,
+              ),
+              child: textContent,
+            )
+          : Transform.translate(
+              offset: Offset(0, widget.yOffset),
+              child: textContent,
+            ),
     );
 
     final Widget card = RepaintBoundary(
@@ -290,11 +314,21 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
             trimmedVerse.isEmpty ? versePlaceholder : trimmedVerse;
         final String refText =
             trimmedRef.isEmpty ? refPlaceholder : trimmedRef;
+        final double activeYOffset =
+            widget.yOffsetListenable?.value ?? widget.yOffset;
+        final bool canResetOffset =
+            widget.onYOffsetChanged != null && activeYOffset != 0.0;
         return Semantics(
           container: true,
           image: true,
           excludeSemantics: true,
-          onTapHint: widget.onYOffsetChanged != null && resetHint.isNotEmpty
+          onTap: canResetOffset
+              ? () {
+                  HapticFeedback.lightImpact();
+                  widget.onYOffsetChanged!(0.0);
+                }
+              : null,
+          onTapHint: canResetOffset && resetHint.isNotEmpty
               ? resetHint
               : null,
           label: "$semanticHeader: \"$verseText\" — $refText",

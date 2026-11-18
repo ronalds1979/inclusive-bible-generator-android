@@ -85,7 +85,7 @@
   "color_coral": "Coral Suave",
   "color_black": "Negro",
   "reset_position_btn": "Centrar",
-  "text_empty_state": "Toca \"Generar y Compartir\" para crear el Alt-Text y la Leyenda listos para copiar.",
+  "text_empty_state": "Escribe o busca un versículo y referencia en el Paso 1 para generar el Alt-Text y la Leyenda listos para copiar.",
   "step_progress_label": "Paso {current} de {total}: {step}",
   "step_back_btn": "Atrás",
   "step_next_label": "Siguiente: {step}",

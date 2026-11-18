@@ -9,7 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'temp_file_cleanup.dart';
 
 class MediaExportService {
-  Future<void> captureSaveAndShareImage({
+  Future<bool> captureSaveAndShareImage({
     required GlobalKey boundaryKey,
     required String altText,
     required String caption,
@@ -18,7 +18,7 @@ class MediaExportService {
     try {
       final RenderObject? renderObject = boundaryKey.currentContext
           ?.findRenderObject();
-      if (renderObject is! RenderRepaintBoundary) return;
+      if (renderObject is! RenderRepaintBoundary) return false;
 
       final ui.Image image = await renderObject.toImage(pixelRatio: 3.0);
       final ByteData? byteData;
@@ -30,7 +30,7 @@ class MediaExportService {
         // ⚡ Bolt: Release native GPU/Skia image buffer immediately after PNG encoding
         image.dispose();
       }
-      if (byteData == null) return;
+      if (byteData == null) return false;
       final Uint8List pngBytes = byteData.buffer.asUint8List();
 
       final Directory tempDir = await getTemporaryDirectory();
@@ -56,10 +56,12 @@ class MediaExportService {
       );
       // ⚡ Bolt: Defer transient file cleanup until after share sheet opens so directory I/O is off the critical path
       await pruneTransientFiles(tempDir, prefix: 'verse_', suffix: '.png');
+      return true;
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error capturing image: $e");
       }
+      return false;
     }
   }
 }
