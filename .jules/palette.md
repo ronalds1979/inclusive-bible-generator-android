@@ -45,3 +45,7 @@
 ## 2026-11-17 - Live Alt-Text/Caption Preview, Font Reset & Dialog Accessibility Parity
 **Learning:** Waiting until the user triggers "Generate & Share" before displaying Alt-Text and Social Media Caption blocks copy-only accessibility workflows, and `GeminiAuthDialog` lacked empty-clipboard live-region feedback and 48dp minimum heights on its dialog actions. Additionally, the Font Size slider lacked a quick reset action analogous to the Vertical Position reset.
 **Action:** Compute live Alt-Text and Caption synchronously inside Tab 4's `AnimatedBuilder` whenever verse and reference are populated, add a 48dp `Reset` button beside Font Size when modified from default `22`, and align `GeminiAuthDialog` with live-region empty-clipboard feedback and 48dp minimum action buttons.
+
+## 2026-11-20 - Co-locate Contrast Warning with Background Dim Controls
+**Learning:** Placing the low-contrast warning exclusively in the Style tab hides real-time readability feedback while users pick bright backgrounds or adjust Background Dim in the Background tab.
+**Action:** Extract `_buildContrastWarningCard` into a shared helper and render it beneath Background Dim as well as below Text Color so `Auto-Dim` is immediately accessible where dim adjustments happen.

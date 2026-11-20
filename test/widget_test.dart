@@ -745,4 +745,33 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'Background tab surfaces low-contrast warning and Auto-Dim adjusts dim to 35%',
+    (WidgetTester tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      await tester.binding.setSurfaceSize(const Size(412, 915));
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(const MyApp());
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text("Background"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Background Dim (Contrast): 15%"), findsOneWidget);
+      final Finder autoDimFinder = find.widgetWithText(TextButton, "Auto-Dim");
+      expect(autoDimFinder, findsOneWidget);
+
+      await tester.ensureVisible(autoDimFinder);
+      await tester.tap(autoDimFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Background Dim (Contrast): 35%"), findsOneWidget);
+      expect(find.widgetWithText(TextButton, "Auto-Dim"), findsNothing);
+    },
+  );
 }

@@ -1856,6 +1856,8 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           },
         ),
+        _buildContrastWarningCard(lang),
+        const SizedBox(height: 8),
         StockPhotoSearchCard(
           lang: lang,
           generator: generator,
@@ -1914,6 +1916,78 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         _buildStepNavigationRow(lang, 1),
       ],
+    );
+  }
+
+  Widget _buildContrastWarningCard(String lang) {
+    return AnimatedBuilder(
+      animation: _contrastListenable,
+      builder: (context, _) {
+        final double dimValue = _backgroundDimNotifier.value;
+        final double luminance = _fontColorNotifier.value.computeLuminance();
+        final bool isDarkPreset =
+            customImagePath == null &&
+            (selectedBackground == "minimal_slate.png" ||
+                selectedBackground == "starry_night.png");
+        final bool lowContrast =
+            (luminance > 0.7 && dimValue < 0.25 && !isDarkPreset) ||
+            (luminance < 0.15 && dimValue >= 0.4);
+        if (!lowContrast) {
+          return const SizedBox.shrink();
+        }
+        return Semantics(
+          liveRegion: true,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 10.0),
+            child: Card(
+              margin: EdgeInsets.zero,
+              color: Theme.of(context).colorScheme.tertiaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12.0,
+                  vertical: 6.0,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.contrast,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        generator.getLocaleString(lang, "contrast_warning_msg"),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onTertiaryContainer,
+                      ),
+                      onPressed: () {
+                        _backgroundDimNotifier.value =
+                            luminance > 0.7 ? 0.35 : 0.0;
+                      },
+                      child: Text(
+                        generator.getLocaleString(lang, "contrast_fix_btn"),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2078,81 +2152,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           },
         ),
-        AnimatedBuilder(
-          animation: _contrastListenable,
-          builder: (context, _) {
-            final double dimValue = _backgroundDimNotifier.value;
-            final double luminance = _fontColorNotifier.value.computeLuminance();
-            final bool isDarkPreset =
-                customImagePath == null &&
-                (selectedBackground == "minimal_slate.png" ||
-                    selectedBackground == "starry_night.png");
-            final bool lowContrast =
-                (luminance > 0.7 && dimValue < 0.25 && !isDarkPreset) ||
-                (luminance < 0.15 && dimValue >= 0.4);
-            if (!lowContrast) {
-              return const SizedBox.shrink();
-            }
-            return Semantics(
-              liveRegion: true,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 10.0),
-                child: Card(
-                margin: EdgeInsets.zero,
-                color: Theme.of(context).colorScheme.tertiaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12.0,
-                    vertical: 6.0,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.contrast,
-                        size: 20,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onTertiaryContainer,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          generator.getLocaleString(
-                            lang,
-                            "contrast_warning_msg",
-                          ),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onTertiaryContainer,
-                              ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                          foregroundColor: Theme.of(
-                            context,
-                          ).colorScheme.onTertiaryContainer,
-                        ),
-                        onPressed: () {
-                          _backgroundDimNotifier.value =
-                              luminance > 0.7 ? 0.35 : 0.0;
-                        },
-                        child: Text(
-                          generator.getLocaleString(lang, "contrast_fix_btn"),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              ),
-            );
-          },
-        ),
+        _buildContrastWarningCard(lang),
         const SizedBox(height: 12),
         ValueListenableBuilder<double>(
           valueListenable: _fontSizeNotifier,
