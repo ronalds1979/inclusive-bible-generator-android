@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -52,10 +53,38 @@ class StockPhotoService {
 
   final http.Client _httpClient;
   final bool _ownsClient;
+  final Duration _apiTimeout;
+  final Duration _downloadTimeout;
 
-  StockPhotoService({http.Client? httpClient})
-    : _httpClient = httpClient ?? _sharedHttpClient,
-      _ownsClient = false;
+  StockPhotoService({
+    http.Client? httpClient,
+    Duration apiTimeout = const Duration(seconds: 12),
+    Duration downloadTimeout = const Duration(seconds: 15),
+  }) : _httpClient = httpClient ?? _sharedHttpClient,
+       _ownsClient = false,
+       _apiTimeout = apiTimeout,
+       _downloadTimeout = downloadTimeout;
+
+  static Future<Uint8List> _readBoundedBytes(
+    Stream<List<int>> stream, {
+    required int maxBytes,
+    required Duration timeout,
+    required String limitExceededMessage,
+  }) async {
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    // 🛡️ Sentinel: Enforce a total stream deadline rather than per-chunk timeout to prevent slow-loris DoS
+    Future<void> collect() async {
+      await for (final List<int> chunk in stream) {
+        if (builder.length + chunk.length > maxBytes) {
+          throw HttpException(limitExceededMessage);
+        }
+        builder.add(chunk);
+      }
+    }
+
+    await collect().timeout(timeout);
+    return builder.takeBytes();
+  }
 
   void close() {
     if (_ownsClient) {
@@ -94,7 +123,7 @@ class StockPhotoService {
       ..followRedirects = false;
     final http.StreamedResponse streamedResponse = await _httpClient
         .send(request)
-        .timeout(const Duration(seconds: 12));
+        .timeout(_apiTimeout);
 
     if (streamedResponse.statusCode != 200) {
       await streamedResponse.stream.drain<void>().catchError((_) {});
@@ -107,18 +136,15 @@ class StockPhotoService {
       throw const HttpException('Stock photo search response exceeds 2 MB limit');
     }
 
-    final BytesBuilder apiBuilder = BytesBuilder(copy: false);
-    await for (final List<int> chunk in streamedResponse.stream.timeout(
-      const Duration(seconds: 12),
-    )) {
-      if (apiBuilder.length + chunk.length > maxApiBytes) {
-        throw const HttpException('Stock photo search response exceeds 2 MB limit');
-      }
-      apiBuilder.add(chunk);
-    }
+    final Uint8List apiBytes = await _readBoundedBytes(
+      streamedResponse.stream,
+      maxBytes: maxApiBytes,
+      timeout: _apiTimeout,
+      limitExceededMessage: 'Stock photo search response exceeds 2 MB limit',
+    );
 
     final Map<String, dynamic> decoded =
-        jsonDecode(utf8.decode(apiBuilder.takeBytes())) as Map<String, dynamic>;
+        jsonDecode(utf8.decode(apiBytes)) as Map<String, dynamic>;
     final Map<String, dynamic>? queryObj =
         decoded['query'] as Map<String, dynamic>?;
     final Map<String, dynamic>? pages =
@@ -194,7 +220,7 @@ class StockPhotoService {
         ..followRedirects = false;
       streamedResponse = await _httpClient
           .send(request)
-          .timeout(const Duration(seconds: 15));
+          .timeout(_downloadTimeout);
 
       final int code = streamedResponse.statusCode;
       if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
@@ -230,17 +256,12 @@ class StockPhotoService {
       throw const HttpException('Stock photo exceeds size limit');
     }
 
-    final BytesBuilder builder = BytesBuilder(copy: false);
-    await for (final List<int> chunk in streamedResponse.stream.timeout(
-      const Duration(seconds: 15),
-    )) {
-      if (builder.length + chunk.length > maxBytes) {
-        throw const HttpException('Stock photo exceeds size limit');
-      }
-      builder.add(chunk);
-    }
-
-    final Uint8List bytes = builder.takeBytes();
+    final Uint8List bytes = await _readBoundedBytes(
+      streamedResponse.stream,
+      maxBytes: maxBytes,
+      timeout: _downloadTimeout,
+      limitExceededMessage: 'Stock photo exceeds size limit',
+    );
     if (bytes.isEmpty) {
       throw const HttpException('Failed to download stock photo (empty body)');
     }

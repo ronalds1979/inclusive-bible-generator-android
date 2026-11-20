@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -645,6 +646,31 @@ void main() {
       field = tester.widget<TextField>(find.byType(TextField));
       expect(field.enableSuggestions, isFalse);
       expect(field.autocorrect, isFalse);
+    },
+  );
+
+  test(
+    'StockPhotoService enforces total stream deadline on slow-drip responses',
+    () async {
+      final trickleService = StockPhotoService(
+        downloadTimeout: const Duration(milliseconds: 80),
+        httpClient: MockClient.streaming((request, bodyStream) async {
+          // Emit small chunks every 30ms so per-chunk timeout would never fire,
+          // while total stream duration exceeds the 80ms deadline.
+          final stream = Stream<List<int>>.periodic(
+            const Duration(milliseconds: 30),
+            (i) => [0xFF, 0xD8, 0xFF, i & 0xFF],
+          ).take(10);
+          return http.StreamedResponse(stream, 200);
+        }),
+      );
+
+      await expectLater(
+        trickleService.fetchThumbnailBytes(
+          'https://upload.wikimedia.org/wikipedia/commons/a/a9/Slow.jpg',
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
     },
   );
 }

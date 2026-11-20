@@ -53,3 +53,8 @@
 - Hardened `StockPhotoService.parseAllowedWikimediaUri` to reject embedded `userInfo` and non-443 ports, and stripped control characters / capped queries at 100 chars in `searchPhotos()` and `StockPhotoSearchCard`.
 - Disabled keyboard suggestions and autocorrect (`enableSuggestions: false`, `autocorrect: false`) on API key `TextField`s in `GeminiAuthDialog` and `YouVersionAuthDialog`.
 - Bounded book search input (`maxLength: 100`), hardened `_loadPreferredBibleVersions()` (64 KB size limit and allowed-language/length filtering), and sanitized asset background names in `VersePreviewCard` and `main.dart`.
+
+## 2026-11-20 - Dart Stream.timeout() Per-Chunk vs Total Stream Deadline
+**Vulnerability:** `StockPhotoService` used `stream.timeout(duration)` inside `await for`, which resets on every incoming chunk and allows a slow-drip response to hold connections open indefinitely.
+**Learning:** Unlike `Future.timeout()` around the entire stream collection loop, Dart's `Stream.timeout()` only enforces an inter-chunk idle timeout.
+**Prevention:** Always wrap the full stream-reading loop in an async helper and apply `.timeout(deadline)` to the resulting `Future`, as done in `_readBoundedBytes`.
