@@ -43,3 +43,7 @@
 ## 2026-11-17 - ValueNotifier for Font Color, Cached Background Labels & Canvas Paint Reuse
 **Learning:** Calling `setState` inside `ColorPicker.onColorChanged` triggers full-page rebuilds at pointer drag frequency, while rebuilding background dropdown items / `_formatBackgroundName` with an inline `RegExp` and calling `.toLowerCase()` across all 66 books per keystroke adds needless frame allocations. In `renderSceneToPng`, allocating new `Paint` and `ui.Gradient.radial` objects inside ray/wash/layer/bokeh loops wastes native Skia/shader allocations.
 **Action:** Move `fontColor` to a `ValueNotifier<Color>` wired to `VersePreviewCard.fontColorListenable` and the contrast banner; cache formatted background labels and `DropdownMenuItem`s in `_MyHomePageState`; pre-index lowercase book names when opening `_showBookSearchSheet`; and hoist reusable `Paint` objects out of `renderSceneToPng` loops.
+
+## 2026-11-20 - Cache FutureBuilder Futures Inside ListView Builders
+**Learning:** Invoking `StockPhotoService.fetchThumbnailBytes()` directly inside `ListView.separated`'s `itemBuilder` -> `FutureBuilder` creates a brand new `Future` and fires duplicate HTTPS thumbnail requests (plus loading spinner flashes) on every selection `setState` or horizontal scroll.
+**Action:** Memoize thumbnail `Future<Uint8List>` instances by URL in `_StockPhotoSearchCardState`, clearing on new searches and removing failed futures on error so retries remain possible.

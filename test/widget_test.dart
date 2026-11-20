@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,8 +7,10 @@ import 'package:app/main.dart';
 import 'package:app/getbible_api.dart';
 import 'package:app/book_mapping.dart';
 import 'package:app/generator.dart';
+import 'package:app/services/stock_photo_service.dart';
 import 'package:app/widgets/gemini_auth_dialog.dart';
 import 'package:app/widgets/gemini_background_card.dart';
+import 'package:app/widgets/stock_photo_search_card.dart';
 import 'package:app/widgets/verse_preview_card.dart';
 import 'package:app/widgets/youversion_auth_dialog.dart';
 
@@ -774,4 +777,98 @@ void main() {
       expect(find.widgetWithText(TextButton, "Auto-Dim"), findsNothing);
     },
   );
+
+  testWidgets(
+    'StockPhotoSearchCard caches thumbnail Futures across selection rebuilds',
+    (WidgetTester tester) async {
+      final Generator generator = Generator();
+      generator.locales = {
+        'en': {
+          'stock_search_title': 'Stock Photos',
+          'stock_search_hint': 'Search',
+          'stock_search_btn': 'Search',
+          'stock_mood_sunrise': 'Sunrise',
+          'stock_mood_ocean': 'Ocean',
+          'stock_mood_mountains': 'Mountains',
+          'stock_mood_stars': 'Stars',
+          'stock_mood_forest': 'Forest',
+          'clear_btn': 'Clear',
+        },
+      };
+      final Uint8List pngBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      );
+      final _FakeStockPhotoService fakeService = _FakeStockPhotoService(
+        pngBytes,
+      );
+
+      String? selectedPath;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StockPhotoSearchCard(
+              lang: 'en',
+              generator: generator,
+              stockPhotoService: fakeService,
+              onPhotoSelected: (path) => selectedPath = path,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(ActionChip).first);
+      await tester.pump();
+      await tester.pump();
+
+      expect(fakeService.thumbnailFetchCalls, equals(2));
+
+      // Tapping a thumbnail triggers _downloadingIndex and _selectedIndex rebuilds;
+      // cached thumbnail Futures must prevent redundant network fetches.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(InkWell),
+        ).first,
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(selectedPath, equals('/tmp/mock_stock_photo.jpg'));
+      expect(fakeService.thumbnailFetchCalls, equals(2));
+    },
+  );
+}
+
+class _FakeStockPhotoService extends StockPhotoService {
+  final Uint8List _pngBytes;
+  int thumbnailFetchCalls = 0;
+
+  _FakeStockPhotoService(this._pngBytes);
+
+  @override
+  Future<List<StockPhotoResult>> searchPhotos(String query) async {
+    return const [
+      StockPhotoResult(
+        title: 'Sunrise 1',
+        thumbUrl: 'https://upload.wikimedia.org/thumb1.jpg',
+        fullUrl: 'https://upload.wikimedia.org/full1.jpg',
+      ),
+      StockPhotoResult(
+        title: 'Sunrise 2',
+        thumbUrl: 'https://upload.wikimedia.org/thumb2.jpg',
+        fullUrl: 'https://upload.wikimedia.org/full2.jpg',
+      ),
+    ];
+  }
+
+  @override
+  Future<Uint8List> fetchThumbnailBytes(String thumbUrl) async {
+    thumbnailFetchCalls++;
+    return _pngBytes;
+  }
+
+  @override
+  Future<String> downloadPhotoToTemp(StockPhotoResult photo) async {
+    return '/tmp/mock_stock_photo.jpg';
+  }
 }

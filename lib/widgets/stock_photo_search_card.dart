@@ -31,6 +31,7 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
   ];
 
   final TextEditingController _searchController = TextEditingController();
+  final Map<String, Future<Uint8List>> _thumbnailFutures = {};
   List<StockPhotoResult> _results = const [];
   bool _isSearching = false;
   bool _hasSearched = false;
@@ -38,8 +39,31 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
   int? _downloadingIndex;
   int? _selectedIndex;
 
+  // ⚡ Bolt: Cache thumbnail Futures per URL so ListView scrolling and selection
+  // rebuilds reuse the completed Future without re-fetching over the network.
+  Future<Uint8List> _getThumbnailFuture(String thumbUrl) {
+    return _thumbnailFutures.putIfAbsent(thumbUrl, () {
+      return widget.stockPhotoService.fetchThumbnailBytes(thumbUrl).catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        _thumbnailFutures.remove(thumbUrl);
+        Error.throwWithStackTrace(error, stackTrace);
+      });
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant StockPhotoSearchCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.stockPhotoService != widget.stockPhotoService) {
+      _thumbnailFutures.clear();
+    }
+  }
+
   @override
   void dispose() {
+    _thumbnailFutures.clear();
     _searchController.dispose();
     super.dispose();
   }
@@ -51,6 +75,7 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
       _searchController.text = overrideQuery;
     }
 
+    _thumbnailFutures.clear();
     setState(() {
       _isSearching = true;
       _errorMessage = null;
@@ -311,8 +336,7 @@ class _StockPhotoSearchCardState extends State<StockPhotoSearchCard> {
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(5),
                                     child: FutureBuilder<Uint8List>(
-                                      future: widget.stockPhotoService
-                                          .fetchThumbnailBytes(item.thumbUrl),
+                                      future: _getThumbnailFuture(item.thumbUrl),
                                       builder: (context, snapshot) {
                                         if (snapshot.hasData) {
                                           return Image.memory(
