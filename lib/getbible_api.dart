@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'book_mapping.dart';
+import 'rvr1960_psalm_superscriptions.dart';
 
 class _CachedChapter {
   final Map<int, String> byVerse;
@@ -357,6 +358,9 @@ class GetBibleAPI {
 
   @visibleForTesting
   static int get cachedYouVersionBiblesCount => _youVersionBiblesCache.length;
+
+  @visibleForTesting
+  static void clearChapterCache() => _chapterCache.clear();
 
   static _CachedChapter? _getCachedChapter(String key) {
     final _CachedChapter? hit = _chapterCache.remove(key);
@@ -778,6 +782,13 @@ class GetBibleAPI {
         if (response.statusCode == 200) {
           final parsed = jsonDecode(response.body);
           if (parsed is List && parsed.isNotEmpty) {
+            final int? chapterNum = int.tryParse(chapter);
+            final String? rvr1960Superscription =
+                (translationCode == "RV1960" &&
+                    bookNr == 19 &&
+                    chapterNum != null)
+                ? rvr1960PsalmSuperscriptions[chapterNum]
+                : null;
             final Map<int, String> byVerse = {};
             final StringBuffer fullBuf = StringBuffer();
             for (final item in parsed) {
@@ -789,9 +800,17 @@ class GetBibleAPI {
                   (item["text"] ?? "").toString(),
                 );
                 if (cleaned.isNotEmpty) {
-                  if (vNum != null) byVerse[vNum] = cleaned;
+                  final String verseText =
+                      (vNum == 1 &&
+                          rvr1960Superscription != null &&
+                          !cleaned.toLowerCase().startsWith(
+                            rvr1960Superscription.toLowerCase(),
+                          ))
+                      ? "$rvr1960Superscription\n$cleaned"
+                      : cleaned;
+                  if (vNum != null) byVerse[vNum] = verseText;
                   if (fullBuf.isNotEmpty) fullBuf.write(' ');
-                  fullBuf.write(cleaned);
+                  fullBuf.write(verseText);
                 }
               }
             }

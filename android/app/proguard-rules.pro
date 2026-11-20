@@ -5,3 +5,7 @@
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
+
+# Flutter Play Store deferred components (not used by this app)
+-dontwarn com.google.android.play.core.**
+
