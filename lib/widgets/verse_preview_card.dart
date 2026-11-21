@@ -578,6 +578,86 @@ class VersePreviewCard extends StatefulWidget {
 class _VersePreviewCardState extends State<VersePreviewCard> {
   late Listenable _textAnimation;
 
+  // ⚡ Bolt: Memoize resolved fitting font size across 60Hz color drags,
+  // non-layout style changes (shadow/backdrop), and clamped slider drags > max fit.
+  Object? _cachedLayoutKey;
+  double? _cachedRequestedFontSize;
+  double? _cachedEffectiveFontSize;
+  double? _cachedOverflowResult;
+  double? _cachedOverflowFailedAt;
+
+  double _resolveCachedFittingFontSize({
+    required double requestedFontSize,
+    required String verseText,
+    required String refText,
+    required bool verseIsPlaceholder,
+    required bool refIsPlaceholder,
+    required double maxWidth,
+    required double maxHeight,
+    required TextScaler textScaler,
+    required TextDirection textDirection,
+    required VerseTextStyleOptions currentStyle,
+  }) {
+    final Object layoutKey = (
+      verseText,
+      refText,
+      verseIsPlaceholder,
+      refIsPlaceholder,
+      maxWidth,
+      maxHeight,
+      textScaler,
+      textDirection,
+      currentStyle.fontFamily,
+      currentStyle.isBold,
+      currentStyle.isItalic,
+      currentStyle.textAlign,
+      currentStyle.lineHeight,
+      currentStyle.letterSpacing,
+    );
+
+    if (layoutKey == _cachedLayoutKey && _cachedEffectiveFontSize != null) {
+      if (_cachedRequestedFontSize == requestedFontSize) {
+        return _cachedEffectiveFontSize!;
+      }
+      if (_cachedOverflowResult != null &&
+          requestedFontSize <= 120.0 &&
+          requestedFontSize >= _cachedOverflowFailedAt!) {
+        _cachedRequestedFontSize = requestedFontSize;
+        _cachedEffectiveFontSize = _cachedOverflowResult!;
+        return _cachedEffectiveFontSize!;
+      }
+    } else {
+      _cachedOverflowResult = null;
+      _cachedOverflowFailedAt = null;
+    }
+
+    final double resolved = VersePreviewCard.resolveFittingFontSize(
+      requestedFontSize: requestedFontSize,
+      verseText: verseText,
+      refText: refText,
+      verseIsPlaceholder: verseIsPlaceholder,
+      refIsPlaceholder: refIsPlaceholder,
+      maxWidth: maxWidth,
+      maxHeight: maxHeight,
+      textScaler: textScaler,
+      textDirection: textDirection,
+      textStyleOptions: currentStyle,
+    );
+
+    _cachedLayoutKey = layoutKey;
+    _cachedRequestedFontSize = requestedFontSize;
+    _cachedEffectiveFontSize = resolved;
+    if (requestedFontSize > 8.0 &&
+        requestedFontSize <= 120.0 &&
+        maxWidth > 0 &&
+        maxHeight > 0 &&
+        resolved < requestedFontSize) {
+      _cachedOverflowResult = resolved;
+      _cachedOverflowFailedAt = requestedFontSize;
+    }
+    return resolved;
+  }
+
   Listenable _buildTextAnimation() => Listenable.merge([
     widget.previewListenable,
     ?widget.fontColorListenable,
@@ -707,19 +787,18 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
         final double effectiveMaxHeight = hasBackdrop
             ? (maxTextHeight - 24.0).clamp(80.0, maxTextHeight)
             : maxTextHeight;
-        final double effectiveFontSize =
-            VersePreviewCard.resolveFittingFontSize(
-              requestedFontSize: requestedFontSize,
-              verseText: displayVerse,
-              refText: displayRef,
-              verseIsPlaceholder: verseIsPlaceholder,
-              refIsPlaceholder: refIsPlaceholder,
-              maxWidth: effectiveMaxWidth,
-              maxHeight: effectiveMaxHeight,
-              textScaler: textScaler,
-              textDirection: textDirection,
-              textStyleOptions: currentStyle,
-            );
+        final double effectiveFontSize = _resolveCachedFittingFontSize(
+          requestedFontSize: requestedFontSize,
+          verseText: displayVerse,
+          refText: displayRef,
+          verseIsPlaceholder: verseIsPlaceholder,
+          refIsPlaceholder: refIsPlaceholder,
+          maxWidth: effectiveMaxWidth,
+          maxHeight: effectiveMaxHeight,
+          textScaler: textScaler,
+          textDirection: textDirection,
+          currentStyle: currentStyle,
+        );
         final Widget textColumn = SizedBox(
           width: effectiveMaxWidth,
           child: Column(

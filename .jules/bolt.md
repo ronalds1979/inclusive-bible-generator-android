@@ -47,3 +47,7 @@
 ## 2026-11-20 - Cache FutureBuilder Futures Inside ListView Builders
 **Learning:** Invoking `StockPhotoService.fetchThumbnailBytes()` directly inside `ListView.separated`'s `itemBuilder` -> `FutureBuilder` creates a brand new `Future` and fires duplicate HTTPS thumbnail requests (plus loading spinner flashes) on every selection `setState` or horizontal scroll.
 **Action:** Memoize thumbnail `Future<Uint8List>` instances by URL in `_StockPhotoSearchCardState`, clearing on new searches and removing failed futures on error so retries remain possible.
+
+## 2026-11-21 - Memoize Fitting Font Size Across Color Drags & Clamped Slider Overflow
+**Learning:** `VersePreviewCard`'s `_textAnimation` merges `fontColorListenable` with layout-affecting listenables, causing 60Hz color drags and clamped font-size slider drags to re-run `resolveFittingFontSize`'s 12-iteration `TextPainter.layout()` binary search (up to 28 layouts/frame).
+**Action:** Memoize `resolveFittingFontSize` in `_VersePreviewCardState` keyed by a Dart record of layout-affecting inputs plus `requestedFontSize` (and cache the `[8.0, 120.0]` overflow result above the first failing size) to skip redundant `TextPainter.layout()` calls.
