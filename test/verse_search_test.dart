@@ -119,4 +119,51 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'Search Topic dialog disables search under 2 chars and clears query/results',
+    (WidgetTester tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MyApp(verseSearchOverride: (_, _, _) async => const []),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Search Topic'));
+      await tester.tap(find.text('Search Topic'));
+      await tester.pumpAndSettle();
+
+      FilledButton searchButton() => tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Search'),
+      );
+      expect(searchButton().onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField).last, 'a');
+      await tester.pump();
+      expect(searchButton().onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField).last, 'xyz');
+      await tester.pump();
+      expect(searchButton().onPressed, isNotNull);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+      await tester.pumpAndSettle();
+      expect(find.text('No matching verses found. Try another word or phrase.'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byTooltip('Clear'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(searchButton().onPressed, isNull);
+      expect(find.text('No matching verses found. Try another word or phrase.'), findsNothing);
+    },
+  );
 }

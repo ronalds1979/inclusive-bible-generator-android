@@ -1063,40 +1063,66 @@ class _MyHomePageState extends State<MyHomePage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _verseSearchController,
-                            autofocus: true,
-                            textInputAction: TextInputAction.search,
-                            decoration: InputDecoration(
-                              hintText: generator.getLocaleString(
-                                lang,
-                                "verse_search_hint",
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _verseSearchController,
+                      builder: (context, value, _) {
+                        final bool canSearch =
+                            !searching && value.text.trim().length >= 2;
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _verseSearchController,
+                                autofocus: true,
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: generator.getLocaleString(
+                                    lang,
+                                    "verse_search_hint",
+                                  ),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                  suffixIcon: value.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear),
+                                          tooltip: generator.getLocaleString(
+                                            lang,
+                                            "clear_btn",
+                                          ),
+                                          onPressed: searching
+                                              ? null
+                                              : () {
+                                                  _verseSearchController
+                                                      .clear();
+                                                  setDialogState(() {
+                                                    results = const [];
+                                                    hasSearched = false;
+                                                  });
+                                                },
+                                        )
+                                      : null,
+                                ),
+                                onSubmitted: runSearch,
                               ),
-                              border: const OutlineInputBorder(),
-                              isDense: true,
                             ),
-                            onSubmitted: runSearch,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                          onPressed: searching
-                              ? null
-                              : () => runSearch(_verseSearchController.text),
-                          child: Text(
-                            generator.getLocaleString(
-                              lang,
-                              "verse_search_submit",
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                              onPressed: canSearch
+                                  ? () => runSearch(_verseSearchController.text)
+                                  : null,
+                              child: Text(
+                                generator.getLocaleString(
+                                  lang,
+                                  "verse_search_submit",
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 10),
                     Wrap(
@@ -1132,9 +1158,12 @@ class _MyHomePageState extends State<MyHomePage> {
                         style: Theme.of(context).textTheme.bodySmall,
                       )
                     else if (results.isEmpty)
-                      Text(
-                        generator.getLocaleString(lang, "verse_search_empty"),
-                        style: Theme.of(context).textTheme.bodySmall,
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          generator.getLocaleString(lang, "verse_search_empty"),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       )
                     else
                       ConstrainedBox(
