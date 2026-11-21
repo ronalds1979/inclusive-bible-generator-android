@@ -494,6 +494,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool isGenerating = false;
   late final Listenable _previewListenable;
   late final Listenable _contrastListenable;
+  late final Listenable _scorecardListenable;
 
   @override
   void initState() {
@@ -525,6 +526,12 @@ class _MyHomePageState extends State<MyHomePage> {
       _fontColorNotifier,
       _textStyleNotifier,
       _yOffsetNotifier,
+    ]);
+    // ⚡ Bolt: Cache scorecard Listenable.merge once instead of reallocating per build()
+    _scorecardListenable = Listenable.merge([
+      _previewListenable,
+      _contrastListenable,
+      _fontSizeNotifier,
     ]);
     _initApp();
   }
@@ -3149,14 +3156,6 @@ class _MyHomePageState extends State<MyHomePage> {
     return effective;
   }
 
-  double _computeCurrentContrastRatio() {
-    final double fgLuminance = _fontColorNotifier.value.computeLuminance();
-    return VersePreviewCard.computeWcagContrastRatio(
-      fgLuminance,
-      _effectiveBackgroundLuminance(),
-    );
-  }
-
   void _applySuggestedSafeColor(String lang) {
     HapticFeedback.selectionClick();
     final Color approxBg = _effectiveBackgroundColor(
@@ -5244,22 +5243,25 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget _buildInclusivityScorecard(String lang) {
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        _previewListenable,
-        _contrastListenable,
-        _fontSizeNotifier,
-      ]),
+      animation: _scorecardListenable,
       builder: (context, _) {
         final String verseText = verseController.text.trim();
         final String refText = referenceController.text.trim();
         final bool hasVerse = verseText.isNotEmpty && refText.isNotEmpty;
+        // ⚡ Bolt: Reuse effectiveBgLum for normalRatio and short-circuit CVD check when normalRatio < 4.5
+        final Color currentFontColor = _fontColorNotifier.value;
         final double effectiveBgLum = _effectiveBackgroundLuminance();
-        final double normalRatio = _computeCurrentContrastRatio();
-        final double cvdMinRatio = ColorAccessibility.worstCaseCvdContrast(
-          textColor: _fontColorNotifier.value,
-          backgroundColor: _effectiveBackgroundColor(effectiveBgLum),
-        ).minRatio;
-        final bool contrastOk = normalRatio >= 4.5 && cvdMinRatio >= 4.5;
+        final double normalRatio = VersePreviewCard.computeWcagContrastRatio(
+          currentFontColor.computeLuminance(),
+          effectiveBgLum,
+        );
+        final bool contrastOk =
+            normalRatio >= 4.5 &&
+            ColorAccessibility.worstCaseCvdContrast(
+                  textColor: currentFontColor,
+                  backgroundColor: _effectiveBackgroundColor(effectiveBgLum),
+                ).minRatio >=
+                4.5;
         final bool altTextOk =
             hasVerse &&
             (customImagePath == null || _activeImageDescription != null);
@@ -5270,12 +5272,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 verseText.length > 80);
         final bool captionsOk = hasVerse;
 
-        final int score = [
-          contrastOk,
-          altTextOk,
-          typographyOk,
-          captionsOk,
-        ].where((ok) => ok).length;
+        final int score =
+            (contrastOk ? 1 : 0) +
+            (altTextOk ? 1 : 0) +
+            (typographyOk ? 1 : 0) +
+            (captionsOk ? 1 : 0);
 
         final ThemeData theme = Theme.of(context);
         final Color successColor = _successColor(context);
