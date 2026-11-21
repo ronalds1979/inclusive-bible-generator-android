@@ -11,6 +11,7 @@ import 'package:app/getbible_api.dart';
 import 'package:app/services/contrast_sampler.dart';
 import 'package:app/services/image_validation.dart';
 import 'package:app/services/temp_file_cleanup.dart';
+import 'package:app/services/voice_verse_service.dart';
 import 'package:app/widgets/youversion_auth_dialog.dart';
 
 void main() {
@@ -397,6 +398,21 @@ void main() {
       } finally {
         await tempDir.delete(recursive: true);
       }
+    },
+  );
+
+  test(
+    'VoiceVerseService.normalizeSpokenReference caps oversized transcripts before regex matching',
+    () {
+      final String oversized = '${'a ' * 150}3:16';
+      final String normalized = VoiceVerseService.normalizeSpokenReference(
+        oversized,
+      );
+      expect(normalized.length, equals(VoiceVerseService.maxSpokenLength));
+      expect(
+        VoiceVerseService.normalizeSpokenReference('John chapter 3 verse 16'),
+        equals('John 3:16'),
+      );
     },
   );
 }

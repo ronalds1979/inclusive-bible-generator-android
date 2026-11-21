@@ -39,9 +39,9 @@ class MediaExportService {
       );
       await imgFile.writeAsBytes(pngBytes);
 
-      final bool hasAccess = await Gal.hasAccess();
+      final bool hasAccess = await Gal.hasPermission(toAlbum: true);
       if (!hasAccess) {
-        await Gal.requestAccess();
+        await Gal.requestPermission(toAlbum: true);
       }
       await Gal.putImage(imgFile.path, album: 'Inclusive Bible');
 

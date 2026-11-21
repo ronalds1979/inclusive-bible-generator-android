@@ -54,6 +54,8 @@ class VoiceVerseService {
     }
   }
 
+  static const int maxSpokenLength = 200;
+
   static final RegExp _spokenRefRegex = RegExp(
     r'^((?:[1-3]\s+)?[^\d]+?)\s+(?:(?:chapter|cap[ií]tulo|cap\.?)\s+)?(\d+)(?:\s*(?:[:.,]|(?:verses?|vers[ií]culos?|v\.?))\s*(\d+)(?:\s*(?:[-–]|(?:to|through|a|al|at[eé]))\s*(\d+))?|\s+(\d+)(?:\s*(?:[-–]|(?:to|through|a|al|at[eé]))\s*(\d+))?)?$',
     caseSensitive: false,
@@ -63,8 +65,13 @@ class VoiceVerseService {
   /// Spanish (e.g. `"John chapter 3 verse 16"`, `"Salmos 23 versículo 1 ao 4"`,
   /// `"Juan 3 versículo 16"`) into standard `"Book Chapter:Verse(-EndVerse)"`.
   static String normalizeSpokenReference(String rawSpoken) {
-    final String cleaned = rawSpoken
-        .trim()
+    final String trimmed = rawSpoken.trim();
+    if (trimmed.isEmpty || trimmed.length > maxSpokenLength) {
+      return trimmed.length > maxSpokenLength
+          ? trimmed.substring(0, maxSpokenLength)
+          : trimmed;
+    }
+    final String cleaned = trimmed
         .replaceAll(RegExp(r'\s+'), ' ')
         .replaceAll(RegExp(r'\b(ao|aos)\b', caseSensitive: false), 'a')
         .replaceAll(RegExp(r'\bprimeiro\b', caseSensitive: false), '1')

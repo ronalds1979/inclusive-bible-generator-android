@@ -15,10 +15,10 @@ dependencies:
   path_provider: ^2.1.6
   share_plus: ^13.3.1
   flutter_tts: ^4.2.5
-  google_fonts: ^8.2.1
+  google_fonts: ^9.0.0
   flutter_colorpicker: ^1.1.0
   image_picker: ^1.2.4
-  gal: ^2.3.3
+  gal: ^3.0.1
   url_launcher: ^6.3.1
   flutter_secure_storage: ^11.2.0
 

@@ -1550,10 +1550,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _sampleCurrentBackgroundLuminance() async {
     final int seq = ++_sampleSeq;
+    final String safeBgName = selectedBackground
+        .split('/')
+        .last
+        .split('\\')
+        .last;
     final BackgroundLuminanceProfile? profile = customImagePath != null
         ? await contrastSampler.sampleFile(customImagePath!)
         : await contrastSampler.sampleAsset(
-            'assets/backgrounds/$selectedBackground',
+            'assets/backgrounds/$safeBgName',
           );
     if (!mounted || seq != _sampleSeq) return;
     setState(() {
@@ -1660,8 +1665,13 @@ class _MyHomePageState extends State<MyHomePage> {
       if (customImagePath != null) {
         result = await geminiNanoService.describeImageFile(customImagePath!);
       } else {
+        final String safeBgName = selectedBackground
+            .split('/')
+            .last
+            .split('\\')
+            .last;
         final ByteData assetData = await rootBundle.load(
-          'assets/backgrounds/$selectedBackground',
+          'assets/backgrounds/$safeBgName',
         );
         result = await geminiNanoService.describeImageBytes(
           assetData.buffer.asUint8List(),

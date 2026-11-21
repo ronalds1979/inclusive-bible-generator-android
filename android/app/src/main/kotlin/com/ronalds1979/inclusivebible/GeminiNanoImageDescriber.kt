@@ -24,6 +24,10 @@ import java.util.concurrent.Executors
  * Runs 100% locally at zero cost with no API key on compatible Android devices.
  */
 class GeminiNanoImageDescriber(private val appContext: Context) {
+    companion object {
+        private const val MAX_IMAGE_BYTES: Long = 20L * 1024L * 1024L
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
@@ -214,6 +218,37 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
         }
     }
 
+    private fun hasValidRasterHeader(header: ByteArray, length: Int): Boolean {
+        if (length >= 4 &&
+            header[0] == 0x89.toByte() &&
+            header[1] == 0x50.toByte() &&
+            header[2] == 0x4E.toByte() &&
+            header[3] == 0x47.toByte()
+        ) {
+            return true
+        }
+        if (length >= 3 &&
+            header[0] == 0xFF.toByte() &&
+            header[1] == 0xD8.toByte() &&
+            header[2] == 0xFF.toByte()
+        ) {
+            return true
+        }
+        if (length >= 12 &&
+            header[0] == 0x52.toByte() &&
+            header[1] == 0x49.toByte() &&
+            header[2] == 0x46.toByte() &&
+            header[3] == 0x46.toByte() &&
+            header[8] == 0x57.toByte() &&
+            header[9] == 0x45.toByte() &&
+            header[10] == 0x42.toByte() &&
+            header[11] == 0x50.toByte()
+        ) {
+            return true
+        }
+        return false
+    }
+
     private fun decodeSampledBitmap(
         imageBytes: ByteArray?,
         imagePath: String?,
@@ -221,10 +256,24 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
     ): Bitmap? {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         if (imageBytes != null && imageBytes.isNotEmpty()) {
+            if (imageBytes.size.toLong() > MAX_IMAGE_BYTES ||
+                !hasValidRasterHeader(imageBytes, imageBytes.size)
+            ) {
+                return null
+            }
             BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOptions)
         } else if (!imagePath.isNullOrBlank()) {
             val file = File(imagePath)
             if (!file.exists() || !file.isFile) return null
+            val fileSize = file.length()
+            if (fileSize <= 0L || fileSize > MAX_IMAGE_BYTES) return null
+            val header = ByteArray(12)
+            val bytesRead = try {
+                file.inputStream().use { it.read(header) }
+            } catch (_: Throwable) {
+                return null
+            }
+            if (!hasValidRasterHeader(header, bytesRead)) return null
             BitmapFactory.decodeFile(imagePath, boundsOptions)
         } else {
             return null
