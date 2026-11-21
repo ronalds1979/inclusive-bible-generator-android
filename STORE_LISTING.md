@@ -71,7 +71,7 @@ Comparte la Palabra de Dios de una manera que todas las personas puedan disfruta
 
 **Diseñado para la Accesibilidad y Facilidad de Uso:**
 • **Listo para Compartir al Abrir:** Carga automáticamente el Versículo del Día al iniciar la app (y lo recarga al cambiar de idioma), completando la vista previa, el Alt-Text y la leyenda al instante.
-• **Flujo Guiado en 4 Passos:** Sigue una ruta clara paso a paso — 1. Versículo, 2. Fondo, 3. Estilo, 4. Audio y Texto — con controles de 48dp+, botones `-`/`+` en cada deslizador y soporte para TalkBack y teclado.
+• **Flujo Guiado en 4 Pasos:** Sigue una ruta clara paso a paso — 1. Versículo, 2. Fondo, 3. Estilo, 4. Audio y Texto — con controles de 48dp+, botones `-`/`+` en cada deslizador y soporte para TalkBack y teclado.
 • **Búsqueda por Tema, Selector Inteligente y Voz:** Selecciona libro, capítulo y rango de versículos, busca por palabras, frases o temas en 1 toque (Paz, Esperanza, Amor, Fuerza, Fe) o dicta una referencia por voz.
 • **Tipografía Offline y Estilos Rápidos:** Elige entre 8 fuentes offline (incluyendo Playfair Display, Lora y Montserrat), Negrita/Cursiva, alineación, sombras adaptables, fondo esmerilado o alto contraste, detalles editoriales, interlineado y estilos rápidos como **Lectura Facilitada**.
 • **Pensado para Daltonismo y Baja Visión:** Colores con nombre siempre visible, contraste WCAG adaptado al daltonismo, **Sugerir Color Seguro**, **Mejor Posición**, **Tema de Alto Contraste**, **Colores de Estado para Daltonismo** y **Vista Previa Completa con Simulador de Visión**.
