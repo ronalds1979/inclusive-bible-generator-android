@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:app/generator.dart';
 import 'package:app/getbible_api.dart';
+import 'package:app/services/contrast_sampler.dart';
 import 'package:app/services/image_validation.dart';
 import 'package:app/services/temp_file_cleanup.dart';
 import 'package:app/widgets/youversion_auth_dialog.dart';
@@ -357,6 +358,45 @@ void main() {
       final TextField field = tester.widget<TextField>(find.byType(TextField));
       expect(field.enableSuggestions, isFalse);
       expect(field.autocorrect, isFalse);
+    },
+  );
+
+  test(
+    'ContrastSampler rejects oversized, empty, and non-raster image inputs',
+    () async {
+      const sampler = ContrastSampler();
+      expect(await sampler.sampleImageBytes(Uint8List(0)), isNull);
+      expect(
+        await sampler.sampleImageBytes(
+          Uint8List.fromList(utf8.encode('<svg xmlns="http://www.w3.org/2000/svg"/>')),
+        ),
+        isNull,
+      );
+
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'ibg_contrast_security_',
+      );
+      try {
+        final File emptyFile = File('${tempDir.path}/empty.png')..createSync();
+        expect(await sampler.sampleFile(emptyFile.path), isNull);
+
+        final File svgFile = File('${tempDir.path}/fake.png')
+          ..writeAsStringSync('<svg xmlns="http://www.w3.org/2000/svg"/>');
+        expect(await sampler.sampleFile(svgFile.path), isNull);
+
+        final File oversizedFile = File('${tempDir.path}/oversized.png');
+        final RandomAccessFile raf = await oversizedFile.open(mode: FileMode.write);
+        try {
+          await raf.writeFrom([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+          await raf.setPosition(ContrastSampler.maxImageBytes);
+          await raf.writeByte(0);
+        } finally {
+          await raf.close();
+        }
+        expect(await sampler.sampleFile(oversizedFile.path), isNull);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
     },
   );
 }

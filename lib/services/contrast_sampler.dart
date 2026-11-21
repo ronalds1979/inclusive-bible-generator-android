@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../widgets/verse_preview_card.dart';
+import 'image_validation.dart';
 
 /// Luminance summary sampled across the top, center, and bottom horizontal
 /// bands of a background image.
@@ -58,6 +59,8 @@ class BackgroundLuminanceProfile {
 /// Samples actual pixel luminance from a background image (asset or file)
 /// using a tiny downsampled decode for fast, accurate WCAG contrast checks.
 class ContrastSampler {
+  static const int maxImageBytes = 20 * 1024 * 1024;
+
   const ContrastSampler();
 
   static double _srgbChannelToLinear(int channel8) {
@@ -129,6 +132,12 @@ class ContrastSampler {
   }
 
   Future<BackgroundLuminanceProfile?> sampleImageBytes(Uint8List bytes) async {
+    // 🛡️ Sentinel: Bound image byte payloads and verify PNG/JPEG/WebP magic bytes before native codec decoding
+    if (bytes.isEmpty ||
+        bytes.length > maxImageBytes ||
+        !isValidRasterImageBytes(bytes)) {
+      return null;
+    }
     ui.Codec? codec;
     ui.Image? image;
     try {
@@ -156,6 +165,15 @@ class ContrastSampler {
     try {
       final File file = File(path);
       if (!await file.exists()) return null;
+      // 🛡️ Sentinel: Enforce 20 MB size limit and raster magic bytes before reading full file into memory
+      final int fileSize = await file.length();
+      if (fileSize <= 0 || fileSize > maxImageBytes) return null;
+      final List<int> headerBytes = await file
+          .openRead(0, 12)
+          .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+      if (!isValidRasterImageBytes(Uint8List.fromList(headerBytes))) {
+        return null;
+      }
       final Uint8List bytes = await file.readAsBytes();
       return await sampleImageBytes(bytes);
     } catch (_) {
