@@ -1,4 +1,4 @@
-# Release Notes — v1.1.0 (5)
+# Release Notes — v1.1.0 (6)
 
 Changes since **v1.0.2 (4)**.
 
