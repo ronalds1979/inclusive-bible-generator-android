@@ -99,7 +99,7 @@
     <h2>3. Photos, Voice Input &amp; Audio</h2>
     <ul>
       <li><strong>Gallery Access:</strong> If you pick a custom background image from your device gallery, the image is read locally to render your verse graphic, sample contrast, and optionally generate an on-device Alt-Text description. It is never uploaded to the developer.</li>
-      <li><strong>On-Device Gemini Nano (Optional):</strong> On compatible Android devices, enabling <em>On-Device Alt-Text (Gemini Nano)</em> uses Android's local ML Kit GenAI / AICore service to describe your background image entirely on-device.</li>
+      <li><strong>On-Device Gemini Nano (Optional):</strong> On compatible Android devices, enabling <em>On-Device Alt-Text (Gemini Nano)</em> uses Android's local ML Kit GenAI / AICore service to describe your background image entirely on-device. Images and generated descriptions are never sent to external servers; however, Google's ML Kit SDK may collect limited, non-personal API diagnostic and performance metrics via Google Play services as documented in <a href="https://developers.google.com/ml-kit/android-data-disclosure" rel="noopener noreferrer">Google's ML Kit Android Data Disclosure</a>.</li>
       <li><strong>Voice-to-Verse Input (Optional):</strong> When you tap the microphone button to speak a Bible reference, Android's system speech recognition service processes your voice request and returns only the recognized reference text to the app.</li>
       <li><strong>Export &amp; Sharing:</strong> Generated images, Text-to-Speech (TTS) audio files, and optional prompts shared via <em>Continue in Gemini App</em> are saved or shared only when you explicitly tap a share or open action.</li>
     </ul>
