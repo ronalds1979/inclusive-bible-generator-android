@@ -1,16 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:app/main.dart';
 import 'package:app/getbible_api.dart';
 import 'package:app/book_mapping.dart';
 import 'package:app/generator.dart';
-import 'package:app/services/stock_photo_service.dart';
-import 'package:app/widgets/gemini_auth_dialog.dart';
-import 'package:app/widgets/gemini_background_card.dart';
-import 'package:app/widgets/stock_photo_search_card.dart';
 import 'package:app/widgets/verse_preview_card.dart';
 import 'package:app/widgets/youversion_auth_dialog.dart';
 
@@ -59,123 +53,6 @@ void main() {
     expect(getChapterCountForBook('Salmos', 'pt'), equals(150));
     expect(getVerseCountForChapter('Salmos', 119, 'pt'), equals(176));
     expect(getVerseCountForChapter('John', 3, 'en'), equals(36));
-  });
-
-  testWidgets(
-    'GeminiBackgroundCard enables generate button only when verse is non-empty',
-    (WidgetTester tester) async {
-      final generator = Generator();
-      generator.locales = {
-        "en": {
-          "gemini_section_title": "AI Background (Gemini)",
-          "gemini_connect_btn": "Sign in with Google",
-          "gemini_connected_btn": "Google Connected",
-          "gemini_style_label": "Visual Style:",
-          "style_nature": "Serene Nature",
-          "style_watercolor": "Watercolor",
-          "style_cinematic": "Cinematic Light",
-          "style_oil_painting": "Oil Painting",
-          "style_minimalist": "Minimalist",
-          "gemini_prompt_label": "Extra Scene Details (Optional)",
-          "gemini_generate_bg_btn": "Generate Background with Gemini",
-          "clear_btn": "Clear",
-        },
-      };
-
-      final promptController = TextEditingController();
-      final verseController = TextEditingController();
-      bool generateTapped = false;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: GeminiBackgroundCard(
-              lang: "en",
-              generator: generator,
-              isConnected: false,
-              selectedStyle: "style_nature",
-              onStyleChanged: (_) {},
-              promptController: promptController,
-              verseController: verseController,
-              isGenerating: false,
-              onConnectPressed: () {},
-              onGeneratePressed: () {
-                generateTapped = true;
-              },
-            ),
-          ),
-        ),
-      );
-
-      final generateBtnFinder = find.widgetWithText(
-        ElevatedButton,
-        "Generate Background with Gemini",
-      );
-      expect(generateBtnFinder, findsOneWidget);
-
-      // Initially disabled when verseController is empty
-      await tester.tap(generateBtnFinder);
-      await tester.pump();
-      expect(generateTapped, isFalse);
-
-      // Entering a verse enables the button
-      verseController.text = "The Lord is my shepherd.";
-      await tester.pump();
-
-      await tester.tap(generateBtnFinder);
-      await tester.pump();
-      expect(generateTapped, isTrue);
-
-      promptController.dispose();
-      verseController.dispose();
-    },
-  );
-
-  testWidgets('GeminiAuthDialog saves entered API key and triggers callback', (
-    WidgetTester tester,
-  ) async {
-    final generator = Generator();
-    generator.locales = {
-      "en": {
-        "gemini_dialog_title": "Connect Gemini AI",
-        "gemini_dialog_hint": "Get a free Gemini API key",
-        "gemini_open_aistudio_btn":
-            "1. Get Free Gemini Key (Google AI Studio)",
-        "gemini_paste_clipboard_btn": "Paste Key from Clipboard",
-        "gemini_api_key_label": "Gemini API Key (AIza...)",
-        "gemini_save_btn": "Save & Connect",
-        "gemini_disconnect_btn": "Remove Key",
-        "gemini_cancel_btn": "Cancel",
-      },
-    };
-
-    String? savedKey;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: GeminiAuthDialog(
-            lang: "en",
-            generator: generator,
-            initialApiKey: null,
-            onSave: (key) async {
-              savedKey = key;
-            },
-            onDisconnect: () async {},
-          ),
-        ),
-      ),
-    );
-
-    await tester.enterText(
-      find.byType(TextField),
-      "mock-gemini-key-for-widget-test",
-    );
-    await tester.pump();
-    await tester.tap(find.text("Save & Connect"));
-    await tester.pumpAndSettle();
-
-    expect(savedKey, equals("mock-gemini-key-for-widget-test"));
   });
 
   testWidgets('VersePreviewCard updates live when controllers change', (
@@ -266,7 +143,7 @@ void main() {
       });
       await tester.pumpAndSettle();
 
-      expect(find.text("Español (España)"), findsOneWidget);
+      expect(find.text("ES-ES"), findsOneWidget);
       expect(find.text("Buscar Versículo"), findsOneWidget);
     },
   );
@@ -289,7 +166,7 @@ void main() {
       expect(find.byType(NavigationBar), findsOneWidget);
 
       // Switch language to English (US/UK)
-      await tester.tap(find.text("Português (Brasil)"));
+      await tester.tap(find.text("PT-BR"));
       await tester.pumpAndSettle();
       await tester.tap(find.text("English (US/UK)").last);
       await tester.pumpAndSettle();
@@ -570,71 +447,6 @@ void main() {
     expect(offset, equals(0.0));
   });
 
-  testWidgets('GeminiAuthDialog meets tap target guidelines and shows clipboard feedback', (
-    WidgetTester tester,
-  ) async {
-    final SemanticsHandle handle = tester.ensureSemantics();
-    try {
-      final generator = Generator();
-      generator.locales = {
-        "en": {
-          "gemini_dialog_title": "Connect Gemini AI",
-          "gemini_dialog_hint": "Get a free Gemini API key",
-          "gemini_open_aistudio_btn": "1. Get Free Gemini Key (Google AI Studio)",
-          "gemini_paste_clipboard_btn": "Paste Key from Clipboard",
-          "gemini_clipboard_detected_msg": "Gemini API Key detected from clipboard!",
-          "yv_clipboard_empty_msg": "Clipboard does not contain a valid key.",
-          "gemini_api_key_label": "Gemini API Key (AIza...)",
-          "show_api_key_tooltip": "Show API key",
-          "hide_api_key_tooltip": "Hide API key",
-          "gemini_save_btn": "Save & Connect",
-          "gemini_disconnect_btn": "Disconnect Key",
-          "gemini_cancel_btn": "Close",
-        },
-      };
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: GeminiAuthDialog(
-              lang: "en",
-              generator: generator,
-              initialApiKey: "AIzaSyTestExistingKey12345",
-              onSave: (_) async {},
-              onDisconnect: () async {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (MethodCall methodCall) async {
-          if (methodCall.method == 'Clipboard.getData') {
-            return <String, dynamic>{'text': 'not-a-valid-key'};
-          }
-          return null;
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        ),
-      );
-
-      await tester.tap(find.byTooltip("Paste Key from Clipboard"));
-      await tester.pumpAndSettle();
-      expect(find.text("Clipboard does not contain a valid key."), findsOneWidget);
-    } finally {
-      handle.dispose();
-    }
-  });
-
   testWidgets('Audio & Text tab shows live Alt-Text & Caption and Style tab resets font size', (
     WidgetTester tester,
   ) async {
@@ -779,96 +591,71 @@ void main() {
   );
 
   testWidgets(
-    'StockPhotoSearchCard caches thumbnail Futures across selection rebuilds',
+    'VersePreviewCard font size never decreases when slider exceeds 50',
     (WidgetTester tester) async {
-      final Generator generator = Generator();
-      generator.locales = {
-        'en': {
-          'stock_search_title': 'Stock Photos',
-          'stock_search_hint': 'Search',
-          'stock_search_btn': 'Search',
-          'stock_mood_sunrise': 'Sunrise',
-          'stock_mood_ocean': 'Ocean',
-          'stock_mood_mountains': 'Mountains',
-          'stock_mood_stars': 'Stars',
-          'stock_mood_forest': 'Forest',
-          'clear_btn': 'Clear',
-        },
-      };
-      final Uint8List pngBytes = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-      );
-      final _FakeStockPhotoService fakeService = _FakeStockPhotoService(
-        pngBytes,
-      );
+      const String verse =
+          'Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, '
+          'para que todo aquele que nele crê não pereça, mas tenha a vida eterna.';
+      const String reference = 'João 3:16';
+      final verseController = TextEditingController(text: verse);
+      final referenceController = TextEditingController(text: reference);
+      final fontSizeNotifier = ValueNotifier<double>(22.0);
+      final generator = Generator();
+      addTearDown(() {
+        verseController.dispose();
+        referenceController.dispose();
+        fontSizeNotifier.dispose();
+      });
 
-      String? selectedPath;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: StockPhotoSearchCard(
-              lang: 'en',
-              generator: generator,
-              stockPhotoService: fakeService,
-              onPhotoSelected: (path) => selectedPath = path,
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: VersePreviewCard(
+                repaintKey: GlobalKey(),
+                aspectRatioStr: '1:1',
+                customImagePath: null,
+                selectedBackground: 'default.png',
+                previewListenable: Listenable.merge([
+                  verseController,
+                  referenceController,
+                ]),
+                verseController: verseController,
+                referenceController: referenceController,
+                fontColor: Colors.white,
+                fontSize: 22.0,
+                fontSizeListenable: fontSizeNotifier,
+                yOffset: 0.0,
+                lang: 'pt-BR',
+                generator: generator,
+              ),
             ),
           ),
         ),
       );
 
-      await tester.tap(find.byType(ActionChip).first);
-      await tester.pump();
-      await tester.pump();
+      double previousRenderedFontSize = 0.0;
+      for (final double sliderValue in [22.0, 40.0, 50.0, 70.0, 95.0, 120.0]) {
+        fontSizeNotifier.value = sliderValue;
+        await tester.pump();
 
-      expect(fakeService.thumbnailFetchCalls, equals(2));
+        final Text verseWidget = tester.widget<Text>(find.text(verse));
+        final double renderedFontSize = verseWidget.style!.fontSize!;
+        final Rect verseRect = tester.getRect(find.text(verse));
+        final Rect refRect = tester.getRect(find.text(reference));
 
-      // Tapping a thumbnail triggers _downloadingIndex and _selectedIndex rebuilds;
-      // cached thumbnail Futures must prevent redundant network fetches.
-      await tester.tap(
-        find.descendant(
-          of: find.byType(ListView),
-          matching: find.byType(InkWell),
-        ).first,
-      );
-      await tester.pump();
-      await tester.pump();
-
-      expect(selectedPath, equals('/tmp/mock_stock_photo.jpg'));
-      expect(fakeService.thumbnailFetchCalls, equals(2));
+        expect(
+          renderedFontSize,
+          greaterThanOrEqualTo(previousRenderedFontSize),
+          reason:
+              'Rendered font size should never shrink at slider=$sliderValue',
+        );
+        expect(verseRect.bottom, lessThan(refRect.top));
+        expect(tester.takeException(), isNull);
+        previousRenderedFontSize = renderedFontSize;
+      }
     },
   );
-}
-
-class _FakeStockPhotoService extends StockPhotoService {
-  final Uint8List _pngBytes;
-  int thumbnailFetchCalls = 0;
-
-  _FakeStockPhotoService(this._pngBytes);
-
-  @override
-  Future<List<StockPhotoResult>> searchPhotos(String query) async {
-    return const [
-      StockPhotoResult(
-        title: 'Sunrise 1',
-        thumbUrl: 'https://upload.wikimedia.org/thumb1.jpg',
-        fullUrl: 'https://upload.wikimedia.org/full1.jpg',
-      ),
-      StockPhotoResult(
-        title: 'Sunrise 2',
-        thumbUrl: 'https://upload.wikimedia.org/thumb2.jpg',
-        fullUrl: 'https://upload.wikimedia.org/full2.jpg',
-      ),
-    ];
-  }
-
-  @override
-  Future<Uint8List> fetchThumbnailBytes(String thumbUrl) async {
-    thumbnailFetchCalls++;
-    return _pngBytes;
-  }
-
-  @override
-  Future<String> downloadPhotoToTemp(StockPhotoResult photo) async {
-    return '/tmp/mock_stock_photo.jpg';
-  }
 }

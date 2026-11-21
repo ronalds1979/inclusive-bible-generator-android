@@ -8,20 +8,22 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'book_mapping.dart';
-import 'gemini_service.dart';
 import 'generator.dart';
 import 'getbible_api.dart';
+import 'services/color_accessibility.dart';
+import 'services/contrast_sampler.dart';
+import 'services/gemini_handoff_service.dart';
+import 'services/gemini_nano_service.dart';
+import 'services/image_validation.dart';
 import 'services/media_export_service.dart';
-import 'services/stock_photo_service.dart';
 import 'services/temp_file_cleanup.dart';
 import 'services/tts_service.dart';
-import 'widgets/gemini_auth_dialog.dart';
-import 'widgets/gemini_background_card.dart';
-import 'widgets/stock_photo_search_card.dart';
+import 'services/voice_verse_service.dart';
 import 'widgets/verse_preview_card.dart';
-import 'widgets/youversion_auth_dialog.dart';
+import 'widgets/vision_simulation.dart';
 
 String resolveAppLanguageForLocale(Locale locale) {
   switch (locale.languageCode.toLowerCase()) {
@@ -40,45 +42,90 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final Generator? generator;
-  final GeminiService? geminiService;
   final TtsService? ttsService;
   final MediaExportService? mediaExportService;
+  final GeminiNanoService? geminiNanoService;
+  final GeminiHandoffService? geminiHandoffService;
+  final VoiceVerseService? voiceVerseService;
+  final ContrastSampler? contrastSampler;
+  final Future<List<BibleSearchResult>> Function(
+    String query,
+    String versionId,
+    String lang,
+  )? verseSearchOverride;
 
   const MyApp({
     super.key,
     this.generator,
-    this.geminiService,
     this.ttsService,
     this.mediaExportService,
+    this.geminiNanoService,
+    this.geminiHandoffService,
+    this.voiceVerseService,
+    this.contrastSampler,
+    this.verseSearchOverride,
   });
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  static const Color _editorialSeed = Color(0xFF284B8C);
+  bool _highContrastUi = false;
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final bool isDark = brightness == Brightness.dark;
+    final ColorScheme colorScheme = _highContrastUi
+        ? (isDark
+              ? const ColorScheme.highContrastDark()
+              : const ColorScheme.highContrastLight())
+        : ColorScheme.fromSeed(
+            seedColor: _editorialSeed,
+            brightness: brightness,
+          );
+    return ThemeData(
+      colorScheme: colorScheme,
+      useMaterial3: true,
+      cardTheme: CardThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: _highContrastUi
+                ? colorScheme.onSurface
+                : colorScheme.outlineVariant,
+            width: _highContrastUi ? 1.5 : 1.0,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Inclusive Bible Generator',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
       themeMode: ThemeMode.system,
       home: MyHomePage(
-        generator: generator,
-        geminiService: geminiService,
-        ttsService: ttsService,
-        mediaExportService: mediaExportService,
+        generator: widget.generator,
+        ttsService: widget.ttsService,
+        mediaExportService: widget.mediaExportService,
+        geminiNanoService: widget.geminiNanoService,
+        geminiHandoffService: widget.geminiHandoffService,
+        voiceVerseService: widget.voiceVerseService,
+        contrastSampler: widget.contrastSampler,
+        verseSearchOverride: widget.verseSearchOverride,
+        highContrastUi: _highContrastUi,
+        onHighContrastChanged: (bool value) {
+          if (_highContrastUi != value) {
+            setState(() => _highContrastUi = value);
+          }
+        },
       ),
     );
   }
@@ -86,16 +133,32 @@ class MyApp extends StatelessWidget {
 
 class MyHomePage extends StatefulWidget {
   final Generator? generator;
-  final GeminiService? geminiService;
   final TtsService? ttsService;
   final MediaExportService? mediaExportService;
+  final GeminiNanoService? geminiNanoService;
+  final GeminiHandoffService? geminiHandoffService;
+  final VoiceVerseService? voiceVerseService;
+  final ContrastSampler? contrastSampler;
+  final Future<List<BibleSearchResult>> Function(
+    String query,
+    String versionId,
+    String lang,
+  )? verseSearchOverride;
+  final bool highContrastUi;
+  final ValueChanged<bool>? onHighContrastChanged;
 
   const MyHomePage({
     super.key,
     this.generator,
-    this.geminiService,
     this.ttsService,
     this.mediaExportService,
+    this.geminiNanoService,
+    this.geminiHandoffService,
+    this.voiceVerseService,
+    this.contrastSampler,
+    this.verseSearchOverride,
+    this.highContrastUi = false,
+    this.onHighContrastChanged,
   });
 
   @override
@@ -109,7 +172,73 @@ class _MyHomePageState extends State<MyHomePage> {
     MapEntry(Color(0xFFFFF8E1), "color_cream"),
     MapEntry(Color(0xFF81D4FA), "color_sky_blue"),
     MapEntry(Color(0xFFFFAB91), "color_coral"),
+    MapEntry(Color(0xFF0D2B52), "color_deep_navy"),
     MapEntry(Colors.black, "color_black"),
+  ];
+
+  static const List<MapEntry<String, VerseTextStyleOptions>> _stylePresets = [
+    MapEntry(
+      "preset_editorial",
+      VerseTextStyleOptions(
+        fontFamily: VerseFontFamily.playfairDisplay,
+        isBold: true,
+        isItalic: false,
+        shadow: VerseTextShadow.soft,
+        textAlign: TextAlign.center,
+        backdrop: VerseTextBackdrop.none,
+        accent: VerseCardAccent.divider,
+        lineHeight: 1.30,
+      ),
+    ),
+    MapEntry(
+      "preset_minimal",
+      VerseTextStyleOptions(
+        fontFamily: VerseFontFamily.montserrat,
+        isBold: true,
+        isItalic: false,
+        shadow: VerseTextShadow.soft,
+        textAlign: TextAlign.left,
+        backdrop: VerseTextBackdrop.none,
+        lineHeight: 1.25,
+      ),
+    ),
+    MapEntry(
+      "preset_devotional",
+      VerseTextStyleOptions(
+        fontFamily: VerseFontFamily.lora,
+        isBold: false,
+        isItalic: true,
+        shadow: VerseTextShadow.none,
+        textAlign: TextAlign.center,
+        backdrop: VerseTextBackdrop.frosted,
+        lineHeight: 1.40,
+      ),
+    ),
+    MapEntry(
+      "preset_wcag",
+      VerseTextStyleOptions(
+        fontFamily: VerseFontFamily.sans,
+        isBold: true,
+        isItalic: false,
+        shadow: VerseTextShadow.none,
+        textAlign: TextAlign.center,
+        backdrop: VerseTextBackdrop.solid,
+        lineHeight: 1.35,
+      ),
+    ),
+    MapEntry(
+      "preset_dyslexia",
+      VerseTextStyleOptions(
+        fontFamily: VerseFontFamily.sans,
+        isBold: false,
+        isItalic: false,
+        shadow: VerseTextShadow.none,
+        textAlign: TextAlign.left,
+        backdrop: VerseTextBackdrop.solid,
+        lineHeight: 1.50,
+        letterSpacing: 0.40,
+      ),
+    ),
   ];
 
   String? _copiedField;
@@ -124,11 +253,30 @@ class _MyHomePageState extends State<MyHomePage> {
   ];
 
   late final Generator generator;
-  late final GeminiService geminiService;
   late final TtsService ttsService;
   late final MediaExportService mediaExportService;
-  final StockPhotoService stockPhotoService = StockPhotoService();
+  late final GeminiNanoService geminiNanoService;
+  late final GeminiHandoffService geminiHandoffService;
+  late final VoiceVerseService voiceVerseService;
+  late final ContrastSampler contrastSampler;
   final GlobalKey _globalKey = GlobalKey();
+
+  GeminiNanoAvailability _geminiNanoAvailability =
+      GeminiNanoAvailability.unavailable;
+  bool _geminiNanoEnabled = false;
+  bool _geminiHandoffEnabled = false;
+  bool _highContrastUiEnabled = false;
+  bool _colorBlindUiEnabled = false;
+  bool _voiceInputAvailable = false;
+  bool _isListeningVoice = false;
+  bool _isDescribingImage = false;
+  String? _onDeviceImageDescription;
+  final TextEditingController _imageDescriptionController =
+      TextEditingController();
+  final TextEditingController _verseSearchController = TextEditingController();
+  BackgroundLuminanceProfile? _sampledBgProfile;
+  int _sampleSeq = 0;
+  (int, int)? _spokenWordRange;
 
   int _selectedTabIndex = 0;
 
@@ -138,6 +286,12 @@ class _MyHomePageState extends State<MyHomePage> {
     "English (US/UK)",
     "Español (España)",
   ];
+
+  static String _shortLanguageCode(String languageName) {
+    if (languageName.startsWith("English")) return "EN-US";
+    if (languageName.startsWith("Español")) return "ES-ES";
+    return "PT-BR";
+  }
 
   String bibleLang = "pt";
   String youVersionApiKey = GetBibleAPI.defaultYouVersionApiKey;
@@ -223,7 +377,6 @@ class _MyHomePageState extends State<MyHomePage> {
   int? selectedEndVerse;
   final TextEditingController referenceController = TextEditingController();
   final TextEditingController verseController = TextEditingController();
-  final TextEditingController geminiPromptController = TextEditingController();
 
   static final RegExp _fileExtensionRegExp = RegExp(r'\.[^.]+$');
 
@@ -237,12 +390,6 @@ class _MyHomePageState extends State<MyHomePage> {
   double get backgroundDim => _backgroundDimNotifier.value;
   set backgroundDim(double v) => _backgroundDimNotifier.value = v;
 
-  String? geminiApiKey;
-  String selectedGeminiStyle = GeminiService.styleKeys.first;
-  bool isGeneratingGeminiBg = false;
-  bool isGeminiBackground = false;
-  bool _showExperimentalGemini = false;
-
   final ValueNotifier<Color> _fontColorNotifier = ValueNotifier<Color>(
     Colors.white,
   );
@@ -255,6 +402,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final ValueNotifier<double> _yOffsetNotifier = ValueNotifier<double>(0.0);
   double get yOffset => _yOffsetNotifier.value;
   set yOffset(double v) => _yOffsetNotifier.value = v;
+  final ValueNotifier<VerseTextStyleOptions> _textStyleNotifier =
+      ValueNotifier<VerseTextStyleOptions>(const VerseTextStyleOptions());
 
   bool generateAudio = false;
   bool isPlayingAudioPreview = false;
@@ -304,16 +453,23 @@ class _MyHomePageState extends State<MyHomePage> {
     currentLang = resolveAppLanguageForLocale(deviceLocale);
     bibleLang = getLangKey().substring(0, 2);
     generator = widget.generator ?? Generator();
-    geminiService = widget.geminiService ?? GeminiService();
     ttsService = widget.ttsService ?? TtsService();
     mediaExportService = widget.mediaExportService ?? MediaExportService();
+    geminiNanoService = widget.geminiNanoService ?? const GeminiNanoService();
+    geminiHandoffService =
+        widget.geminiHandoffService ?? const GeminiHandoffService();
+    voiceVerseService = widget.voiceVerseService ?? const VoiceVerseService();
+    contrastSampler = widget.contrastSampler ?? const ContrastSampler();
     _previewListenable = Listenable.merge([
       referenceController,
       verseController,
+      _imageDescriptionController,
     ]);
     _contrastListenable = Listenable.merge([
       _backgroundDimNotifier,
       _fontColorNotifier,
+      _textStyleNotifier,
+      _yOffsetNotifier,
     ]);
     _initApp();
   }
@@ -326,9 +482,11 @@ class _MyHomePageState extends State<MyHomePage> {
     _fontColorNotifier.dispose();
     _fontSizeNotifier.dispose();
     _yOffsetNotifier.dispose();
+    _textStyleNotifier.dispose();
+    _imageDescriptionController.dispose();
+    _verseSearchController.dispose();
     referenceController.dispose();
     verseController.dispose();
-    geminiPromptController.dispose();
     ttsService.stop();
     super.dispose();
   }
@@ -347,17 +505,28 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _initApp() async {
     unawaited(_cleanupStartupTransientFiles());
-    // ⚡ Bolt: Parallelize independent startup I/O (locales, secure storage keys, asset manifest)
+    // ⚡ Bolt: Parallelize independent startup I/O (locales, secure storage keys, asset manifest, device capability check)
     final results = await Future.wait<dynamic>([
       generator.loadLocales(),
-      geminiService.loadApiKey(),
       GetBibleAPI.loadYouVersionApiKey(),
       _loadBackgrounds(),
       _loadPreferredBibleVersions(),
+      geminiNanoService.checkAvailability(),
+      _loadAdvancedPreferences(),
+      _loadTypographyStyle(),
+      voiceVerseService.isAvailable(),
     ]);
-    geminiApiKey = results[1] as String?;
-    youVersionApiKey =
-        (results[2] as String?) ?? GetBibleAPI.defaultYouVersionApiKey;
+    final String providedYouVersionKey =
+        GetBibleAPI.defaultYouVersionApiKey.trim();
+    youVersionApiKey = providedYouVersionKey.isNotEmpty
+        ? providedYouVersionKey
+        : ((results[1] as String?) ?? '');
+    _geminiNanoAvailability = results[4] as GeminiNanoAvailability;
+    _voiceInputAvailable = results[7] as bool;
+    if (!_geminiNanoAvailability.isCompatible) {
+      _geminiNanoEnabled = false;
+    }
+    unawaited(_sampleCurrentBackgroundLuminance());
     _syncDefaultBookForLanguage();
     // ⚡ Bolt: Populate built-in Bible versions synchronously so cold start isn't blocked by network I/O
     final builtIn = GetBibleAPI.getBuiltInVersions(bibleLang);
@@ -535,6 +704,86 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error saving preferred Bible version: $e");
+      }
+    }
+  }
+
+  Future<void> _loadAdvancedPreferences() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/advanced_features.json');
+      if (await file.exists()) {
+        final int fileLen = await file.length();
+        if (fileLen <= 0 || fileLen > 16 * 1024) return;
+        final dynamic decoded = jsonDecode(await file.readAsString());
+        if (decoded is Map) {
+          _geminiNanoEnabled = decoded['gemini_nano_enabled'] == true;
+          _geminiHandoffEnabled = decoded['gemini_handoff_enabled'] == true;
+          _highContrastUiEnabled = decoded['high_contrast_ui'] == true;
+          _colorBlindUiEnabled = decoded['color_blind_ui'] == true;
+          if (_highContrastUiEnabled) {
+            widget.onHighContrastChanged?.call(true);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error loading advanced feature preferences: $e");
+      }
+    }
+  }
+
+  Future<void> _saveAdvancedPreferences() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/advanced_features.json');
+      await file.writeAsString(
+        jsonEncode({
+          'gemini_nano_enabled': _geminiNanoEnabled,
+          'gemini_handoff_enabled': _geminiHandoffEnabled,
+          'high_contrast_ui': _highContrastUiEnabled,
+          'color_blind_ui': _colorBlindUiEnabled,
+        }),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error saving advanced feature preferences: $e");
+      }
+    }
+  }
+
+  void _updateTextStyle(VerseTextStyleOptions next) {
+    _textStyleNotifier.value = next;
+    unawaited(_saveTypographyStyle(next));
+  }
+
+  Future<void> _loadTypographyStyle() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/typography_style.json');
+      if (await file.exists()) {
+        final int fileLen = await file.length();
+        if (fileLen <= 0 || fileLen > 16 * 1024) return;
+        final dynamic decoded = jsonDecode(await file.readAsString());
+        if (decoded is Map) {
+          _textStyleNotifier.value = VerseTextStyleOptions.fromJson(decoded);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error loading typography style preferences: $e");
+      }
+    }
+  }
+
+  Future<void> _saveTypographyStyle(VerseTextStyleOptions style) async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/typography_style.json');
+      await file.writeAsString(jsonEncode(style.toJson()));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error saving typography style preferences: $e");
       }
     }
   }
@@ -737,7 +986,7 @@ class _MyHomePageState extends State<MyHomePage> {
           .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
       if (fileSize <= 0 ||
           fileSize > 20 * 1024 * 1024 ||
-          !GeminiService.isValidRasterImageBytes(Uint8List.fromList(headerBytes))) {
+          !isValidRasterImageBytes(Uint8List.fromList(headerBytes))) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -754,190 +1003,357 @@ class _MyHomePageState extends State<MyHomePage> {
 
       setState(() {
         customImagePath = image.path;
-        isGeminiBackground = false;
+        _onDeviceImageDescription = null;
+        _imageDescriptionController.clear();
       });
+      unawaited(_sampleCurrentBackgroundLuminance());
     }
   }
 
-  Future<bool> _showGeminiAuthDialog() async {
+  Future<void> _showVerseSearchDialog() async {
     final String lang = getLangKey();
-    final bool? connected = await showDialog<bool>(
+    final String versionId = bibleVersionsMap[selectedBibleVersion] ?? "web";
+    _verseSearchController.clear();
+    List<BibleSearchResult> results = const [];
+    bool searching = false;
+    bool hasSearched = false;
+
+    const List<String> themeKeys = [
+      "verse_search_theme_peace",
+      "verse_search_theme_hope",
+      "verse_search_theme_love",
+      "verse_search_theme_strength",
+      "verse_search_theme_faith",
+    ];
+
+    final BibleSearchResult? picked = await showDialog<BibleSearchResult>(
       context: context,
       builder: (BuildContext dialogContext) {
-        return GeminiAuthDialog(
-          lang: lang,
-          generator: generator,
-          initialApiKey: geminiApiKey,
-          onSave: (String entered) async {
-            final String? normalized = GeminiService.normalizeApiKey(entered);
-            await geminiService.saveApiKey(normalized ?? "");
-            setState(() {
-              geminiApiKey = normalized;
-              _updateStatus(
-                normalized != null
-                    ? generator.getLocaleString(lang, "gemini_key_saved_msg")
-                    : generator.getLocaleString(lang, "gemini_key_removed_msg"),
-                forceSuccess: normalized != null,
-              );
-            });
-          },
-          onDisconnect: () async {
-            await geminiService.saveApiKey("");
-            setState(() {
-              geminiApiKey = null;
-              _updateStatus(
-                generator.getLocaleString(lang, "gemini_key_removed_msg"),
-              );
-            });
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            Future<void> runSearch(String rawQuery) async {
+              final String q = rawQuery.trim();
+              if (q.length < 2 || searching) return;
+              setDialogState(() {
+                searching = true;
+                hasSearched = true;
+              });
+              final List<BibleSearchResult> fetched =
+                  widget.verseSearchOverride != null
+                  ? await widget.verseSearchOverride!(q, versionId, bibleLang)
+                  : await GetBibleAPI.searchVerses(
+                      query: q,
+                      versionId: versionId,
+                      lang: bibleLang,
+                    );
+              if (!dialogContext.mounted) return;
+              setDialogState(() {
+                results = fetched;
+                searching = false;
+              });
+            }
+
+            return AlertDialog(
+              title: Text(
+                generator.getLocaleString(lang, "verse_search_title"),
+              ),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _verseSearchController,
+                            autofocus: true,
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              hintText: generator.getLocaleString(
+                                lang,
+                                "verse_search_hint",
+                              ),
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onSubmitted: runSearch,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          onPressed: searching
+                              ? null
+                              : () => runSearch(_verseSearchController.text),
+                          child: Text(
+                            generator.getLocaleString(
+                              lang,
+                              "verse_search_submit",
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: themeKeys.map((key) {
+                        final String label = generator.getLocaleString(
+                          lang,
+                          key,
+                        );
+                        return ActionChip(
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          label: Text(label),
+                          onPressed: searching
+                              ? null
+                              : () {
+                                  HapticFeedback.selectionClick();
+                                  _verseSearchController.text = label;
+                                  runSearch(label);
+                                },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    if (searching)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (!hasSearched)
+                      Text(
+                        generator.getLocaleString(lang, "verse_search_prompt"),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else if (results.isEmpty)
+                      Text(
+                        generator.getLocaleString(lang, "verse_search_empty"),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 280),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: results.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final BibleSearchResult item = results[index];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 4,
+                              ),
+                              title: Text(
+                                item.reference,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                item.text,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                Navigator.of(dialogContext).pop(item);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    generator.getLocaleString(lang, "gemini_cancel_btn"),
+                  ),
+                ),
+              ],
+            );
           },
         );
       },
     );
-    return connected ?? false;
-  }
 
-  Future<void> _showYouVersionAuthDialog() async {
-    final String lang = getLangKey();
-    await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return YouVersionAuthDialog(
-          lang: lang,
-          generator: generator,
-          initialApiKey: youVersionApiKey,
-          onSave: (String entered) async {
-            final String normalized =
-                GetBibleAPI.normalizeYouVersionApiKey(entered) ?? "";
-            await GetBibleAPI.saveYouVersionApiKey(normalized);
-            if (!mounted) return;
-            setState(() {
-              youVersionApiKey = normalized;
-              _updateStatus(
-                normalized.isNotEmpty
-                    ? generator.getLocaleString(lang, "yv_key_saved_msg")
-                    : generator.getLocaleString(lang, "yv_key_removed_msg"),
-                forceSuccess: normalized.isNotEmpty,
-              );
-            });
-            await _loadBibleVersions(reloadVotd: false);
-          },
-          onDisconnect: () async {
-            await GetBibleAPI.saveYouVersionApiKey("");
-            if (!mounted) return;
-            setState(() {
-              youVersionApiKey = GetBibleAPI.defaultYouVersionApiKey;
-              _updateStatus(
-                generator.getLocaleString(lang, "yv_key_removed_msg"),
-              );
-            });
-            await _loadBibleVersions(reloadVotd: false);
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _generateGeminiBackground() async {
-    final String verse = verseController.text.trim();
-    final String reference = referenceController.text.trim();
-    final String lang = getLangKey();
-
-    if (verse.isEmpty) return;
-
-    if (geminiApiKey == null || geminiApiKey!.isEmpty) {
-      final bool connected = await _showGeminiAuthDialog();
-      if (!connected || geminiApiKey == null || geminiApiKey!.isEmpty) {
-        return;
-      }
-    }
-
-    setState(() {
-      isGeneratingGeminiBg = true;
-      _updateStatus(generator.getLocaleString(lang, "gemini_generating_msg"));
-    });
-
-    final Uint8List? imageBytes = await geminiService.generateBackgroundImage(
-      apiKey: geminiApiKey!,
-      verse: verse,
-      reference: reference,
-      aspectRatio: aspectRatioStr,
-      styleKey: selectedGeminiStyle,
-      customPrompt: geminiPromptController.text.trim(),
-    );
-
-    if (imageBytes != null) {
-      if (!GeminiService.isValidRasterImageBytes(imageBytes)) {
-        setState(() {
-          isGeneratingGeminiBg = false;
-          _updateStatus(
-            generator.getLocaleString(lang, "gemini_bg_error_msg"),
-            forceError: true,
-          );
-        });
-        return;
-      }
-      try {
-        final Directory tempDir = await getTemporaryDirectory();
-        // ⚡ Bolt: Prune old transient files in the background without blocking UI update
-        unawaited(
-          pruneTransientFiles(
-            tempDir,
-            prefix: 'gemini_bg_',
-            suffix: '.png',
-            excludePath: customImagePath,
-          ),
-        );
-        final File bgFile = File(
-          '${tempDir.path}/gemini_bg_${DateTime.now().millisecondsSinceEpoch}.png',
-        );
-        await bgFile.writeAsBytes(imageBytes);
-
-        setState(() {
-          customImagePath = bgFile.path;
-          isGeminiBackground = true;
-          isGeneratingGeminiBg = false;
-          _updateStatus(
-            generator.getLocaleString(lang, "gemini_bg_success_msg"),
-            forceSuccess: true,
-          );
-        });
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint("Error saving Gemini background image: $e");
-        }
-        setState(() {
-          isGeneratingGeminiBg = false;
-          _updateStatus(
-            generator.getLocaleString(lang, "gemini_bg_error_msg"),
-            forceError: true,
-          );
-        });
-      }
-    } else {
-      final String baseErr = generator.getLocaleString(
-        lang,
-        "gemini_bg_error_msg",
-      );
-      final String detail = geminiService.lastError != null
-          ? " (${geminiService.lastError})"
-          : "";
-      final bool isInvalidKey =
-          geminiService.lastError != null &&
-          (geminiService.lastError!.contains("API key not valid") ||
-              geminiService.lastError!.contains("API_KEY_INVALID") ||
-              geminiService.lastError!.contains("HTTP 401") ||
-              geminiService.lastError!.contains("HTTP 403"));
-      if (isInvalidKey) {
-        await geminiService.saveApiKey("");
-      }
+    if (picked != null && mounted) {
       setState(() {
-        if (isInvalidKey) {
-          geminiApiKey = null;
-        }
-        isGeneratingGeminiBg = false;
-        _updateStatus("$baseErr$detail", forceError: true);
+        selectedBook = picked.bookName;
+        selectedChapter = picked.chapter;
+        selectedVerse = picked.verse;
+        selectedEndVerse = null;
+        referenceController.text = picked.reference;
+        verseController.text = picked.text;
+        _updateStatus(
+          "${picked.reference} — ${generator.getLocaleString(lang, "success_msg")}",
+          forceSuccess: true,
+        );
       });
     }
+  }
+
+  Future<void> _showAboutDialog() async {
+    final String lang = getLangKey();
+    final ThemeData theme = Theme.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              ExcludeSemantics(
+                child: Icon(
+                  Icons.menu_book_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(generator.getLocaleString(lang, "about_title")),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  generator.getLocaleString(lang, "about_description"),
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 14),
+                Card.outlined(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            generator.getLocaleString(
+                              lang,
+                              "about_youversion_heading",
+                            ),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          generator.getLocaleString(
+                            lang,
+                            "about_youversion_credit",
+                          ),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          onPressed: () async {
+                            final Uri uri = Uri.parse(
+                              GetBibleAPI.youVersionPortalUrl,
+                            );
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          },
+                          icon: const ExcludeSemantics(
+                            child: Icon(Icons.open_in_new, size: 16),
+                          ),
+                          label: Text(
+                            generator.getLocaleString(
+                              lang,
+                              "about_visit_youversion_btn",
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  generator.getLocaleString(lang, "about_other_sources"),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(generator.getLocaleString(lang, "gemini_cancel_btn")),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _sampleCurrentBackgroundLuminance() async {
+    final int seq = ++_sampleSeq;
+    final BackgroundLuminanceProfile? profile = customImagePath != null
+        ? await contrastSampler.sampleFile(customImagePath!)
+        : await contrastSampler.sampleAsset(
+            'assets/backgrounds/$selectedBackground',
+          );
+    if (!mounted || seq != _sampleSeq) return;
+    setState(() {
+      _sampledBgProfile = profile;
+    });
+  }
+
+  Future<void> _listenForVerseByVoice() async {
+    if (!_voiceInputAvailable || _isListeningVoice) return;
+    HapticFeedback.lightImpact();
+    final String lang = getLangKey();
+    final String locale = TtsService.resolveTargetLocale(getAudioLangKey());
+    setState(() {
+      _isListeningVoice = true;
+    });
+    final String? spoken = await voiceVerseService.listenForVerse(
+      locale: locale,
+      prompt: generator.getLocaleString(lang, "voice_verse_prompt"),
+    );
+    if (!mounted) return;
+    setState(() {
+      _isListeningVoice = false;
+    });
+    if (spoken == null || spoken.trim().isEmpty) return;
+    final String normalized = VoiceVerseService.normalizeSpokenReference(
+      spoken,
+    );
+    referenceController.text = normalized;
+    setState(() {
+      _updateStatus(
+        generator
+            .getLocaleString(lang, "voice_verse_heard_msg")
+            .replaceAll("{ref}", normalized),
+      );
+    });
+    await _fetchVerse();
   }
 
   Future<void> _toggleAudioPreview() async {
@@ -946,6 +1362,7 @@ class _MyHomePageState extends State<MyHomePage> {
       await ttsService.stop();
       setState(() {
         isPlayingAudioPreview = false;
+        _spokenWordRange = null;
       });
       return;
     }
@@ -955,18 +1372,300 @@ class _MyHomePageState extends State<MyHomePage> {
 
     setState(() {
       isPlayingAudioPreview = true;
+      _spokenWordRange = null;
     });
     await ttsService.speakPreview(
       verse: verse,
       reference: referenceController.text.trim(),
       lang: getAudioLangKey(),
       gender: gender,
+      onWordProgress: (int start, int end) {
+        if (!mounted || !isPlayingAudioPreview) return;
+        setState(() {
+          _spokenWordRange = (start, end);
+        });
+      },
     );
     if (mounted) {
       setState(() {
         isPlayingAudioPreview = false;
+        _spokenWordRange = null;
       });
     }
+  }
+
+  String? get _activeImageDescription {
+    final String manual = _imageDescriptionController.text.trim();
+    if (manual.isNotEmpty) return manual;
+    if (_geminiNanoAvailability.isCompatible &&
+        _geminiNanoEnabled &&
+        _onDeviceImageDescription != null &&
+        _onDeviceImageDescription!.trim().isNotEmpty) {
+      return _onDeviceImageDescription!.trim();
+    }
+    return null;
+  }
+
+  Future<void> _describeCurrentBackgroundWithGeminiNano() async {
+    if (!_geminiNanoAvailability.isCompatible ||
+        !_geminiNanoEnabled ||
+        _isDescribingImage) {
+      return;
+    }
+    final String lang = getLangKey();
+    setState(() {
+      _isDescribingImage = true;
+      _updateStatus(generator.getLocaleString(lang, "gemini_nano_describing_msg"));
+    });
+
+    GeminiNanoDescriptionResult result;
+    try {
+      if (customImagePath != null) {
+        result = await geminiNanoService.describeImageFile(customImagePath!);
+      } else {
+        final ByteData assetData = await rootBundle.load(
+          'assets/backgrounds/$selectedBackground',
+        );
+        result = await geminiNanoService.describeImageBytes(
+          assetData.buffer.asUint8List(),
+        );
+      }
+    } catch (_) {
+      result = const GeminiNanoDescriptionResult(errorCode: 'inference_error');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isDescribingImage = false;
+      if (result.isSuccess) {
+        _onDeviceImageDescription = result.description;
+        _imageDescriptionController.text = result.description!;
+        _geminiNanoAvailability = GeminiNanoAvailability.available;
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_nano_success_msg"),
+          forceSuccess: true,
+        );
+      } else if (result.errorCode == 'downloading') {
+        _geminiNanoAvailability = GeminiNanoAvailability.downloading;
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_nano_downloading_msg"),
+        );
+      } else {
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_nano_error_msg"),
+          forceError: true,
+        );
+      }
+    });
+  }
+
+  Future<void> _shareToGemini(GeminiHandoffTask task) async {
+    final String verse = verseController.text.trim();
+    final String reference = referenceController.text.trim();
+    if (verse.isEmpty || reference.isEmpty) return;
+
+    HapticFeedback.lightImpact();
+    final String lang = getLangKey();
+    final String prompt = geminiHandoffService.buildPrompt(
+      lang: lang,
+      verse: verse,
+      reference: reference,
+      aspectRatio: aspectRatioStr,
+      task: task,
+    );
+    final bool shared = await geminiHandoffService.shareToGemini(
+      prompt: prompt,
+      imagePath: task == GeminiHandoffTask.devotionalCaption
+          ? customImagePath
+          : null,
+    );
+    if (!mounted) return;
+    if (!shared) {
+      setState(() {
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_handoff_error_msg"),
+          forceError: true,
+        );
+      });
+    }
+  }
+
+  Future<void> _copyAndOpenGemini(GeminiHandoffTask task) async {
+    final String verse = verseController.text.trim();
+    final String reference = referenceController.text.trim();
+    if (verse.isEmpty || reference.isEmpty) return;
+
+    HapticFeedback.lightImpact();
+    final String lang = getLangKey();
+    final String prompt = geminiHandoffService.buildPrompt(
+      lang: lang,
+      verse: verse,
+      reference: reference,
+      aspectRatio: aspectRatioStr,
+      task: task,
+    );
+    final bool opened = await geminiHandoffService.copyAndOpenGemini(
+      prompt: prompt,
+    );
+    if (!mounted) return;
+    setState(() {
+      _updateStatus(
+        opened
+            ? generator.getLocaleString(lang, "gemini_handoff_copied_msg")
+            : generator.getLocaleString(lang, "gemini_handoff_error_msg"),
+        forceSuccess: opened,
+        forceError: !opened,
+      );
+    });
+  }
+
+  Future<void> _showAdvancedFeaturesDialog() async {
+    final String lang = getLangKey();
+    final bool nanoCompatible = _geminiNanoAvailability.isCompatible;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return AlertDialog(
+              title: Text(
+                generator.getLocaleString(lang, "advanced_features_title"),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      generator.getLocaleString(
+                        lang,
+                        "advanced_features_subtitle",
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    if (nanoCompatible)
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          generator.getLocaleString(
+                            lang,
+                            "gemini_nano_toggle_title",
+                          ),
+                        ),
+                        subtitle: Text(
+                          generator.getLocaleString(
+                            lang,
+                            _geminiNanoAvailability ==
+                                    GeminiNanoAvailability.available
+                                ? "gemini_nano_toggle_subtitle"
+                                : "gemini_nano_toggle_subtitle_download",
+                          ),
+                        ),
+                        value: _geminiNanoEnabled,
+                        onChanged: (bool value) {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            _geminiNanoEnabled = value;
+                            if (!value) {
+                              _onDeviceImageDescription = null;
+                            }
+                          });
+                          setDialogState(() {});
+                          unawaited(_saveAdvancedPreferences());
+                        },
+                      ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "gemini_handoff_toggle_title",
+                        ),
+                      ),
+                      subtitle: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "gemini_handoff_toggle_subtitle",
+                        ),
+                      ),
+                      value: _geminiHandoffEnabled,
+                      onChanged: (bool value) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _geminiHandoffEnabled = value;
+                        });
+                        setDialogState(() {});
+                        unawaited(_saveAdvancedPreferences());
+                      },
+                    ),
+                    const Divider(),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "high_contrast_ui_title",
+                        ),
+                      ),
+                      subtitle: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "high_contrast_ui_subtitle",
+                        ),
+                      ),
+                      value: _highContrastUiEnabled,
+                      onChanged: (bool value) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _highContrastUiEnabled = value;
+                        });
+                        widget.onHighContrastChanged?.call(value);
+                        setDialogState(() {});
+                        unawaited(_saveAdvancedPreferences());
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "color_blind_ui_title",
+                        ),
+                      ),
+                      subtitle: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "color_blind_ui_subtitle",
+                        ),
+                      ),
+                      value: _colorBlindUiEnabled,
+                      onChanged: (bool value) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _colorBlindUiEnabled = value;
+                        });
+                        setDialogState(() {});
+                        unawaited(_saveAdvancedPreferences());
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    generator.getLocaleString(lang, "gemini_cancel_btn"),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _generateContent() async {
@@ -981,22 +1680,11 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     final String lang = getLangKey();
-    String? customDescription;
-    if (isGeminiBackground && customImagePath != null) {
-      final String styleLabel = generator.getLocaleString(
-        lang,
-        selectedGeminiStyle,
-      );
-      final String extraDetails = geminiPromptController.text.trim();
-      customDescription = extraDetails.isNotEmpty
-          ? "AI-generated background ($styleLabel: $extraDetails)."
-          : "AI-generated background ($styleLabel).";
-    }
     final Map<String, String> texts = await generator.generateTexts(
       lang,
       verse,
       reference,
-      customDescription: customDescription,
+      customDescription: _activeImageDescription,
     );
     setState(() {
       altText = texts["altText"]!;
@@ -1228,9 +1916,19 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Color _successColor(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? Colors.green.shade300
-        : Colors.green.shade800;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    if (_colorBlindUiEnabled) {
+      return isDark ? const Color(0xFF64B5F6) : const Color(0xFF0057B8);
+    }
+    return isDark ? Colors.green.shade300 : Colors.green.shade800;
+  }
+
+  Color _errorColor(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    if (_colorBlindUiEnabled) {
+      return isDark ? const Color(0xFFFFB74D) : const Color(0xFFC85A00);
+    }
+    return Theme.of(context).colorScheme.error;
   }
 
   Widget _buildVerseTab(String lang) {
@@ -1324,24 +2022,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 },
               ),
             ),
-            ),
-            IconButton(
-              tooltip: generator.getLocaleString(
-                lang,
-                youVersionApiKey.isNotEmpty
-                    ? "yv_connected_btn"
-                    : "yv_connect_btn",
-              ),
-              icon: Icon(
-                youVersionApiKey.isNotEmpty
-                    ? Icons.verified_user
-                    : Icons.vpn_key_outlined,
-                size: 20,
-                color: youVersionApiKey.isNotEmpty
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-              ),
-              onPressed: _showYouVersionAuthDialog,
             ),
           ],
         ),
@@ -1580,6 +2260,29 @@ class _MyHomePageState extends State<MyHomePage> {
               icon: const Icon(Icons.wb_sunny_outlined, size: 18),
               label: Text(generator.getLocaleString(lang, "votd_btn")),
             ),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+              ),
+              onPressed: isFetching ? null : _showVerseSearchDialog,
+              icon: const Icon(Icons.search, size: 18),
+              label: Text(generator.getLocaleString(lang, "verse_search_btn")),
+            ),
+            if (_voiceInputAvailable)
+              IconButton.filledTonal(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                tooltip: generator.getLocaleString(lang, "voice_verse_tooltip"),
+                onPressed: _isListeningVoice || isFetching
+                    ? null
+                    : _listenForVerseByVoice,
+                icon: _isListeningVoice
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.mic),
+              ),
           ],
         ),
         const SizedBox(height: 10),
@@ -1645,7 +2348,7 @@ class _MyHomePageState extends State<MyHomePage> {
         .join(' ');
   }
 
-  Widget _buildBackgroundTab(String lang, bool isGeminiConnected) {
+  Widget _buildBackgroundTab(String lang) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1670,17 +2373,19 @@ class _MyHomePageState extends State<MyHomePage> {
                   hint: Text(
                     generator.getLocaleString(
                       lang,
-                      isGeminiBackground
-                          ? "gemini_bg_active_label"
-                          : "custom_bg_active_label",
+                      "custom_bg_active_label",
                     ),
                   ),
                   items: _getBackgroundDropdownItems(),
-                  onChanged: (v) => setState(() {
-                    selectedBackground = v!;
-                    customImagePath = null;
-                    isGeminiBackground = false;
-                  }),
+                  onChanged: (v) {
+                    setState(() {
+                      selectedBackground = v!;
+                      customImagePath = null;
+                      _onDeviceImageDescription = null;
+                      _imageDescriptionController.clear();
+                    });
+                    unawaited(_sampleCurrentBackgroundLuminance());
+                  },
                 ),
               ),
             ),
@@ -1705,9 +2410,7 @@ class _MyHomePageState extends State<MyHomePage> {
               if (customImagePath != null && index == 0) {
                 final String activeLabel = generator.getLocaleString(
                   lang,
-                  isGeminiBackground
-                      ? "gemini_bg_active_label"
-                      : "custom_bg_active_label",
+                  "custom_bg_active_label",
                 );
                 return Semantics(
                   image: true,
@@ -1775,8 +2478,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       setState(() {
                         selectedBackground = bgName;
                         customImagePath = null;
-                        isGeminiBackground = false;
+                        _onDeviceImageDescription = null;
+                        _imageDescriptionController.clear();
                       });
+                      unawaited(_sampleCurrentBackgroundLuminance());
                     },
                     child: Container(
                       width: 68,
@@ -1825,6 +2530,8 @@ class _MyHomePageState extends State<MyHomePage> {
             },
           ),
         ),
+        const SizedBox(height: 8),
+        _buildBackgroundToneBadge(lang),
         const SizedBox(height: 12),
         ValueListenableBuilder<double>(
           valueListenable: _backgroundDimNotifier,
@@ -1842,80 +2549,347 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ],
                 ),
-                Slider(
-                  value: dimValue,
-                  min: 0.0,
-                  max: 0.75,
-                  divisions: 15,
-                  label: "${(dimValue * 100).round()}%",
-                  semanticFormatterCallback: (v) =>
-                      "${generator.getLocaleString(lang, "background_dim_label")}: ${(v * 100).round()}%",
-                  onChanged: (v) => _backgroundDimNotifier.value = v,
+                Row(
+                  children: [
+                    IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "decrease_dim_tooltip",
+                      ),
+                      onPressed: dimValue > 0.01
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              _backgroundDimNotifier.value =
+                                  ((dimValue - 0.05).clamp(0.0, 0.75) * 20)
+                                      .round() /
+                                  20.0;
+                            }
+                          : null,
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: dimValue,
+                        min: 0.0,
+                        max: 0.75,
+                        divisions: 15,
+                        label: "${(dimValue * 100).round()}%",
+                        semanticFormatterCallback: (v) =>
+                            "${generator.getLocaleString(lang, "background_dim_label")}: ${(v * 100).round()}%",
+                        onChanged: (v) => _backgroundDimNotifier.value = v,
+                      ),
+                    ),
+                    IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "increase_dim_tooltip",
+                      ),
+                      onPressed: dimValue < 0.74
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              _backgroundDimNotifier.value =
+                                  ((dimValue + 0.05).clamp(0.0, 0.75) * 20)
+                                      .round() /
+                                  20.0;
+                            }
+                          : null,
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
                 ),
               ],
             );
           },
         ),
-        _buildContrastWarningCard(lang),
-        const SizedBox(height: 8),
-        StockPhotoSearchCard(
-          lang: lang,
-          generator: generator,
-          stockPhotoService: stockPhotoService,
-          onPhotoSelected: (path) {
-            setState(() {
-              customImagePath = path;
-              isGeminiBackground = false;
-            });
-          },
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Column(
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.science_outlined),
-                title: Text(
-                  generator.getLocaleString(lang, "experimental_gemini_title"),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+        if (_geminiHandoffEnabled) ...[
+          const SizedBox(height: 10),
+          AnimatedBuilder(
+            animation: _previewListenable,
+            builder: (context, _) {
+              final bool hasVerse =
+                  verseController.text.trim().isNotEmpty &&
+                  referenceController.text.trim().isNotEmpty;
+              return OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
                 ),
-                subtitle: Text(
-                  generator.getLocaleString(
-                    lang,
-                    "experimental_gemini_subtitle",
-                  ),
-                ),
-                value: _showExperimentalGemini,
-                onChanged: (val) =>
-                    setState(() => _showExperimentalGemini = val),
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-                child: _showExperimentalGemini
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                        child: GeminiBackgroundCard(
-                          lang: lang,
-                          generator: generator,
-                          isConnected: isGeminiConnected,
-                          selectedStyle: selectedGeminiStyle,
-                          onStyleChanged: (v) =>
-                              setState(() => selectedGeminiStyle = v),
-                          promptController: geminiPromptController,
-                          verseController: verseController,
-                          isGenerating: isGeneratingGeminiBg,
-                          onConnectPressed: _showGeminiAuthDialog,
-                          onGeneratePressed: _generateGeminiBackground,
-                        ),
+                onPressed: hasVerse
+                    ? () => _copyAndOpenGemini(
+                        GeminiHandoffTask.customBackground,
                       )
-                    : const SizedBox.shrink(),
-              ),
-            ],
+                    : null,
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: Text(
+                  generator.getLocaleString(lang, "gemini_handoff_bg_btn"),
+                ),
+              );
+            },
           ),
-        ),
+        ],
+        _buildContrastWarningCard(lang),
         _buildStepNavigationRow(lang, 1),
       ],
+    );
+  }
+
+  Future<void> _showFullScreenPreview(String lang) async {
+    VisionSimulationMode simMode = VisionSimulationMode.normal;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return Dialog.fullscreen(
+              child: Scaffold(
+                appBar: AppBar(
+                  title: Text(
+                    generator.getLocaleString(lang, "fullscreen_preview_title"),
+                  ),
+                  leading: IconButton(
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    icon: const Icon(Icons.close),
+                    tooltip: generator.getLocaleString(
+                      lang,
+                      "gemini_cancel_btn",
+                    ),
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                  ),
+                ),
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: VisionSimulatorFilter(
+                              mode: simMode,
+                              child: VersePreviewCard(
+                                repaintKey: GlobalKey(),
+                                aspectRatioStr: aspectRatioStr,
+                                customImagePath: customImagePath,
+                                selectedBackground: selectedBackground,
+                                previewListenable: _previewListenable,
+                                verseController: verseController,
+                                referenceController: referenceController,
+                                fontColor: _fontColorNotifier.value,
+                                fontSize: _fontSizeNotifier.value,
+                                yOffset: _yOffsetNotifier.value,
+                                backgroundDim: _backgroundDimNotifier.value,
+                                textStyleOptions: _textStyleNotifier.value,
+                                fontColorListenable: _fontColorNotifier,
+                                fontSizeListenable: _fontSizeNotifier,
+                                yOffsetListenable: _yOffsetNotifier,
+                                backgroundDimListenable: _backgroundDimNotifier,
+                                textStyleListenable: _textStyleNotifier,
+                                onYOffsetChanged: (updated) =>
+                                    _yOffsetNotifier.value = updated,
+                                lang: lang,
+                                generator: generator,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerLow,
+                          border: Border(
+                            top: BorderSide(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
+                            ),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              generator.getLocaleString(
+                                lang,
+                                "vision_sim_label",
+                              ),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: VisionSimulationMode.values.map((m) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: ChoiceChip(
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.padded,
+                                      label: Text(
+                                        generator.getLocaleString(
+                                          lang,
+                                          m.localeKey,
+                                        ),
+                                      ),
+                                      selected: simMode == m,
+                                      onSelected: (_) {
+                                        HapticFeedback.selectionClick();
+                                        setDialogState(() => simMode = m);
+                                      },
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  double _effectiveBackgroundLuminance() {
+    final double dimValue = _backgroundDimNotifier.value;
+    final Color currentFontColor = _fontColorNotifier.value;
+    final double fgLuminance = currentFontColor.computeLuminance();
+    final VerseTextStyleOptions style = _textStyleNotifier.value;
+
+    final double baseBgLuminance;
+    if (customImagePath != null && _sampledBgProfile != null) {
+      baseBgLuminance = _sampledBgProfile!.luminanceForOffset(
+        _yOffsetNotifier.value,
+      );
+    } else {
+      final bool isDarkPreset =
+          customImagePath == null &&
+          (selectedBackground == "minimal_slate.png" ||
+              selectedBackground == "starry_night.png");
+      final bool isLightPreset =
+          customImagePath == null &&
+          (selectedBackground == "soft_parchment.png" ||
+              selectedBackground == "dawn_sky.png");
+      baseBgLuminance = isDarkPreset
+          ? 0.06
+          : (isLightPreset ? 0.62 : 0.26);
+    }
+
+    double effectiveBgLuminance = baseBgLuminance * (1.0 - dimValue);
+    if (style.backdrop == VerseTextBackdrop.frosted) {
+      final bool darkText = fgLuminance < 0.4;
+      effectiveBgLuminance = darkText
+          ? effectiveBgLuminance * 0.28 + 0.72
+          : effectiveBgLuminance * 0.58;
+    } else if (style.backdrop == VerseTextBackdrop.solid) {
+      final bool darkText = fgLuminance < 0.4;
+      effectiveBgLuminance = darkText
+          ? effectiveBgLuminance * 0.10 + 0.90
+          : effectiveBgLuminance * 0.22;
+    }
+    return effectiveBgLuminance.clamp(0.0, 1.0);
+  }
+
+  double _computeCurrentContrastRatio() {
+    final double fgLuminance = _fontColorNotifier.value.computeLuminance();
+    return VersePreviewCard.computeWcagContrastRatio(
+      fgLuminance,
+      _effectiveBackgroundLuminance(),
+    );
+  }
+
+  void _applySuggestedSafeColor(String lang) {
+    HapticFeedback.selectionClick();
+    final Color approxBg = ColorAccessibility.grayscaleColorForLuminance(
+      _effectiveBackgroundLuminance(),
+    );
+    final result = ColorAccessibility.suggestSafestTextColor(
+      candidates: _presetColors,
+      backgroundColor: approxBg,
+    );
+    _fontColorNotifier.value = result.entry.key;
+    final String colorName = generator.getLocaleString(
+      lang,
+      result.entry.value,
+    );
+    setState(() {
+      _updateStatus(
+        generator
+            .getLocaleString(lang, "safe_color_applied_msg")
+            .replaceAll("{color}", colorName),
+        forceSuccess: true,
+      );
+    });
+  }
+
+  Widget _buildBackgroundToneBadge(String lang) {
+    return AnimatedBuilder(
+      animation: _contrastListenable,
+      builder: (context, _) {
+        final double bgLum = _effectiveBackgroundLuminance();
+        final bool isDark = bgLum < 0.22;
+        final bool isLight = bgLum > 0.55;
+        final IconData icon = isDark
+            ? Icons.dark_mode_outlined
+            : (isLight ? Icons.light_mode_outlined : Icons.contrast);
+        final String label = generator.getLocaleString(
+          lang,
+          isDark
+              ? "bg_tone_dark"
+              : (isLight ? "bg_tone_light" : "bg_tone_balanced"),
+        );
+        return Semantics(
+          label: label,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ExcludeSemantics(
+                  child: Icon(
+                    icon,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1924,17 +2898,191 @@ class _MyHomePageState extends State<MyHomePage> {
       animation: _contrastListenable,
       builder: (context, _) {
         final double dimValue = _backgroundDimNotifier.value;
-        final double luminance = _fontColorNotifier.value.computeLuminance();
-        final bool isDarkPreset =
-            customImagePath == null &&
-            (selectedBackground == "minimal_slate.png" ||
-                selectedBackground == "starry_night.png");
-        final bool lowContrast =
-            (luminance > 0.7 && dimValue < 0.25 && !isDarkPreset) ||
-            (luminance < 0.15 && dimValue >= 0.4);
-        if (!lowContrast) {
-          return const SizedBox.shrink();
+        final Color currentFontColor = _fontColorNotifier.value;
+        final double fgLuminance = currentFontColor.computeLuminance();
+        final VerseTextStyleOptions style = _textStyleNotifier.value;
+
+        final double effectiveBgLum = _effectiveBackgroundLuminance();
+        final double contrastRatio = VersePreviewCard.computeWcagContrastRatio(
+          fgLuminance,
+          effectiveBgLum,
+        );
+        final Color approxBgColor =
+            ColorAccessibility.grayscaleColorForLuminance(effectiveBgLum);
+        final cvdCheck = ColorAccessibility.worstCaseCvdContrast(
+          textColor: currentFontColor,
+          backgroundColor: approxBgColor,
+        );
+        final String ratioStr = contrastRatio.toStringAsFixed(1);
+        final bool lowContrast = contrastRatio < 4.5;
+        final bool cvdLowContrast = !lowContrast && cvdCheck.minRatio < 4.5;
+        final bool isAaa = contrastRatio >= 7.0 && cvdCheck.minRatio >= 7.0;
+
+        ({double yOffset, double ratio})? smartPlacement;
+        if (_sampledBgProfile != null &&
+            style.backdrop == VerseTextBackdrop.none) {
+          final candidate = _sampledBgProfile!.bestPlacementFor(
+            fontColor: currentFontColor,
+            dim: dimValue,
+          );
+          if (candidate.ratio >= contrastRatio + 0.8 &&
+              (candidate.yOffset - _yOffsetNotifier.value).abs() > 25.0) {
+            smartPlacement = candidate;
+          }
         }
+
+        if (cvdLowContrast) {
+          final String modeName = generator.getLocaleString(
+            lang,
+            cvdCheck.worstMode.localeKey,
+          );
+          final String cvdMsg = generator
+              .getLocaleString(lang, "cvd_contrast_warning")
+              .replaceAll("{mode}", modeName)
+              .replaceAll("{ratio}", cvdCheck.minRatio.toStringAsFixed(1));
+          return Semantics(
+            liveRegion: true,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10.0),
+              child: Card(
+                margin: EdgeInsets.zero,
+                color: Theme.of(context).colorScheme.tertiaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12.0,
+                    vertical: 8.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          ExcludeSemantics(
+                            child: Icon(
+                              Icons.remove_red_eye_outlined,
+                              size: 20,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onTertiaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              cvdMsg,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onTertiaryContainer,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onTertiaryContainer,
+                        ),
+                        onPressed: () => _applySuggestedSafeColor(lang),
+                        child: Text(
+                          generator.getLocaleString(
+                            lang,
+                            "suggest_safe_color_btn",
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (!lowContrast) {
+          final Color badgeColor = isAaa
+              ? _successColor(context)
+              : Theme.of(context).colorScheme.primary;
+          final String badgeLabel = generator
+              .getLocaleString(
+                lang,
+                isAaa ? "wcag_contrast_aaa" : "wcag_contrast_aa",
+              )
+              .replaceAll("{ratio}", ratioStr);
+          return Padding(
+            padding: const EdgeInsets.only(top: 10.0),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Semantics(
+                  label: badgeLabel,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0,
+                      vertical: 8.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: badgeColor.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            isAaa ? Icons.verified : Icons.check_circle_outline,
+                            size: 18,
+                            color: badgeColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            badgeLabel,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: badgeColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (smartPlacement != null)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      _yOffsetNotifier.value = smartPlacement!.yOffset;
+                    },
+                    icon: const Icon(Icons.auto_fix_high, size: 16),
+                    label: Text(
+                      generator.getLocaleString(lang, "smart_placement_btn"),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
+
+        final String lowContrastMsg = generator
+            .getLocaleString(lang, "wcag_contrast_low")
+            .replaceAll("{ratio}", ratioStr);
         return Semantics(
           liveRegion: true,
           child: Padding(
@@ -1945,41 +3093,86 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12.0,
-                  vertical: 6.0,
+                  vertical: 8.0,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.contrast,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.onTertiaryContainer,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        generator.getLocaleString(lang, "contrast_warning_msg"),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onTertiaryContainer,
+                    Row(
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.contrast,
+                            size: 20,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onTertiaryContainer,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            lowContrastMsg,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onTertiaryContainer,
+                                ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, 48),
-                        foregroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onTertiaryContainer,
-                      ),
-                      onPressed: () {
-                        _backgroundDimNotifier.value =
-                            luminance > 0.7 ? 0.35 : 0.0;
-                      },
-                      child: Text(
-                        generator.getLocaleString(lang, "contrast_fix_btn"),
-                      ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        if (smartPlacement != null)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.onTertiaryContainer,
+                            ),
+                            onPressed: () {
+                              HapticFeedback.selectionClick();
+                              _yOffsetNotifier.value = smartPlacement!.yOffset;
+                            },
+                            child: Text(
+                              generator.getLocaleString(
+                                lang,
+                                "smart_placement_btn",
+                              ),
+                            ),
+                          ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onTertiaryContainer,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.selectionClick();
+                            if (fgLuminance > 0.5) {
+                              _backgroundDimNotifier.value =
+                                  dimValue < 0.35 ? 0.35 : 0.60;
+                            } else {
+                              _updateTextStyle(
+                                style.copyWith(
+                                  backdrop: VerseTextBackdrop.solid,
+                                ),
+                              );
+                            }
+                          },
+                          child: Text(
+                            generator.getLocaleString(lang, "contrast_fix_btn"),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2022,6 +3215,621 @@ class _MyHomePageState extends State<MyHomePage> {
           }).toList(),
         ),
         const SizedBox(height: 12),
+        ValueListenableBuilder<VerseTextStyleOptions>(
+          valueListenable: _textStyleNotifier,
+          builder: (context, textStyle, _) {
+            final ThemeData theme = Theme.of(context);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card.outlined(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Semantics(
+                                header: true,
+                                child: Row(
+                                  children: [
+                                    ExcludeSemantics(
+                                      child: Icon(
+                                        Icons.text_fields,
+                                        size: 18,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        generator.getLocaleString(
+                                          lang,
+                                          "typography_section_title",
+                                        ),
+                                        style: theme.textTheme.titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (!textStyle.isDefault)
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                ),
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  _updateTextStyle(
+                                    const VerseTextStyleOptions(),
+                                  );
+                                },
+                                icon: const ExcludeSemantics(
+                                  child: Icon(Icons.restart_alt, size: 16),
+                                ),
+                                label: Text(
+                                  generator.getLocaleString(
+                                    lang,
+                                    "reset_style_btn",
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          generator.getLocaleString(
+                            lang,
+                            "style_presets_label",
+                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _stylePresets.map((entry) {
+                            final String label = generator.getLocaleString(
+                              lang,
+                              entry.key,
+                            );
+                            final VerseTextStyleOptions preset = entry.value;
+                            return ChoiceChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              label: Text(
+                                label,
+                                style: VersePreviewCard.resolveBaseTextStyle(
+                                  preset.fontFamily,
+                                ),
+                              ),
+                              selected: textStyle == preset,
+                              onSelected: (_) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(preset);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          generator.getLocaleString(lang, "font_type_label"),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: VerseFontFamily.values.map((family) {
+                            final String label = generator.getLocaleString(
+                              lang,
+                              family.localeKey,
+                            );
+                            final TextStyle previewStyle =
+                                VersePreviewCard.resolveBaseTextStyle(family);
+                            return ChoiceChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              label: Text(label, style: previewStyle),
+                              selected: textStyle.fontFamily == family,
+                              onSelected: (_) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(fontFamily: family),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        if (textStyle.fontFamily == VerseFontFamily.cursive)
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: verseController,
+                            builder: (context, verseVal, _) {
+                              if (verseVal.text.trim().length <= 80) {
+                                return const SizedBox.shrink();
+                              }
+                              return Semantics(
+                                liveRegion: true,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 10.0),
+                                  child: Card(
+                                    margin: EdgeInsets.zero,
+                                    color: theme.colorScheme.tertiaryContainer,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12.0,
+                                        vertical: 6.0,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          ExcludeSemantics(
+                                            child: Icon(
+                                              Icons.visibility_outlined,
+                                              size: 20,
+                                              color: theme
+                                                  .colorScheme
+                                                  .onTertiaryContainer,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              generator.getLocaleString(
+                                                lang,
+                                                "script_legibility_tip",
+                                              ),
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .onTertiaryContainer,
+                                                  ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          TextButton(
+                                            style: TextButton.styleFrom(
+                                              minimumSize: const Size(0, 48),
+                                              foregroundColor: theme
+                                                  .colorScheme
+                                                  .onTertiaryContainer,
+                                            ),
+                                            onPressed: () {
+                                              HapticFeedback.selectionClick();
+                                              _updateTextStyle(
+                                                textStyle.copyWith(
+                                                  fontFamily:
+                                                      VerseFontFamily.lora,
+                                                ),
+                                              );
+                                            },
+                                            child: Text(
+                                              generator.getLocaleString(
+                                                lang,
+                                                "script_legibility_fix_btn",
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 12),
+                        Text(
+                          generator.getLocaleString(lang, "font_format_label"),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilterChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              avatar: const ExcludeSemantics(
+                                child: Icon(Icons.format_bold, size: 18),
+                              ),
+                              label: Text(
+                                generator.getLocaleString(
+                                  lang,
+                                  "font_bold_label",
+                                ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              selected: textStyle.isBold,
+                              onSelected: (selected) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(isBold: selected),
+                                );
+                              },
+                            ),
+                            FilterChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              avatar: const ExcludeSemantics(
+                                child: Icon(Icons.format_italic, size: 18),
+                              ),
+                              label: Text(
+                                generator.getLocaleString(
+                                  lang,
+                                  "font_italic_label",
+                                ),
+                                style: const TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              selected: textStyle.isItalic,
+                              onSelected: (selected) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(isItalic: selected),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          generator.getLocaleString(lang, "text_align_label"),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Semantics(
+                          label: generator.getLocaleString(
+                            lang,
+                            "text_align_label",
+                          ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: SegmentedButton<TextAlign>(
+                              style: const ButtonStyle(
+                                minimumSize: WidgetStatePropertyAll(
+                                  Size(0, 48),
+                                ),
+                              ),
+                              segments: [
+                                ButtonSegment<TextAlign>(
+                                  value: TextAlign.left,
+                                  tooltip: generator.getLocaleString(
+                                    lang,
+                                    "align_left",
+                                  ),
+                                  icon: const ExcludeSemantics(
+                                    child: Icon(
+                                      Icons.format_align_left,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  label: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "align_left",
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                ButtonSegment<TextAlign>(
+                                  value: TextAlign.center,
+                                  tooltip: generator.getLocaleString(
+                                    lang,
+                                    "align_center",
+                                  ),
+                                  icon: const ExcludeSemantics(
+                                    child: Icon(
+                                      Icons.format_align_center,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  label: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "align_center",
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                ButtonSegment<TextAlign>(
+                                  value: TextAlign.right,
+                                  tooltip: generator.getLocaleString(
+                                    lang,
+                                    "align_right",
+                                  ),
+                                  icon: const ExcludeSemantics(
+                                    child: Icon(
+                                      Icons.format_align_right,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  label: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "align_right",
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                              selected: {textStyle.textAlign},
+                              onSelectionChanged: (Set<TextAlign> selection) {
+                                if (selection.isEmpty) return;
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(
+                                    textAlign: selection.first,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          generator.getLocaleString(lang, "card_accent_label"),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: VerseCardAccent.values.map((accent) {
+                            final String label = generator.getLocaleString(
+                              lang,
+                              accent.localeKey,
+                            );
+                            return ChoiceChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              label: Text(label),
+                              selected: textStyle.accent == accent,
+                              onSelected: (_) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(accent: accent),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card.outlined(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Row(
+                            children: [
+                              ExcludeSemantics(
+                                child: Icon(
+                                  Icons.accessibility_new,
+                                  size: 18,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  generator.getLocaleString(
+                                    lang,
+                                    "readability_section_title",
+                                  ),
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          generator.getLocaleString(lang, "text_shadow_label"),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: VerseTextShadow.values.map((shadow) {
+                            final String label = generator.getLocaleString(
+                              lang,
+                              shadow.localeKey,
+                            );
+                            return ChoiceChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              label: Text(label),
+                              selected: textStyle.shadow == shadow,
+                              onSelected: (_) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(shadow: shadow),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          generator.getLocaleString(
+                            lang,
+                            "text_backdrop_label",
+                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: VerseTextBackdrop.values.map((backdrop) {
+                            final String label = generator.getLocaleString(
+                              lang,
+                              backdrop.localeKey,
+                            );
+                            return ChoiceChip(
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              label: Text(label),
+                              selected: textStyle.backdrop == backdrop,
+                              onSelected: (_) {
+                                HapticFeedback.selectionClick();
+                                _updateTextStyle(
+                                  textStyle.copyWith(backdrop: backdrop),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                "${generator.getLocaleString(lang, "line_spacing_label")}: ${textStyle.lineHeight.toStringAsFixed(2)}x",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if ((textStyle.lineHeight -
+                                        VerseTextStyleOptions
+                                            .defaultLineHeight)
+                                    .abs() >
+                                0.01)
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                ),
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  _updateTextStyle(
+                                    textStyle.copyWith(
+                                      lineHeight: VerseTextStyleOptions
+                                          .defaultLineHeight,
+                                    ),
+                                  );
+                                },
+                                icon: const ExcludeSemantics(
+                                  child: Icon(Icons.restart_alt, size: 16),
+                                ),
+                                label: Text(
+                                  generator.getLocaleString(
+                                    lang,
+                                    "reset_font_size_btn",
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              tooltip: generator.getLocaleString(
+                                lang,
+                                "decrease_line_spacing_tooltip",
+                              ),
+                              onPressed: textStyle.lineHeight > 1.01
+                                  ? () {
+                                      HapticFeedback.selectionClick();
+                                      final double next = double.parse(
+                                        (textStyle.lineHeight - 0.05)
+                                            .clamp(1.0, 2.0)
+                                            .toStringAsFixed(2),
+                                      );
+                                      _updateTextStyle(
+                                        textStyle.copyWith(lineHeight: next),
+                                      );
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.remove),
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value: textStyle.lineHeight,
+                                min: 1.0,
+                                max: 2.0,
+                                divisions: 20,
+                                label:
+                                    "${textStyle.lineHeight.toStringAsFixed(2)}x",
+                                semanticFormatterCallback: (v) =>
+                                    "${generator.getLocaleString(lang, "line_spacing_label")}: ${v.toStringAsFixed(2)}x",
+                                onChanged: (v) {
+                                  _updateTextStyle(
+                                    textStyle.copyWith(
+                                      lineHeight: double.parse(
+                                        v.toStringAsFixed(2),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            IconButton(
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              tooltip: generator.getLocaleString(
+                                lang,
+                                "increase_line_spacing_tooltip",
+                              ),
+                              onPressed: textStyle.lineHeight < 1.99
+                                  ? () {
+                                      HapticFeedback.selectionClick();
+                                      final double next = double.parse(
+                                        (textStyle.lineHeight + 0.05)
+                                            .clamp(1.0, 2.0)
+                                            .toStringAsFixed(2),
+                                      );
+                                      _updateTextStyle(
+                                        textStyle.copyWith(lineHeight: next),
+                                      );
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.add),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
         Text(
           generator.getLocaleString(lang, "font_color_label"),
           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -2030,123 +3838,181 @@ class _MyHomePageState extends State<MyHomePage> {
         ValueListenableBuilder<Color>(
           valueListenable: _fontColorNotifier,
           builder: (context, currentColor, _) {
-            return Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              runSpacing: 4,
+            final String activeColorName = ColorAccessibility.describeColorName(
+              currentColor,
+              lang,
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final entry in _presetColors)
-                  Builder(
-                    builder: (context) {
-                      final Color preset = entry.key;
-                      final bool isSelected =
-                          currentColor.toARGB32() == preset.toARGB32();
-                      final String colorName = generator.getLocaleString(
-                        lang,
-                        entry.value,
-                      );
-                      return Semantics(
-                        button: true,
-                        selected: isSelected,
-                        label: colorName,
-                        child: Tooltip(
-                          message: colorName,
-                          child: InkResponse(
-                            onTap: () {
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final entry in _presetColors)
+                      Builder(
+                        builder: (context) {
+                          final Color preset = entry.key;
+                          final bool isSelected =
+                              currentColor.toARGB32() == preset.toARGB32();
+                          final String colorName = generator.getLocaleString(
+                            lang,
+                            entry.value,
+                          );
+                          return ChoiceChip(
+                            materialTapTargetSize: MaterialTapTargetSize.padded,
+                            avatar: ExcludeSemantics(
+                              child: Container(
+                                width: 18,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: preset,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline,
+                                    width: 1.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            label: Text(colorName),
+                            selected: isSelected,
+                            onSelected: (_) {
                               HapticFeedback.selectionClick();
                               _fontColorNotifier.value = preset;
                             },
-                            radius: 24,
-                            child: SizedBox(
-                              width: 48,
-                              height: 48,
-                              child: Center(
-                                child: Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(
-                                    color: preset,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Colors.grey.shade400,
-                                      width: isSelected ? 3 : 1,
-                                    ),
-                                  ),
-                                  child: isSelected
-                                      ? Icon(
-                                          Icons.check,
-                                          size: 18,
-                                          color: preset.computeLuminance() > 0.5
-                                              ? Colors.black
-                                              : Colors.white,
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            ),
-                          ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
+                      onPressed: () => _applySuggestedSafeColor(lang),
+                      icon: const ExcludeSemantics(
+                        child: Icon(Icons.auto_fix_high, size: 18),
+                      ),
+                      label: Text(
+                        generator.getLocaleString(
+                          lang,
+                          "suggest_safe_color_btn",
                         ),
-                      );
-                    },
-                  ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                    backgroundColor: currentColor,
-                    foregroundColor: currentColor.computeLuminance() > 0.5
-                        ? Colors.black
-                        : Colors.white,
-                  ),
-                  onPressed: () {
-                    final Color previousColor = currentColor;
-                    showDialog(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return AlertDialog(
-                          title: Text(
-                            generator.getLocaleString(lang, "pick_color_title"),
-                          ),
-                          content: SingleChildScrollView(
-                            child: ColorPicker(
-                              pickerColor: currentColor,
-                              onColorChanged: (c) =>
-                                  _fontColorNotifier.value = c,
-                            ),
-                          ),
-                          actions: <Widget>[
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                minimumSize: const Size(0, 48),
-                              ),
-                              onPressed: () {
-                                _fontColorNotifier.value = previousColor;
-                                Navigator.of(context).pop();
-                              },
-                              child: Text(
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        backgroundColor: currentColor,
+                        foregroundColor: currentColor.computeLuminance() > 0.5
+                            ? Colors.black
+                            : Colors.white,
+                      ),
+                      onPressed: () {
+                        final Color previousColor = currentColor;
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: Text(
                                 generator.getLocaleString(
                                   lang,
-                                  "gemini_cancel_btn",
+                                  "pick_color_title",
                                 ),
                               ),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(0, 48),
+                              content: SingleChildScrollView(
+                                child: ValueListenableBuilder<Color>(
+                                  valueListenable: _fontColorNotifier,
+                                  builder: (context, pickedColor, _) {
+                                    final String liveName =
+                                        ColorAccessibility.describeColorName(
+                                          pickedColor,
+                                          lang,
+                                        );
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Semantics(
+                                          liveRegion: true,
+                                          child: Text(
+                                            generator
+                                                .getLocaleString(
+                                                  lang,
+                                                  "selected_color_name_label",
+                                                )
+                                                .replaceAll(
+                                                  "{color}",
+                                                  liveName,
+                                                ),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        ColorPicker(
+                                          pickerColor: pickedColor,
+                                          onColorChanged: (c) =>
+                                              _fontColorNotifier.value = c,
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
-                              child: Text(
-                                generator.getLocaleString(lang, "got_it_btn"),
-                              ),
-                              onPressed: () => Navigator.of(context).pop(),
-                            ),
-                          ],
+                              actions: <Widget>[
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(0, 48),
+                                  ),
+                                  onPressed: () {
+                                    _fontColorNotifier.value = previousColor;
+                                    Navigator.of(context).pop();
+                                  },
+                                  child: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "gemini_cancel_btn",
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    minimumSize: const Size(0, 48),
+                                  ),
+                                  child: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      "got_it_btn",
+                                    ),
+                                  ),
+                                  onPressed: () => Navigator.of(context).pop(),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                  icon: const Icon(Icons.color_lens, size: 18),
-                  label: Text(generator.getLocaleString(lang, "select_color_btn")),
+                      icon: const ExcludeSemantics(
+                        child: Icon(Icons.color_lens, size: 18),
+                      ),
+                      label: Text(
+                        "${generator.getLocaleString(lang, "select_color_btn")} ($activeColorName)",
+                      ),
+                    ),
+                  ],
                 ),
               ],
             );
@@ -2182,15 +4048,57 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                   ],
                 ),
-                Slider(
-                  value: sizeValue,
-                  min: 20,
-                  max: 120,
-                  divisions: 100,
-                  label: sizeValue.round().toString(),
-                  semanticFormatterCallback: (v) =>
-                      "${generator.getLocaleString(lang, "font_size_label")}: ${v.round()}",
-                  onChanged: (v) => _fontSizeNotifier.value = v,
+                Row(
+                  children: [
+                    IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "decrease_font_size_tooltip",
+                      ),
+                      onPressed: sizeValue > 20
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              _fontSizeNotifier.value =
+                                  (sizeValue - 2).clamp(20.0, 120.0);
+                            }
+                          : null,
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: sizeValue,
+                        min: 20,
+                        max: 120,
+                        divisions: 100,
+                        label: sizeValue.round().toString(),
+                        semanticFormatterCallback: (v) =>
+                            "${generator.getLocaleString(lang, "font_size_label")}: ${v.round()}",
+                        onChanged: (v) => _fontSizeNotifier.value = v,
+                      ),
+                    ),
+                    IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "increase_font_size_tooltip",
+                      ),
+                      onPressed: sizeValue < 120
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              _fontSizeNotifier.value =
+                                  (sizeValue + 2).clamp(20.0, 120.0);
+                            }
+                          : null,
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
                 ),
               ],
             );
@@ -2224,15 +4132,57 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                   ],
                 ),
-                Slider(
-                  value: offsetValue,
-                  min: -400,
-                  max: 400,
-                  divisions: 800,
-                  label: offsetValue.round().toString(),
-                  semanticFormatterCallback: (v) =>
-                      "${generator.getLocaleString(lang, "y_offset_label")}: ${v.round()}",
-                  onChanged: (v) => _yOffsetNotifier.value = v,
+                Row(
+                  children: [
+                    IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "move_text_up_tooltip",
+                      ),
+                      onPressed: offsetValue > -400
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              _yOffsetNotifier.value =
+                                  (offsetValue - 20).clamp(-400.0, 400.0);
+                            }
+                          : null,
+                      icon: const Icon(Icons.arrow_upward),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: offsetValue,
+                        min: -400,
+                        max: 400,
+                        divisions: 800,
+                        label: offsetValue.round().toString(),
+                        semanticFormatterCallback: (v) =>
+                            "${generator.getLocaleString(lang, "y_offset_label")}: ${v.round()}",
+                        onChanged: (v) => _yOffsetNotifier.value = v,
+                      ),
+                    ),
+                    IconButton(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "move_text_down_tooltip",
+                      ),
+                      onPressed: offsetValue < 400
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              _yOffsetNotifier.value =
+                                  (offsetValue + 20).clamp(-400.0, 400.0);
+                            }
+                          : null,
+                      icon: const Icon(Icons.arrow_downward),
+                    ),
+                  ],
                 ),
               ],
             );
@@ -2422,9 +4372,54 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            SelectableText(
-                              transcript,
-                              style: Theme.of(context).textTheme.bodySmall,
+                            Builder(
+                              builder: (context) {
+                                final (int, int)? range = _spokenWordRange;
+                                final TextStyle? baseTranscriptStyle = Theme.of(
+                                  context,
+                                ).textTheme.bodySmall;
+                                if (isPlayingAudioPreview &&
+                                    range != null &&
+                                    range.$1 >= 0 &&
+                                    range.$2 > range.$1 &&
+                                    range.$2 <= transcript.length) {
+                                  final ColorScheme cs = Theme.of(
+                                    context,
+                                  ).colorScheme;
+                                  return SelectableText.rich(
+                                    TextSpan(
+                                      style: baseTranscriptStyle,
+                                      children: [
+                                        TextSpan(
+                                          text: transcript.substring(
+                                            0,
+                                            range.$1,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: transcript.substring(
+                                            range.$1,
+                                            range.$2,
+                                          ),
+                                          style: baseTranscriptStyle?.copyWith(
+                                            backgroundColor:
+                                                cs.primaryContainer,
+                                            color: cs.onPrimaryContainer,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: transcript.substring(range.$2),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+                                return SelectableText(
+                                  transcript,
+                                  style: baseTranscriptStyle,
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -2485,20 +4480,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               );
             }
-            String description = generator.getLocaleString(
-              lang,
-              "default_description",
-            );
-            if (isGeminiBackground && customImagePath != null) {
-              final String styleLabel = generator.getLocaleString(
-                lang,
-                selectedGeminiStyle,
-              );
-              final String extraDetails = geminiPromptController.text.trim();
-              description = extraDetails.isNotEmpty
-                  ? "AI-generated background ($styleLabel: $extraDetails)."
-                  : "AI-generated background ($styleLabel).";
-            }
+            final String description =
+                _activeImageDescription ??
+                generator.getLocaleString(
+                  lang,
+                  "default_description",
+                );
             final String liveAltText = generator.getLocaleString(
               lang,
               "alt_text_template",
@@ -2518,28 +4505,98 @@ class _MyHomePageState extends State<MyHomePage> {
               children: [
                 if (liveAltText.isNotEmpty) ...[
                   const SizedBox(height: 16),
+                  TextField(
+                    controller: _imageDescriptionController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: generator.getLocaleString(
+                        lang,
+                        "custom_image_desc_label",
+                      ),
+                      hintText: generator.getLocaleString(
+                        lang,
+                        "custom_image_desc_hint",
+                      ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Text(
                     generator.getLocaleString(lang, "alt_text_label"),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   SelectableText(liveAltText),
-                  const SizedBox(height: 4),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                    ),
-                    onPressed: () =>
-                        _copyToClipboard(liveAltText, fieldKey: "alt"),
-                    icon: Icon(
-                      _copiedField == "alt" ? Icons.check : Icons.copy,
-                      size: 16,
-                      color:
-                          _copiedField == "alt" ? _successColor(context) : null,
-                    ),
-                    label: Text(
-                      generator.getLocaleString(lang, "copy_alt_text_btn"),
-                    ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: () =>
+                            _copyToClipboard(liveAltText, fieldKey: "alt"),
+                        icon: Icon(
+                          _copiedField == "alt" ? Icons.check : Icons.copy,
+                          size: 16,
+                          color: _copiedField == "alt"
+                              ? _successColor(context)
+                              : null,
+                        ),
+                        label: Text(
+                          generator.getLocaleString(lang, "copy_alt_text_btn"),
+                        ),
+                      ),
+                      if (_geminiNanoAvailability.isCompatible &&
+                          _geminiNanoEnabled)
+                        FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          onPressed: _isDescribingImage
+                              ? null
+                              : _describeCurrentBackgroundWithGeminiNano,
+                          icon: _isDescribingImage
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.auto_awesome, size: 18),
+                          label: Text(
+                            generator.getLocaleString(
+                              lang,
+                              "gemini_nano_describe_btn",
+                            ),
+                          ),
+                        ),
+                      if (_geminiNanoAvailability.isCompatible &&
+                          _geminiNanoEnabled &&
+                          _onDeviceImageDescription != null)
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _onDeviceImageDescription = null;
+                              _imageDescriptionController.clear();
+                            });
+                          },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: Text(
+                            generator.getLocaleString(
+                              lang,
+                              "gemini_nano_clear_btn",
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
                 if (liveCaption.isNotEmpty) ...[
@@ -2569,12 +4626,199 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                 ],
+                if (_geminiHandoffEnabled) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    generator.getLocaleString(
+                      lang,
+                      "gemini_handoff_section_title",
+                    ),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: () => _shareToGemini(
+                          GeminiHandoffTask.devotionalCaption,
+                        ),
+                        icon: const Icon(Icons.share, size: 18),
+                        label: Text(
+                          generator.getLocaleString(
+                            lang,
+                            "gemini_handoff_caption_btn",
+                          ),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: () => _copyAndOpenGemini(
+                          GeminiHandoffTask.devotionalCaption,
+                        ),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: Text(
+                          generator.getLocaleString(
+                            lang,
+                            "gemini_handoff_open_btn",
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             );
           },
         ),
+        _buildInclusivityScorecard(lang),
         _buildStepNavigationRow(lang, 3),
       ],
+    );
+  }
+
+  Widget _buildInclusivityScorecard(String lang) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _previewListenable,
+        _contrastListenable,
+        _fontSizeNotifier,
+      ]),
+      builder: (context, _) {
+        final String verseText = verseController.text.trim();
+        final String refText = referenceController.text.trim();
+        final bool hasVerse = verseText.isNotEmpty && refText.isNotEmpty;
+        final bool contrastOk = _computeCurrentContrastRatio() >= 4.5;
+        final bool altTextOk =
+            hasVerse &&
+            (customImagePath == null || _activeImageDescription != null);
+        final VerseTextStyleOptions style = _textStyleNotifier.value;
+        final bool typographyOk =
+            _fontSizeNotifier.value >= 22.0 &&
+            !(style.fontFamily == VerseFontFamily.cursive &&
+                verseText.length > 80);
+        final bool captionsOk = hasVerse;
+
+        final int score = [
+          contrastOk,
+          altTextOk,
+          typographyOk,
+          captionsOk,
+        ].where((ok) => ok).length;
+
+        final ThemeData theme = Theme.of(context);
+        final Color successColor = _successColor(context);
+        final String headerText = generator
+            .getLocaleString(lang, "inclusivity_score_title")
+            .replaceAll("{score}", "$score")
+            .replaceAll("{total}", "4");
+
+        Widget buildCheckChip({
+          required String label,
+          required bool ok,
+          VoidCallback? onFix,
+        }) {
+          return ActionChip(
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+            avatar: ExcludeSemantics(
+              child: Icon(
+                ok ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 18,
+                color: ok ? successColor : theme.colorScheme.tertiary,
+              ),
+            ),
+            label: Text(label),
+            onPressed: ok ? null : onFix,
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 16.0),
+          child: Card.outlined(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Row(
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            score == 4
+                                ? Icons.verified_user
+                                : Icons.accessibility_new,
+                            size: 18,
+                            color: score == 4
+                                ? successColor
+                                : theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            headerText,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      buildCheckChip(
+                        label: generator.getLocaleString(
+                          lang,
+                          "inclusivity_check_contrast",
+                        ),
+                        ok: contrastOk,
+                        onFix: () => _selectTab(2),
+                      ),
+                      buildCheckChip(
+                        label: generator.getLocaleString(
+                          lang,
+                          "inclusivity_check_alt_text",
+                        ),
+                        ok: altTextOk,
+                        onFix: () => _selectTab(hasVerse ? 3 : 0),
+                      ),
+                      buildCheckChip(
+                        label: generator.getLocaleString(
+                          lang,
+                          "inclusivity_check_typography",
+                        ),
+                        ok: typographyOk,
+                        onFix: () => _selectTab(2),
+                      ),
+                      buildCheckChip(
+                        label: generator.getLocaleString(
+                          lang,
+                          "inclusivity_check_captions",
+                        ),
+                        ok: captionsOk,
+                        onFix: () => _selectTab(0),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2708,7 +4952,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 : (isSuccess ? Icons.check_circle : Icons.info),
                             size: 18,
                             color: isError
-                                ? Theme.of(context).colorScheme.error
+                                ? _errorColor(context)
                                 : (isSuccess
                                       ? _successColor(context)
                                       : Theme.of(context).colorScheme.primary),
@@ -2722,7 +4966,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: isError
-                                  ? Theme.of(context).colorScheme.error
+                                  ? _errorColor(context)
                                   : (isSuccess
                                         ? _successColor(context)
                                         : Theme.of(
@@ -2787,43 +5031,65 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     final String lang = getLangKey();
-    final bool isGeminiConnected =
-        geminiApiKey != null && geminiApiKey!.isNotEmpty;
 
     final Widget previewWidget = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: VersePreviewCard(
-              repaintKey: _globalKey,
-              aspectRatioStr: aspectRatioStr,
-              customImagePath: customImagePath,
-              selectedBackground: selectedBackground,
-              previewListenable: _previewListenable,
-              verseController: verseController,
-              referenceController: referenceController,
-              fontColor: _fontColorNotifier.value,
-              fontSize: _fontSizeNotifier.value,
-              yOffset: _yOffsetNotifier.value,
-              backgroundDim: _backgroundDimNotifier.value,
-              fontColorListenable: _fontColorNotifier,
-              fontSizeListenable: _fontSizeNotifier,
-              yOffsetListenable: _yOffsetNotifier,
-              backgroundDimListenable: _backgroundDimNotifier,
-              onYOffsetChanged: (updated) => _yOffsetNotifier.value = updated,
-              lang: lang,
-              generator: generator,
+          child: Material(
+            elevation: 3,
+            borderRadius: BorderRadius.circular(10),
+            clipBehavior: Clip.antiAlias,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: VersePreviewCard(
+                repaintKey: _globalKey,
+                aspectRatioStr: aspectRatioStr,
+                customImagePath: customImagePath,
+                selectedBackground: selectedBackground,
+                previewListenable: _previewListenable,
+                verseController: verseController,
+                referenceController: referenceController,
+                fontColor: _fontColorNotifier.value,
+                fontSize: _fontSizeNotifier.value,
+                yOffset: _yOffsetNotifier.value,
+                backgroundDim: _backgroundDimNotifier.value,
+                textStyleOptions: _textStyleNotifier.value,
+                fontColorListenable: _fontColorNotifier,
+                fontSizeListenable: _fontSizeNotifier,
+                yOffsetListenable: _yOffsetNotifier,
+                backgroundDimListenable: _backgroundDimNotifier,
+                textStyleListenable: _textStyleNotifier,
+                onYOffsetChanged: (updated) => _yOffsetNotifier.value = updated,
+                lang: lang,
+                generator: generator,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 4),
-        ExcludeSemantics(
-          child: Text(
-            generator.getLocaleString(lang, "drag_hint"),
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: ExcludeSemantics(
+                child: Text(
+                  generator.getLocaleString(lang, "drag_hint"),
+                  style: Theme.of(context).textTheme.labelSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            IconButton(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: const Icon(Icons.fullscreen, size: 20),
+              tooltip: generator.getLocaleString(
+                lang,
+                "expand_preview_tooltip",
+              ),
+              onPressed: () => _showFullScreenPreview(lang),
+            ),
+          ],
         ),
       ],
     );
@@ -2859,7 +5125,7 @@ class _MyHomePageState extends State<MyHomePage> {
       index: _selectedTabIndex,
       children: [
         ExcludeFocus(excluding: _selectedTabIndex != 0, child: _buildVerseTab(lang)),
-        ExcludeFocus(excluding: _selectedTabIndex != 1, child: _buildBackgroundTab(lang, isGeminiConnected)),
+        ExcludeFocus(excluding: _selectedTabIndex != 1, child: _buildBackgroundTab(lang)),
         ExcludeFocus(excluding: _selectedTabIndex != 2, child: _buildStyleTab(lang)),
         ExcludeFocus(excluding: _selectedTabIndex != 3, child: _buildAudioAndTextTab(lang)),
       ],
@@ -2867,42 +5133,112 @@ class _MyHomePageState extends State<MyHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(generator.getLocaleString(lang, "title")),
+        titleSpacing: 12,
+        title: Text(
+          generator.getLocaleString(lang, "title"),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            height: 1.15,
+          ),
+        ),
         actions: [
           IconButton(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.info_outline),
+            tooltip: generator.getLocaleString(lang, "about_tooltip"),
+            onPressed: _showAboutDialog,
+          ),
+          IconButton(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.auto_awesome),
             tooltip: generator.getLocaleString(
               lang,
-              isGeminiConnected ? "gemini_connected_btn" : "gemini_connect_btn",
+              "advanced_features_tooltip",
             ),
-            icon: Icon(
-              isGeminiConnected ? Icons.auto_awesome : Icons.key_outlined,
-              color: isGeminiConnected
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-            ),
-            onPressed: _showGeminiAuthDialog,
+            onPressed: _showAdvancedFeaturesDialog,
           ),
-          Semantics(
-            label: generator.getLocaleString(lang, "app_language_label"),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48, maxWidth: 150),
-              child: DropdownButton<String>(
-                isExpanded: true,
-                itemHeight: null,
-                value: currentLang,
-                onChanged: (String? newValue) {
-                  if (newValue == null) return;
-                  setState(() {
-                    currentLang = newValue;
-                  });
-                  _switchBibleLanguage(getLangKey().substring(0, 2));
-                },
-                items: languages.map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value, overflow: TextOverflow.ellipsis),
-                  );
-                }).toList(),
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Semantics(
+              label:
+                  "${generator.getLocaleString(lang, "app_language_label")}: $currentLang",
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 48, maxWidth: 102),
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ExcludeSemantics(
+                      child: Icon(
+                        Icons.language,
+                        size: 15,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          isDense: true,
+                          itemHeight: null,
+                          iconSize: 18,
+                          value: currentLang,
+                          selectedItemBuilder: (BuildContext context) {
+                            return languages
+                                .map<Widget>(
+                                  (String value) => Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      _shortLanguageCode(value),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                )
+                                .toList();
+                          },
+                          onChanged: (String? newValue) {
+                            if (newValue == null) return;
+                            setState(() {
+                              currentLang = newValue;
+                            });
+                            _switchBibleLanguage(getLangKey().substring(0, 2));
+                          },
+                          items: languages.map<DropdownMenuItem<String>>((
+                            String value,
+                          ) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(
+                                value,
+                                style: Theme.of(context).textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

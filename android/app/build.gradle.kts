@@ -32,7 +32,8 @@ android {
         applicationId = "com.ronalds1979.inclusivebible"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // ML Kit GenAI Image Description (Gemini Nano) requires Android 8.0 (API 26)+.
+        minSdk = maxOf(flutter.minSdkVersion, 26)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -79,4 +80,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("com.google.mlkit:genai-image-description:1.0.0-beta1")
+    implementation("com.google.guava:guava:33.3.1-android")
 }

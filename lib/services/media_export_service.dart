@@ -47,8 +47,11 @@ class MediaExportService {
 
       final List<XFile> filesToShare = [XFile(imgFile.path)];
       // ⚡ Bolt: Avoid synchronous I/O on main thread
-      if (audioPath != null && await File(audioPath).exists()) {
-        filesToShare.add(XFile(audioPath));
+      if (audioPath != null) {
+        final File audioFile = File(audioPath);
+        if (await audioFile.exists() && await audioFile.length() > 44) {
+          filesToShare.add(XFile(audioPath, mimeType: 'audio/wav'));
+        }
       }
 
       await SharePlus.instance.share(

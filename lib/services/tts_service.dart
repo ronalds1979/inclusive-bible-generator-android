@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -28,7 +29,8 @@ class TtsService {
   static const double documentaryPitch = 0.95;
 
   /// Deeper pitch fallback when the device lacks a dedicated Male voice pack.
-  static const double maleFallbackPitch = 0.62;
+  /// Kept at 0.80 (rather than <0.70) to avoid robotic DSP vocoder distortion.
+  static const double maleFallbackPitch = 0.80;
 
   /// Higher pitch fallback when only a Male voice pack is available for Female.
   static const double femaleFallbackPitch = 1.10;
@@ -42,20 +44,33 @@ class TtsService {
   );
 
   static final RegExp _explicitMaleNameRegExp = RegExp(
-    r'(?:^|[-_#.\s])male(?:$|[-_#.\s\d])|-m-',
+    r'(?:^|[-_#.\s])male(?:$|[-_#.\s\d])|-m-|smtm\d*',
   );
 
   static final RegExp _explicitFemaleNameRegExp = RegExp(
-    r'female|-f-',
+    r'female|-f-|smtf\d*',
   );
 
   // ⚡ Bolt: Pre-compile voice name tokenizer instead of allocating a RegExp per voice
   static final RegExp _voiceTokenSplitRegExp = RegExp(r'[-_#.\s]+');
+  static final RegExp _featureSplitRegExp = RegExp(r'[\t,;\s]+');
+
+  /// Minimum WAV byte length (44-byte RIFF/WAVE header + at least 1 audio byte).
+  static const int _minValidWavBytes = 44;
+
+  /// Guard timeout for Android `synthesizeToFile` when the engine fails silently.
+  static const Duration _synthTimeout = Duration(seconds: 20);
 
   static const Set<String> _maleVoiceTokens = {
     'iol',
     'iom',
     'tpd',
+    'ptd',
+    'jmn',
+    'pmj',
+    'rjs',
+    'esd',
+    'esf',
     'gbb',
     'gbd',
     'aub',
@@ -89,6 +104,7 @@ class TtsService {
     'iog',
     'tpc',
     'tpf',
+    'pte',
     'gba',
     'gbc',
     'aua',
@@ -118,9 +134,16 @@ class TtsService {
   };
 
   List<dynamic>? _cachedDeviceVoices;
+  final bool? _isAndroidOverride;
+  final Future<Directory> Function()? _tempDirProvider;
 
-  TtsService({FlutterTts? flutterTts})
-    : _flutterTts = flutterTts ?? FlutterTts();
+  TtsService({
+    FlutterTts? flutterTts,
+    @visibleForTesting bool? isAndroidOverride,
+    @visibleForTesting Future<Directory> Function()? tempDirProvider,
+  }) : _flutterTts = flutterTts ?? FlutterTts(),
+       _isAndroidOverride = isAndroidOverride,
+       _tempDirProvider = tempDirProvider;
 
   static const Map<String, String> _defaultLocales = {
     "pt-BR": "pt-BR",
@@ -170,17 +193,49 @@ class TtsService {
     return lower == "pt" || lower.startsWith("pt-");
   }
 
+  /// Returns `true` when Android reports `KEY_FEATURE_NOT_INSTALLED`
+  /// (`"notInstalled"`) in the voice's `features` metadata.
+  static bool isVoiceNotInstalled(Map<dynamic, dynamic> voice) {
+    final String features = (voice["features"] ?? "").toString().toLowerCase();
+    if (features.isEmpty) return false;
+    return features.split(_featureSplitRegExp).contains("notinstalled");
+  }
+
+  /// Returns `true` when the voice requires a network connection to synthesize.
+  static bool isNetworkVoice(Map<dynamic, dynamic> voice) {
+    final String networkRequired = (voice["network_required"] ?? "")
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (networkRequired == "1" || networkRequired == "true") {
+      return true;
+    }
+    final String name = (voice["name"] ?? "").toString().trim().toLowerCase();
+    return name.contains("-network");
+  }
+
   static int _scoreVoice(
     Map<dynamic, dynamic> voice,
     String normalizedLang,
     String normalizedGender,
   ) {
     int score = 0;
+
+    // Prefer locally installed offline voices over network voices of the same
+    // gender (+800), while still allowing a genuine matching-gender neural
+    // network voice (+1500) to beat a wrong-gender local voice (-1500) so we
+    // avoid robotic pitch-shifting whenever a real Male/Female voice exists.
+    // `generateAudio` automatically falls back to the local default voice if
+    // a network voice fails to synthesize offline.
+    if (!isNetworkVoice(voice)) {
+      score += 800;
+    }
+
     final String? detectedGender = detectVoiceGender(voice);
     if (detectedGender == normalizedGender) {
-      score += 1000;
+      score += 1500;
     } else if (detectedGender != null) {
-      score -= 1000;
+      score -= 1500;
     }
 
     final String locale = (voice["locale"] ?? "")
@@ -198,14 +253,6 @@ class TtsService {
       } else if (locale == "es-us" || locale == "es-419" || locale == "es-mx") {
         score += 25;
       }
-    }
-
-    final String name = (voice["name"] ?? "").toString().toLowerCase();
-    final String networkRequired = (voice["network_required"] ?? "")
-        .toString()
-        .trim();
-    if (networkRequired != "1" && !name.contains("-network")) {
-      score += 20;
     }
 
     final String quality = (voice["quality"] ?? "").toString().toLowerCase();
@@ -248,6 +295,7 @@ class TtsService {
           final String locale = (v["locale"] ?? "").toString().trim();
           return name.isNotEmpty &&
               locale.isNotEmpty &&
+              !isVoiceNotInstalled(v) &&
               _matchesLanguage(locale, normalizedLang);
         })
         .toList();
@@ -415,14 +463,86 @@ class TtsService {
     return "$spokenRef... $cleanVerse";
   }
 
-  Future<void> _configureNarratorVoice(String lang, String gender) async {
+  Future<void> _clearVoiceSafely() async {
+    try {
+      await _flutterTts.clearVoice();
+    } catch (_) {
+      // Some platforms/engines do not support clearVoice; setLanguage below
+      // will still reset the active locale voice.
+    }
+  }
+
+  Future<TtsVoiceSelection> _configureNarratorVoice(
+    String lang,
+    String gender,
+  ) async {
     final TtsVoiceSelection selection = await resolveDeviceVoice(lang, gender);
+    if (selection.voice == null) {
+      await _clearVoiceSafely();
+    }
     await _flutterTts.setLanguage(selection.targetLocale);
     if (selection.voice != null) {
       await _flutterTts.setVoice(selection.voice!);
     }
     await _flutterTts.setSpeechRate(documentarySpeechRate);
     await _flutterTts.setPitch(selection.pitch);
+    return selection;
+  }
+
+  static Future<bool> _isValidAudioFile(String path) async {
+    final File file = File(path);
+    if (!await file.exists()) return false;
+    final int length = await file.length();
+    return length > _minValidWavBytes;
+  }
+
+  static Future<void> _deleteFileQuietly(String path) async {
+    try {
+      final File file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> _synthesizeToFileSafely(String text, String fullPath) async {
+    final Completer<bool> errorCompleter = Completer<bool>();
+    final ErrorHandler? previousErrorHandler = _flutterTts.errorHandler;
+    _flutterTts.setErrorHandler((dynamic message) {
+      if (kDebugMode) {
+        debugPrint("TTS synthesis error: $message");
+      }
+      if (!errorCompleter.isCompleted) {
+        errorCompleter.complete(false);
+      }
+      previousErrorHandler?.call(message);
+    });
+
+    try {
+      await _flutterTts.awaitSynthCompletion(true);
+      final Future<bool> synthFuture = _flutterTts
+          .synthesizeToFile(text, fullPath, true)
+          .then((dynamic res) => res == 1 || res == true)
+          .catchError((Object e) {
+            if (kDebugMode) {
+              debugPrint("Error in synthesizeToFile: $e");
+            }
+            return false;
+          });
+
+      final bool succeeded = await Future.any<bool>([
+        synthFuture,
+        errorCompleter.future,
+      ]).timeout(_synthTimeout, onTimeout: () => false);
+
+      if (!succeeded) {
+        await _flutterTts.stop();
+        return false;
+      }
+      return await _isValidAudioFile(fullPath);
+    } finally {
+      _flutterTts.errorHandler = previousErrorHandler;
+    }
   }
 
   Future<void> speakPreview({
@@ -430,6 +550,7 @@ class TtsService {
     required String reference,
     required String lang,
     required String gender,
+    void Function(int start, int end)? onWordProgress,
   }) async {
     try {
       await _flutterTts.stop();
@@ -439,10 +560,24 @@ class TtsService {
         reference: reference,
         lang: lang,
       );
+      if (onWordProgress != null) {
+        _flutterTts.setProgressHandler((
+          String text,
+          int start,
+          int end,
+          String word,
+        ) {
+          onWordProgress(start, end);
+        });
+      }
       await _flutterTts.speak(textToRead);
     } catch (e) {
       if (kDebugMode) {
         debugPrint("Error playing TTS preview: $e");
+      }
+    } finally {
+      if (onWordProgress != null) {
+        _flutterTts.setProgressHandler((_, _, _, _) {});
       }
     }
   }
@@ -454,22 +589,52 @@ class TtsService {
     required String gender,
   }) async {
     try {
-      await _configureNarratorVoice(lang, gender);
+      if (!(_isAndroidOverride ?? Platform.isAndroid)) {
+        return null;
+      }
+
       final String textToRead = buildSpokenScript(
         verse: verse,
         reference: reference,
         lang: lang,
       );
+      if (textToRead.trim().isEmpty) {
+        return null;
+      }
 
-      if (Platform.isAndroid) {
-        final Directory dir = await getTemporaryDirectory();
-        await pruneTransientFiles(dir, prefix: 'verse_audio_', suffix: '.wav');
-        final String fileName =
-            "verse_audio_${DateTime.now().millisecondsSinceEpoch}.wav";
-        final String fullPath = "${dir.path}/$fileName";
-        await _flutterTts.awaitSynthCompletion(true);
-        await _flutterTts.synthesizeToFile(textToRead, fullPath, true);
+      final Directory dir = await (_tempDirProvider ?? getTemporaryDirectory)();
+      await pruneTransientFiles(dir, prefix: 'verse_audio_', suffix: '.wav');
+
+      await _flutterTts.stop();
+      final TtsVoiceSelection selection = await _configureNarratorVoice(
+        lang,
+        gender,
+      );
+
+      final int timestamp = DateTime.now().millisecondsSinceEpoch;
+      final String fullPath = "${dir.path}/verse_audio_$timestamp.wav";
+      if (await _synthesizeToFileSafely(textToRead, fullPath)) {
         return fullPath;
+      }
+      await _deleteFileQuietly(fullPath);
+
+      // Fallback: if an explicit device voice failed to synthesize (e.g. voice
+      // pack unavailable or network synthesis error), reset to the engine's
+      // default installed voice for the target locale and retry once.
+      if (selection.voice != null) {
+        await _flutterTts.stop();
+        await _clearVoiceSafely();
+        await _flutterTts.setLanguage(resolveTargetLocale(lang));
+        await _flutterTts.setSpeechRate(documentarySpeechRate);
+        await _flutterTts.setPitch(
+          gender == "Male" ? maleFallbackPitch : documentaryPitch,
+        );
+        final String fallbackPath =
+            "${dir.path}/verse_audio_${timestamp}_fallback.wav";
+        if (await _synthesizeToFileSafely(textToRead, fallbackPath)) {
+          return fallbackPath;
+        }
+        await _deleteFileQuietly(fallbackPath);
       }
     } catch (e) {
       if (kDebugMode) {

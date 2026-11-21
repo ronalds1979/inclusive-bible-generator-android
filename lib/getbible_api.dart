@@ -8,6 +8,24 @@ import 'package:path_provider/path_provider.dart';
 import 'book_mapping.dart';
 import 'rvr1960_psalm_superscriptions.dart';
 
+class BibleSearchResult {
+  final String bookName;
+  final int bookNumber;
+  final int chapter;
+  final int verse;
+  final String reference;
+  final String text;
+
+  const BibleSearchResult({
+    required this.bookName,
+    required this.bookNumber,
+    required this.chapter,
+    required this.verse,
+    required this.reference,
+    required this.text,
+  });
+}
+
 class _CachedChapter {
   final Map<int, String> byVerse;
   final String fullChapterText;
@@ -1018,5 +1036,99 @@ class GetBibleAPI {
       "verse": versePart,
       "reference": reference,
     };
+  }
+
+  /// Searches Bible verses matching a keyword, phrase, or theme using
+  /// Bolls.life's keyless semantic/lexical search endpoint (`/v2/find`).
+  static Future<List<BibleSearchResult>> searchVerses({
+    required String query,
+    required String versionId,
+    required String lang,
+    int limit = 12,
+    http.Client? client,
+  }) async {
+    final String trimmed = query.trim();
+    if (trimmed.length < 2 || trimmed.length > 160) {
+      return const [];
+    }
+
+    final String lowerLang = lang.trim().toLowerCase();
+    final String langPrefix = lowerLang.startsWith('pt')
+        ? 'pt'
+        : (lowerLang.startsWith('es') ? 'es' : 'en');
+    final String normalizedVersion = versionId.trim().toLowerCase();
+    final String translation =
+        _bollsVersionMap[normalizedVersion] ??
+        (langPrefix == 'pt'
+            ? 'NAA'
+            : (langPrefix == 'es' ? 'RV1960' : 'WEB'));
+
+    final Uri uri = Uri.parse(
+      'https://bolls.life/v2/find/$translation'
+      '?search=${Uri.encodeQueryComponent(trimmed)}'
+      '&limit=${limit.clamp(1, 25)}&page=1',
+    );
+
+    final http.Client httpClient = client ?? _sharedHttpClient;
+    try {
+      final response = await _getBoundedResponse(
+        httpClient,
+        uri,
+        headers: const {'Accept': 'application/json'},
+      );
+      if (response.statusCode != 200) {
+        return const [];
+      }
+      final dynamic decoded = json.decode(response.body);
+      final List<dynamic> rawResults;
+      if (decoded is Map && decoded['results'] is List) {
+        rawResults = decoded['results'] as List<dynamic>;
+      } else if (decoded is List) {
+        rawResults = decoded;
+      } else {
+        return const [];
+      }
+
+      final List<String> canonicalBooks = getCanonicalBooks(langPrefix);
+      final List<BibleSearchResult> matches = [];
+      for (final item in rawResults) {
+        if (item is! Map) continue;
+        final int? bookNr = item['book'] is int
+            ? item['book'] as int
+            : int.tryParse('${item['book']}');
+        final int? chapter = item['chapter'] is int
+            ? item['chapter'] as int
+            : int.tryParse('${item['chapter']}');
+        final int? verse = item['verse'] is int
+            ? item['verse'] as int
+            : int.tryParse('${item['verse']}');
+        final String cleaned = cleanVerseText('${item['text'] ?? ''}');
+        if (bookNr == null ||
+            bookNr < 1 ||
+            bookNr > canonicalBooks.length ||
+            chapter == null ||
+            verse == null ||
+            cleaned.isEmpty) {
+          continue;
+        }
+        final String bookName = canonicalBooks[bookNr - 1];
+        matches.add(
+          BibleSearchResult(
+            bookName: bookName,
+            bookNumber: bookNr,
+            chapter: chapter,
+            verse: verse,
+            reference: '$bookName $chapter:$verse',
+            text: cleaned,
+          ),
+        );
+      }
+      return matches;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("Error searching verses: $e");
+      }
+      return const [];
+    }
   }
 }
