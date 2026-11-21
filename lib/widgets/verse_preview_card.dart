@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../generator.dart';
@@ -545,6 +546,7 @@ class VersePreviewCard extends StatefulWidget {
   final ValueListenable<VerseTextStyleOptions>? textStyleListenable;
   final ValueChanged<double>? onYOffsetChanged;
   final String lang;
+  final String? bibleLang;
   final Generator generator;
 
   const VersePreviewCard({
@@ -568,6 +570,7 @@ class VersePreviewCard extends StatefulWidget {
     this.textStyleListenable,
     this.onYOffsetChanged,
     required this.lang,
+    this.bibleLang,
     required this.generator,
   });
 
@@ -577,6 +580,7 @@ class VersePreviewCard extends StatefulWidget {
 
 class _VersePreviewCardState extends State<VersePreviewCard> {
   late Listenable _textAnimation;
+  bool _isFocused = false;
 
   // ⚡ Bolt: Memoize resolved fitting font size across 60Hz color drags,
   // non-layout style changes (shadow/backdrop), and clamped slider drags > max fit.
@@ -810,7 +814,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
                 textAlign: currentStyle.textAlign,
                 style: baseStyle.copyWith(
                   color: verseIsPlaceholder
-                      ? currentFontColor.withValues(alpha: 0.6)
+                      ? currentFontColor.withValues(alpha: 0.85)
                       : currentFontColor,
                   fontSize: effectiveFontSize / 2,
                   height: currentStyle.lineHeight,
@@ -853,7 +857,7 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
                 textAlign: currentStyle.textAlign,
                 style: baseStyle.copyWith(
                   color: refIsPlaceholder
-                      ? currentFontColor.withValues(alpha: 0.6)
+                      ? currentFontColor.withValues(alpha: 0.85)
                       : currentFontColor,
                   fontSize: (effectiveFontSize * 0.66) / 2,
                   letterSpacing: 0.4,
@@ -1010,37 +1014,108 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
 
     final Widget interactiveCard = widget.onYOffsetChanged == null
         ? responsiveCard
-        : GestureDetector(
-            onDoubleTap: () {
-              HapticFeedback.lightImpact();
-              widget.onYOffsetChanged!(0.0);
+        : FocusableActionDetector(
+            onShowFocusHighlight: (bool focused) {
+              if (_isFocused != focused) {
+                setState(() => _isFocused = focused);
+              }
             },
-            onVerticalDragUpdate: (details) {
-              final double baseOffset =
-                  widget.yOffsetListenable?.value ?? widget.yOffset;
-              final double rawUpdated =
-                  (baseOffset + details.delta.dy * 1.5).clamp(-400.0, 400.0);
-              final bool crossedCenter =
-                  (baseOffset < 0 && rawUpdated >= 0) ||
-                  (baseOffset > 0 && rawUpdated <= 0);
-              final double updated =
-                  (crossedCenter || rawUpdated.abs() < 3.0) && baseOffset != 0.0
+            shortcuts: const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.arrowUp):
+                  ScrollIntent(direction: AxisDirection.up),
+              SingleActivator(LogicalKeyboardKey.arrowDown):
+                  ScrollIntent(direction: AxisDirection.down),
+              SingleActivator(LogicalKeyboardKey.home): ActivateIntent(),
+            },
+            actions: <Type, Action<Intent>>{
+              ScrollIntent: CallbackAction<ScrollIntent>(
+                onInvoke: (ScrollIntent intent) {
+                  final double baseOffset =
+                      widget.yOffsetListenable?.value ?? widget.yOffset;
+                  final double delta =
+                      intent.direction == AxisDirection.up ? -20.0 : 20.0;
+                  final double updated = (baseOffset + delta).clamp(
+                    -400.0,
+                    400.0,
+                  );
+                  HapticFeedback.selectionClick();
+                  widget.onYOffsetChanged!(updated);
+                  return null;
+                },
+              ),
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) {
+                  HapticFeedback.lightImpact();
+                  widget.onYOffsetChanged!(0.0);
+                  return null;
+                },
+              ),
+            },
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: _isFocused
+                    ? Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 3.0,
+                      )
+                    : null,
+              ),
+              child: GestureDetector(
+                onDoubleTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onYOffsetChanged!(0.0);
+                },
+                onVerticalDragUpdate: (details) {
+                  final double baseOffset =
+                      widget.yOffsetListenable?.value ?? widget.yOffset;
+                  final double rawUpdated =
+                      (baseOffset + details.delta.dy * 1.5).clamp(
+                        -400.0,
+                        400.0,
+                      );
+                  final bool crossedCenter =
+                      (baseOffset < 0 && rawUpdated >= 0) ||
+                      (baseOffset > 0 && rawUpdated <= 0);
+                  final double updated =
+                      (crossedCenter || rawUpdated.abs() < 3.0) &&
+                          baseOffset != 0.0
                       ? 0.0
                       : rawUpdated;
-              if ((updated == 0.0 && baseOffset != 0.0) ||
-                  (baseOffset > -400.0 && updated == -400.0) ||
-                  (baseOffset < 400.0 && updated == 400.0)) {
-                HapticFeedback.selectionClick();
-              }
-              widget.onYOffsetChanged!(updated);
-            },
-            child: responsiveCard,
+                  if ((updated == 0.0 && baseOffset != 0.0) ||
+                      (baseOffset > -400.0 && updated == -400.0) ||
+                      (baseOffset < 400.0 && updated == 400.0)) {
+                    HapticFeedback.selectionClick();
+                  }
+                  widget.onYOffsetChanged!(updated);
+                },
+                child: responsiveCard,
+              ),
+            ),
           );
 
     final String resetHint = widget.generator.getLocaleString(
       widget.lang,
       "reset_position_btn",
     );
+    final String moveUpLabel = widget.generator.getLocaleString(
+      widget.lang,
+      "move_text_up_tooltip",
+    );
+    final String moveDownLabel = widget.generator.getLocaleString(
+      widget.lang,
+      "move_text_down_tooltip",
+    );
+
+    Locale? resolvePassageLocale(String? code) {
+      if (code == null || code.isEmpty) return null;
+      final String lower = code.toLowerCase();
+      if (lower.startsWith('pt')) return const Locale('pt', 'BR');
+      if (lower.startsWith('es')) return const Locale('es');
+      if (lower.startsWith('en')) return const Locale('en');
+      return null;
+    }
 
     return AnimatedBuilder(
       animation: widget.previewListenable,
@@ -1055,6 +1130,51 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
             widget.yOffsetListenable?.value ?? widget.yOffset;
         final bool canResetOffset =
             widget.onYOffsetChanged != null && activeYOffset != 0.0;
+        final String fullLabel = "$semanticHeader: \"$verseText\" — $refText";
+        final Locale? passageLocale = trimmedVerse.isNotEmpty
+            ? resolvePassageLocale(widget.bibleLang)
+            : null;
+        final Locale? uiLocale = resolvePassageLocale(widget.lang);
+        final bool hasDistinctPassageLocale =
+            passageLocale != null &&
+            uiLocale != null &&
+            passageLocale.languageCode != uiLocale.languageCode;
+        final int verseStart = "$semanticHeader: \"".length;
+        final int verseEnd = verseStart + verseText.length;
+
+        final Map<CustomSemanticsAction, VoidCallback>? customActions =
+            widget.onYOffsetChanged == null
+                ? null
+                : <CustomSemanticsAction, VoidCallback>{
+                    CustomSemanticsAction(
+                      label: moveUpLabel.isNotEmpty
+                          ? moveUpLabel
+                          : 'Move text up',
+                    ): () {
+                      final double base =
+                          widget.yOffsetListenable?.value ?? widget.yOffset;
+                      HapticFeedback.selectionClick();
+                      widget.onYOffsetChanged!((base - 20.0).clamp(-400.0, 400.0));
+                    },
+                    CustomSemanticsAction(
+                      label: moveDownLabel.isNotEmpty
+                          ? moveDownLabel
+                          : 'Move text down',
+                    ): () {
+                      final double base =
+                          widget.yOffsetListenable?.value ?? widget.yOffset;
+                      HapticFeedback.selectionClick();
+                      widget.onYOffsetChanged!((base + 20.0).clamp(-400.0, 400.0));
+                    },
+                    if (canResetOffset)
+                      CustomSemanticsAction(
+                        label: resetHint.isNotEmpty ? resetHint : 'Center',
+                      ): () {
+                        HapticFeedback.lightImpact();
+                        widget.onYOffsetChanged!(0.0);
+                      },
+                  };
+
         return Semantics(
           container: true,
           image: true,
@@ -1068,7 +1188,19 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
           onTapHint: canResetOffset && resetHint.isNotEmpty
               ? resetHint
               : null,
-          label: "$semanticHeader: \"$verseText\" — $refText",
+          customSemanticsActions: customActions,
+          attributedLabel: hasDistinctPassageLocale
+              ? AttributedString(
+                  fullLabel,
+                  attributes: <StringAttribute>[
+                    LocaleStringAttribute(
+                      range: TextRange(start: verseStart, end: verseEnd),
+                      locale: passageLocale,
+                    ),
+                  ],
+                )
+              : null,
+          label: hasDistinctPassageLocale ? null : fullLabel,
           child: child,
         );
       },

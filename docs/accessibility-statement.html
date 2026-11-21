@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accessibility Statement — Inclusive Bible Generator</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #4b5563;
+      --card: #f6f8fa;
+      --border: #d0d7de;
+      --accent: #0550ae;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --fg: #e6edf3;
+        --muted: #9ca3af;
+        --card: #161b22;
+        --border: #30363d;
+        --accent: #79c0ff;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.65;
+      font-size: 1rem;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem;
+    }
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      background: var(--accent);
+      color: var(--bg);
+      padding: 0.65rem 1rem;
+      border-radius: 6px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .skip-link:focus {
+      left: 1rem;
+      top: 1rem;
+      z-index: 1000;
+    }
+    nav ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      list-style: none;
+      padding: 0;
+      margin: 0 0 1.5rem 0;
+    }
+    h1, h2, h3 { line-height: 1.25; }
+    .meta { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.5rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    a:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 3px;
+    }
+    footer {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header>
+    <nav aria-label="Document navigation">
+      <ul>
+        <li><a href="#en">English</a></li>
+        <li><a href="#es" lang="es">Español</a></li>
+        <li><a href="#pt-br" lang="pt-BR">Português (Brasil)</a></li>
+        <li><a href="privacy-policy.html">Privacy Policy</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section id="en" lang="en">
+      <h1>Accessibility Statement</h1>
+      <p class="meta"><strong>Inclusive Bible Generator</strong> (<code>com.ronalds1979.inclusivebible</code>)<br>
+      Last reviewed: November 21, 2026</p>
+
+      <div class="card">
+        <strong>Conformance Target:</strong> Inclusive Bible Generator is designed and tested to conform with <strong>WCAG 2.1 / 2.2 Level AA</strong>, European Standard <strong>EN 301 549 v3.2.1</strong> (Chapter 11 Non-Web Software &amp; Chapter 9 Web), and the <strong>European Accessibility Act (Directive (EU) 2019/882)</strong>.
+      </div>
+
+      <h2>Built-in Accessibility Features (EN 301 549 Clause 12.1.1)</h2>
+      <ul>
+        <li><strong>Automatic OS Preference Support:</strong> Automatically honors system High Contrast mode, Dark/Light theme, 200%+ system font scaling, and Reduced Motion settings.</li>
+        <li><strong>Screen Reader &amp; Language Support:</strong> Localized UI and Material semantics in English, Spanish, and Brazilian Portuguese, semantic section headings, live-region status updates, and passage language attributes.</li>
+        <li><strong>Keyboard, Switch Access &amp; Motor Accessibility:</strong> Minimum 48&times;48dp touch targets, visible focus indicators, Arrow/Home keyboard repositioning on the verse preview, custom TalkBack actions, and direct Hex/RGB color entry without dragging.</li>
+        <li><strong>Color-Vision &amp; Low-Vision Tools:</strong> Real-pixel WCAG AA/AAA &amp; color-blindness (Protanopia, Deuteranopia, Tritanopia) contrast evaluation, built-in Vision Simulator, Color-Blind-Friendly status colors, Dyslexia-Friendly preset, and High-Contrast text backdrops.</li>
+        <li><strong>Audio &amp; Alternative Formats:</strong> Adjustable-rate Text-to-Speech (TTS) audio narration with live word-highlighted transcripts, persistent Stop Audio control, Voice-to-Verse dictation, and auto-generated Alt-Text &amp; social captions.</li>
+      </ul>
+
+      <h2>Known Limitations</h2>
+      <ul>
+        <li>Voice-to-Verse dictation and on-device Gemini Nano image descriptions depend on Android system services available on the user's device. Manual text entry and manual Alt-Text editing are always available as full alternatives.</li>
+      </ul>
+
+      <h2>Feedback &amp; Accessibility Support (EAA &amp; EN 301 549 Clause 12.2)</h2>
+      <p>If you encounter an accessibility barrier or need documentation in an alternative format, please contact us:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:accessibility@inclusivebible.app">accessibility@inclusivebible.app</a> (no account required)</li>
+        <li><strong>Issue Tracker:</strong> <a href="https://github.com/ronalds1979/inclusive-bible-generator-android/issues" rel="noopener noreferrer">GitHub Issues</a></li>
+      </ul>
+      <p>We aim to acknowledge accessibility feedback within 5 business days.</p>
+    </section>
+
+    <hr>
+
+    <section id="es" lang="es">
+      <h2>Declaración de Accesibilidad (Español)</h2>
+      <p><strong>Inclusive Bible Generator</strong> está diseñado para cumplir con <strong>WCAG 2.1 / 2.2 Nivel AA</strong>, la norma europea <strong>EN 301 549</strong> y la <strong>Ley Europea de Accesibilidad (Directiva (UE) 2019/882)</strong>. Respeta automáticamente el alto contraste del sistema, el movimiento reducido, la escala de texto al 200%, TalkBack/VoiceOver, teclado y Switch Access, simulador de daltonismo, dictado por voz, velocidad ajustable de audio con transcripción en vivo y generación automática de Alt-Text.</p>
+      <p>Para reportar barreras de accesibilidad o solicitar soporte sin necesidad de crear una cuenta, escribe a <a href="mailto:accessibility@inclusivebible.app">accessibility@inclusivebible.app</a> o abre una incidencia en <a href="https://github.com/ronalds1979/inclusive-bible-generator-android/issues" rel="noopener noreferrer">GitHub</a>.</p>
+    </section>
+
+    <hr>
+
+    <section id="pt-br" lang="pt-BR">
+      <h2>Declaração de Acessibilidade (Português — Brasil)</h2>
+      <p>O <strong>Inclusive Bible Generator</strong> foi projetado para atender às diretrizes <strong>WCAG 2.1 / 2.2 Nível AA</strong>, à norma europeia <strong>EN 301 549</strong> e à <strong>Lei Europeia de Acessibilidade (Diretiva (UE) 2019/882)</strong>. O aplicativo respeita automaticamente alto contraste do sistema, movimento reduzido, fonte em 200%, TalkBack/VoiceOver, navegação por teclado e Switch Access, simulador de daltonismo, ditado por voz, velocidade ajustável de narração com transcrição ao vivo e geração automática de Alt-Text.</p>
+      <p>Para relatar barreiras de acessibilidade ou solicitar suporte sem precisar de conta, envie um e-mail para <a href="mailto:accessibility@inclusivebible.app">accessibility@inclusivebible.app</a> ou abra uma issue no <a href="https://github.com/ronalds1979/inclusive-bible-generator-android/issues" rel="noopener noreferrer">GitHub</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Inclusive Bible Generator — <a href="privacy-policy.html">Privacy Policy</a></p>
+  </footer>
+</body>
+</html>

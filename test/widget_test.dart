@@ -5,8 +5,22 @@ import 'package:app/main.dart';
 import 'package:app/getbible_api.dart';
 import 'package:app/book_mapping.dart';
 import 'package:app/generator.dart';
+import 'package:app/services/contrast_sampler.dart';
 import 'package:app/widgets/verse_preview_card.dart';
 import 'package:app/widgets/youversion_auth_dialog.dart';
+
+class _MidToneContrastSampler extends ContrastSampler {
+  const _MidToneContrastSampler();
+
+  @override
+  Future<BackgroundLuminanceProfile?> sampleAsset(String assetPath) async {
+    return const BackgroundLuminanceProfile(
+      top: 0.26,
+      center: 0.26,
+      bottom: 0.26,
+    );
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -138,7 +152,9 @@ void main() {
       addTearDown(tester.platformDispatcher.clearLocaleTestValue);
 
       await tester.runAsync(() async {
-        await tester.pumpWidget(const MyApp());
+        await tester.pumpWidget(
+          const MyApp(contrastSampler: _MidToneContrastSampler()),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();
@@ -215,7 +231,9 @@ void main() {
       addTearDown(tester.platformDispatcher.clearLocaleTestValue);
       await tester.binding.setSurfaceSize(const Size(412, 915));
       await tester.runAsync(() async {
-        await tester.pumpWidget(const MyApp());
+        await tester.pumpWidget(
+          const MyApp(contrastSampler: _MidToneContrastSampler()),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();
@@ -569,7 +587,9 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(412, 915));
 
       await tester.runAsync(() async {
-        await tester.pumpWidget(const MyApp());
+        await tester.pumpWidget(
+          const MyApp(contrastSampler: _MidToneContrastSampler()),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();

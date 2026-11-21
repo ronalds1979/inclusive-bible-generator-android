@@ -72,9 +72,25 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
 
   Future<void> _openYouVersionPortal() async {
     final Uri uri = Uri.parse(GetBibleAPI.youVersionPortalUrl);
+    bool launched = false;
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {}
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && mounted) {
+      final String msg = widget.generator.getLocaleString(
+        widget.lang,
+        "url_launch_error_msg",
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            msg.isEmpty ? "Could not open the link on this device." : msg,
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -178,23 +194,36 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
               ),
             ],
             const SizedBox(height: 12),
-            TextField(
-              controller: _keyController,
-              obscureText: _obscure,
-              enableSuggestions: false,
-              autocorrect: false,
-              maxLength: 256,
-              decoration: InputDecoration(
-                counterText: "",
-                labelText: generator.getLocaleString(
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _keyController,
+              builder: (context, value, _) {
+                final bool showInvalidError =
+                    value.text.trim().isNotEmpty &&
+                    GetBibleAPI.normalizeYouVersionApiKey(value.text) == null;
+                final String invalidKeyMsg = generator.getLocaleString(
                   lang,
-                  "yv_api_key_label",
-                ),
-                border: const OutlineInputBorder(),
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _keyController,
-                  builder: (context, value, _) {
-                    return Row(
+                  "yv_invalid_key_error",
+                );
+                return TextField(
+                  controller: _keyController,
+                  obscureText: _obscure,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  maxLength: 256,
+                  decoration: InputDecoration(
+                    counterText: "",
+                    labelText: generator.getLocaleString(
+                      lang,
+                      "yv_api_key_label",
+                    ),
+                    errorText: showInvalidError
+                        ? (invalidKeyMsg.isEmpty
+                              ? "Enter a valid YouVersion App Key."
+                              : invalidKeyMsg)
+                        : null,
+                    errorMaxLines: 2,
+                    border: const OutlineInputBorder(),
+                    suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (value.text.isNotEmpty)
@@ -230,10 +259,10 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                           },
                         ),
                       ],
-                    );
-                  },
-                ),
-              ),
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),

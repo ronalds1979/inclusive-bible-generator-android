@@ -6,25 +6,64 @@ import 'package:flutter/services.dart';
 import '../widgets/verse_preview_card.dart';
 import 'image_validation.dart';
 
-/// Luminance summary sampled across the top, center, and bottom horizontal
-/// bands of a background image.
+/// Luminance & representative color summary sampled across the top, center,
+/// and bottom horizontal bands of a background image.
 @immutable
 class BackgroundLuminanceProfile {
   final double top;
   final double center;
   final double bottom;
+  final double? topP10;
+  final double? topP90;
+  final double? centerP10;
+  final double? centerP90;
+  final double? bottomP10;
+  final double? bottomP90;
+  final ui.Color? topColor;
+  final ui.Color? centerColor;
+  final ui.Color? bottomColor;
 
   const BackgroundLuminanceProfile({
     required this.top,
     required this.center,
     required this.bottom,
+    this.topP10,
+    this.topP90,
+    this.centerP10,
+    this.centerP90,
+    this.bottomP10,
+    this.bottomP90,
+    this.topColor,
+    this.centerColor,
+    this.bottomColor,
   });
 
-  /// Returns the band luminance corresponding to the card's vertical offset.
+  /// Returns the mean band luminance corresponding to the card's vertical offset.
   double luminanceForOffset(double yOffset) {
     if (yOffset < -55.0) return top;
     if (yOffset > 55.0) return bottom;
     return center;
+  }
+
+  /// Returns the worst-case band luminance (10th percentile for dark text,
+  /// 90th percentile for light text) so high-contrast scenes (e.g. bright sky +
+  /// dark trees) do not falsely report safe contrast.
+  double worstCaseLuminanceFor(double yOffset, double fgLuminance) {
+    final bool isLightText = fgLuminance >= 0.4;
+    if (yOffset < -55.0) {
+      return (isLightText ? topP90 : topP10) ?? top;
+    }
+    if (yOffset > 55.0) {
+      return (isLightText ? bottomP90 : bottomP10) ?? bottom;
+    }
+    return (isLightText ? centerP90 : centerP10) ?? center;
+  }
+
+  /// Returns the representative RGB color for the band corresponding to [yOffset].
+  ui.Color? colorForOffset(double yOffset) {
+    if (yOffset < -55.0) return topColor;
+    if (yOffset > 55.0) return bottomColor;
+    return centerColor;
   }
 
   /// Finds the vertical placement (`-110.0`, `0.0`, or `110.0`) with the
@@ -96,38 +135,79 @@ class ContrastSampler {
     final int band1End = (height / 3).floor().clamp(1, height);
     final int band2End = ((height * 2) / 3).floor().clamp(band1End, height);
 
+    final List<double> topLums = <double>[];
+    final List<double> centerLums = <double>[];
+    final List<double> bottomLums = <double>[];
+
     double topSum = 0;
-    int topCount = 0;
+    int topR = 0, topG = 0, topB = 0;
     double centerSum = 0;
-    int centerCount = 0;
+    int centerR = 0, centerG = 0, centerB = 0;
     double bottomSum = 0;
-    int bottomCount = 0;
+    int bottomR = 0, bottomG = 0, bottomB = 0;
 
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
         final int idx = (y * width + x) * 4;
-        final double lum = relativeLuminanceFromRgb(
-          rgbaBytes[idx],
-          rgbaBytes[idx + 1],
-          rgbaBytes[idx + 2],
-        );
+        final int r = rgbaBytes[idx];
+        final int g = rgbaBytes[idx + 1];
+        final int b = rgbaBytes[idx + 2];
+        final double lum = relativeLuminanceFromRgb(r, g, b);
         if (y < band1End) {
           topSum += lum;
-          topCount++;
+          topR += r;
+          topG += g;
+          topB += b;
+          topLums.add(lum);
         } else if (y < band2End) {
           centerSum += lum;
-          centerCount++;
+          centerR += r;
+          centerG += g;
+          centerB += b;
+          centerLums.add(lum);
         } else {
           bottomSum += lum;
-          bottomCount++;
+          bottomR += r;
+          bottomG += g;
+          bottomB += b;
+          bottomLums.add(lum);
         }
       }
     }
 
+    double? percentile(List<double> values, double p) {
+      if (values.isEmpty) return null;
+      values.sort();
+      final int index = ((values.length - 1) * p).round().clamp(
+        0,
+        values.length - 1,
+      );
+      return values[index];
+    }
+
+    ui.Color? meanColor(int rSum, int gSum, int bSum, int count) {
+      if (count <= 0) return null;
+      return ui.Color.fromARGB(
+        255,
+        (rSum / count).round().clamp(0, 255),
+        (gSum / count).round().clamp(0, 255),
+        (bSum / count).round().clamp(0, 255),
+      );
+    }
+
     return BackgroundLuminanceProfile(
-      top: topCount > 0 ? topSum / topCount : 0.26,
-      center: centerCount > 0 ? centerSum / centerCount : 0.26,
-      bottom: bottomCount > 0 ? bottomSum / bottomCount : 0.26,
+      top: topLums.isNotEmpty ? topSum / topLums.length : 0.26,
+      center: centerLums.isNotEmpty ? centerSum / centerLums.length : 0.26,
+      bottom: bottomLums.isNotEmpty ? bottomSum / bottomLums.length : 0.26,
+      topP10: percentile(topLums, 0.10),
+      topP90: percentile(topLums, 0.90),
+      centerP10: percentile(centerLums, 0.10),
+      centerP90: percentile(centerLums, 0.90),
+      bottomP10: percentile(bottomLums, 0.10),
+      bottomP90: percentile(bottomLums, 0.90),
+      topColor: meanColor(topR, topG, topB, topLums.length),
+      centerColor: meanColor(centerR, centerG, centerB, centerLums.length),
+      bottomColor: meanColor(bottomR, bottomG, bottomB, bottomLums.length),
     );
   }
 

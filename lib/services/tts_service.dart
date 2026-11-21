@@ -474,8 +474,11 @@ class TtsService {
 
   Future<TtsVoiceSelection> _configureNarratorVoice(
     String lang,
-    String gender,
-  ) async {
+    String gender, {
+    double? speechRate,
+  }) async {
+    final double resolvedRate =
+        (speechRate ?? documentarySpeechRate).clamp(0.25, 0.75);
     final TtsVoiceSelection selection = await resolveDeviceVoice(lang, gender);
     if (selection.voice == null) {
       await _clearVoiceSafely();
@@ -484,7 +487,7 @@ class TtsService {
     if (selection.voice != null) {
       await _flutterTts.setVoice(selection.voice!);
     }
-    await _flutterTts.setSpeechRate(documentarySpeechRate);
+    await _flutterTts.setSpeechRate(resolvedRate);
     await _flutterTts.setPitch(selection.pitch);
     return selection;
   }
@@ -550,11 +553,12 @@ class TtsService {
     required String reference,
     required String lang,
     required String gender,
+    double? speechRate,
     void Function(int start, int end)? onWordProgress,
   }) async {
     try {
       await _flutterTts.stop();
-      await _configureNarratorVoice(lang, gender);
+      await _configureNarratorVoice(lang, gender, speechRate: speechRate);
       final String textToRead = buildSpokenScript(
         verse: verse,
         reference: reference,
@@ -587,6 +591,7 @@ class TtsService {
     required String reference,
     required String lang,
     required String gender,
+    double? speechRate,
   }) async {
     try {
       if (!(_isAndroidOverride ?? Platform.isAndroid)) {
@@ -605,10 +610,13 @@ class TtsService {
       final Directory dir = await (_tempDirProvider ?? getTemporaryDirectory)();
       await pruneTransientFiles(dir, prefix: 'verse_audio_', suffix: '.wav');
 
+      final double resolvedRate =
+          (speechRate ?? documentarySpeechRate).clamp(0.25, 0.75);
       await _flutterTts.stop();
       final TtsVoiceSelection selection = await _configureNarratorVoice(
         lang,
         gender,
+        speechRate: resolvedRate,
       );
 
       final int timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -625,7 +633,7 @@ class TtsService {
         await _flutterTts.stop();
         await _clearVoiceSafely();
         await _flutterTts.setLanguage(resolveTargetLocale(lang));
-        await _flutterTts.setSpeechRate(documentarySpeechRate);
+        await _flutterTts.setSpeechRate(resolvedRate);
         await _flutterTts.setPitch(
           gender == "Male" ? maleFallbackPitch : documentaryPitch,
         );
@@ -645,6 +653,10 @@ class TtsService {
   }
 
   Future<void> stop() async {
-    await _flutterTts.stop();
+    try {
+      await _flutterTts.stop();
+    } catch (_) {
+      // Ignore platform channel errors when TTS engine is unavailable (e.g. tests).
+    }
   }
 }
