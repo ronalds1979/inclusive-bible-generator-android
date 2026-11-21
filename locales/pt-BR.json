@@ -271,5 +271,17 @@
   "audio_speed_label": "Velocidade da voz:",
   "audio_playing_banner": "Prévia de áudio em reprodução",
   "search_book_label": "Buscar livro",
-  "verse_search_input_label": "Buscar palavra-chave ou tema"
+  "verse_search_input_label": "Buscar palavra-chave ou tema",
+  "clear_reference_tooltip": "Limpar referência",
+  "clear_verse_tooltip": "Limpar versículo bíblico",
+  "clear_search_tooltip": "Limpar busca",
+  "clear_api_key_tooltip": "Limpar chave API",
+  "dismiss_status_tooltip": "Dispensar mensagem de status",
+  "reset_line_spacing_btn": "Redefinir espaçamento",
+  "reset_letter_spacing_btn": "Redefinir letras",
+  "letter_spacing_label": "Espaçamento entre letras",
+  "decrease_letter_spacing_tooltip": "Diminuir espaçamento entre letras",
+  "increase_letter_spacing_tooltip": "Aumentar espaçamento entre letras",
+  "wcag_large_text_tag": "Texto grande (mín. 3:1)",
+  "wcag_normal_text_tag": "Texto normal (mín. 4.5:1)"
 }

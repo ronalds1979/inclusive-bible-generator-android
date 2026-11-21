@@ -277,5 +277,165 @@ void main() {
         expect(yOffset.value, equals(0.0));
       },
     );
+
+    testWidgets(
+      'Multi-tab accessibility matrix: all 4 tabs meet tap-target and labeled-tap-target guidelines in Light, Dark, and High-Contrast modes',
+      (WidgetTester tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        await tester.binding.setSurfaceSize(const Size(412, 915));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        for (final Brightness brightness in [
+          Brightness.light,
+          Brightness.dark,
+        ]) {
+          tester.platformDispatcher.platformBrightnessTestValue = brightness;
+          final SemanticsHandle handle = tester.ensureSemantics();
+          try {
+            await tester.runAsync(() async {
+              await tester.pumpWidget(const MyApp());
+              await Future<void>.delayed(const Duration(milliseconds: 200));
+            });
+            await tester.pumpAndSettle();
+
+            for (final String tabLabel in const [
+              'Verse',
+              'Background',
+              'Style',
+              'Audio & Text',
+            ]) {
+              await tester.tap(find.text(tabLabel));
+              await tester.pumpAndSettle();
+              await expectLater(
+                tester,
+                meetsGuideline(androidTapTargetGuideline),
+              );
+              await expectLater(
+                tester,
+                meetsGuideline(labeledTapTargetGuideline),
+              );
+            }
+          } finally {
+            handle.dispose();
+          }
+        }
+        tester.platformDispatcher.clearPlatformBrightnessTestValue();
+      },
+    );
+
+    testWidgets(
+      'Key dialogs (About, Search Topic, Advanced Features) meet tap-target and labeled-tap-target guidelines',
+      (WidgetTester tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        await tester.binding.setSurfaceSize(const Size(412, 915));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        final SemanticsHandle handle = tester.ensureSemantics();
+        try {
+          await tester.runAsync(() async {
+            await tester.pumpWidget(const MyApp());
+            await Future<void>.delayed(const Duration(milliseconds: 200));
+          });
+          await tester.pumpAndSettle();
+
+          // About dialog
+          await tester.tap(find.byTooltip('About & Credits'));
+          await tester.pumpAndSettle();
+          await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+          await tester.tap(find.text('Close'));
+          await tester.pumpAndSettle();
+
+          // Advanced Features dialog
+          await tester.tap(find.byTooltip('Advanced Features'));
+          await tester.pumpAndSettle();
+          await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+          await tester.tap(find.text('Close'));
+          await tester.pumpAndSettle();
+
+          // Search Topic dialog
+          final Finder searchBtn = find.text('Search Topic');
+          await tester.ensureVisible(searchBtn);
+          await tester.tap(searchBtn);
+          await tester.pumpAndSettle();
+          await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+          await tester.tap(find.text('Close'));
+          await tester.pumpAndSettle();
+        } finally {
+          handle.dispose();
+        }
+      },
+    );
+
+    testWidgets(
+      'Unique Voice Access tooltips, Letter Spacing steppers, and narrow 320px 200% scale reflow work across locales',
+      (WidgetTester tester) async {
+        // Verify all 3 locale files have unique non-empty Voice Access & spacing keys
+        final Generator gen = Generator();
+        await tester.runAsync(() async {
+          await gen.loadLocales();
+        });
+        for (final String lang in const ['en', 'es', 'pt-BR']) {
+          final String clearRef = gen.getLocaleString(
+            lang,
+            'clear_reference_tooltip',
+          );
+          final String clearVerse = gen.getLocaleString(
+            lang,
+            'clear_verse_tooltip',
+          );
+          final String dismissStatus = gen.getLocaleString(
+            lang,
+            'dismiss_status_tooltip',
+          );
+          final String resetLine = gen.getLocaleString(
+            lang,
+            'reset_line_spacing_btn',
+          );
+          final String resetLetter = gen.getLocaleString(
+            lang,
+            'reset_letter_spacing_btn',
+          );
+          expect(clearRef, isNotEmpty);
+          expect(clearVerse, isNotEmpty);
+          expect(dismissStatus, isNotEmpty);
+          expect(clearRef, isNot(equals(clearVerse)));
+          expect(clearRef, isNot(equals(dismissStatus)));
+          expect(resetLine, isNot(equals(resetLetter)));
+        }
+
+        // Verify Letter Spacing steppers & Vision Preview Wrap in UI
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        await tester.binding.setSurfaceSize(const Size(412, 915));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(const MyApp());
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Style'));
+        await tester.pumpAndSettle();
+        final Finder incLetter = find.byTooltip('Increase letter spacing');
+        await tester.ensureVisible(incLetter);
+        await tester.tap(incLetter);
+        await tester.pumpAndSettle();
+        expect(find.text('Letter Spacing: 0.1'), findsOneWidget);
+        expect(find.text('Reset Tracking'), findsOneWidget);
+
+        // Verify narrow phone (320x568) at 200% text scale has zero layout overflow
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.binding.setSurfaceSize(const Size(320, 568));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

@@ -271,5 +271,17 @@
   "audio_speed_label": "Speech Rate:",
   "audio_playing_banner": "Audio preview is playing",
   "search_book_label": "Search book",
-  "verse_search_input_label": "Search keyword or theme"
+  "verse_search_input_label": "Search keyword or theme",
+  "clear_reference_tooltip": "Clear reference",
+  "clear_verse_tooltip": "Clear Bible verse",
+  "clear_search_tooltip": "Clear search",
+  "clear_api_key_tooltip": "Clear API key",
+  "dismiss_status_tooltip": "Dismiss status message",
+  "reset_line_spacing_btn": "Reset Spacing",
+  "reset_letter_spacing_btn": "Reset Tracking",
+  "letter_spacing_label": "Letter Spacing",
+  "decrease_letter_spacing_tooltip": "Decrease letter spacing",
+  "increase_letter_spacing_tooltip": "Increase letter spacing",
+  "wcag_large_text_tag": "Large text (3:1 min)",
+  "wcag_normal_text_tag": "Normal text (4.5:1 min)"
 }

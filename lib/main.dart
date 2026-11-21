@@ -1161,12 +1161,20 @@ class _MyHomePageState extends State<MyHomePage> {
                                     ),
                                     border: const OutlineInputBorder(),
                                     isDense: true,
+                                    suffixIconConstraints: const BoxConstraints(
+                                      minWidth: 48,
+                                      minHeight: 48,
+                                    ),
                                     suffixIcon: value.text.isNotEmpty
                                         ? IconButton(
+                                            constraints: const BoxConstraints(
+                                              minWidth: 48,
+                                              minHeight: 48,
+                                            ),
                                             icon: const Icon(Icons.clear),
                                             tooltip: generator.getLocaleString(
                                               lang,
-                                              "clear_btn",
+                                              "clear_search_tooltip",
                                             ),
                                             onPressed: searching
                                                 ? null
@@ -1268,7 +1276,9 @@ class _MyHomePageState extends State<MyHomePage> {
                             shrinkWrap: true,
                             itemCount: results.length,
                             separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
+                                const ExcludeSemantics(
+                                  child: Divider(height: 1),
+                                ),
                             itemBuilder: (context, index) {
                               final BibleSearchResult item = results[index];
                               return ListTile(
@@ -1819,7 +1829,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         unawaited(_saveAdvancedPreferences());
                       },
                     ),
-                    const Divider(),
+                    const ExcludeSemantics(child: Divider()),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
@@ -2008,7 +2018,9 @@ class _MyHomePageState extends State<MyHomePage> {
                         maxLength: 100,
                         decoration: InputDecoration(
                           counterText: "",
-                          prefixIcon: const Icon(Icons.search),
+                          prefixIcon: const ExcludeSemantics(
+                            child: Icon(Icons.search),
+                          ),
                           labelText: generator.getLocaleString(
                             lang,
                             "search_book_label",
@@ -2018,12 +2030,20 @@ class _MyHomePageState extends State<MyHomePage> {
                             "search_book_hint",
                           ),
                           border: const OutlineInputBorder(),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
                           suffixIcon: query.isNotEmpty
                               ? IconButton(
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
                                   icon: const Icon(Icons.clear),
                                   tooltip: generator.getLocaleString(
                                     lang,
-                                    "clear_btn",
+                                    "clear_search_tooltip",
                                   ),
                                   onPressed: () {
                                     searchController.clear();
@@ -2323,6 +2343,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                         ),
                         IconButton(
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
                           icon: const Icon(Icons.search, size: 20),
                           tooltip: generator.getLocaleString(
                             lang,
@@ -2547,10 +2571,21 @@ class _MyHomePageState extends State<MyHomePage> {
                 isDense: true,
                 border: const OutlineInputBorder(),
                 labelText: generator.getLocaleString(lang, "reference_label"),
+                suffixIconConstraints: const BoxConstraints(
+                  minWidth: 48,
+                  minHeight: 48,
+                ),
                 suffixIcon: value.text.isNotEmpty
                     ? IconButton(
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         icon: const Icon(Icons.clear),
-                        tooltip: generator.getLocaleString(lang, "clear_btn"),
+                        tooltip: generator.getLocaleString(
+                          lang,
+                          "clear_reference_tooltip",
+                        ),
                         onPressed: referenceController.clear,
                       )
                     : null,
@@ -2572,10 +2607,21 @@ class _MyHomePageState extends State<MyHomePage> {
                 border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
                 labelText: generator.getLocaleString(lang, "verse_label"),
+                suffixIconConstraints: const BoxConstraints(
+                  minWidth: 48,
+                  minHeight: 48,
+                ),
                 suffixIcon: value.text.isNotEmpty
                     ? IconButton(
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         icon: const Icon(Icons.clear),
-                        tooltip: generator.getLocaleString(lang, "clear_btn"),
+                        tooltip: generator.getLocaleString(
+                          lang,
+                          "clear_verse_tooltip",
+                        ),
                         onPressed: verseController.clear,
                       )
                     : null,
@@ -2693,10 +2739,12 @@ class _MyHomePageState extends State<MyHomePage> {
                             shape: BoxShape.circle,
                           ),
                           padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.check,
-                            size: 14,
-                            color: Theme.of(context).colorScheme.onPrimary,
+                          child: ExcludeSemantics(
+                            child: Icon(
+                              Icons.check,
+                              size: 14,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
                           ),
                         ),
                       ),
@@ -2762,12 +2810,14 @@ class _MyHomePageState extends State<MyHomePage> {
                                   shape: BoxShape.circle,
                                 ),
                                 padding: const EdgeInsets.all(2),
-                                child: Icon(
-                                  Icons.check,
-                                  size: 14,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimary,
+                                child: ExcludeSemantics(
+                                  child: Icon(
+                                    Icons.check,
+                                    size: 14,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimary,
+                                  ),
                                 ),
                               ),
                             )
@@ -2984,30 +3034,26 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: VisionSimulationMode.values.map((m) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: ChoiceChip(
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.padded,
-                                      label: Text(
-                                        generator.getLocaleString(
-                                          lang,
-                                          m.localeKey,
-                                        ),
-                                      ),
-                                      selected: simMode == m,
-                                      onSelected: (_) {
-                                        HapticFeedback.selectionClick();
-                                        setDialogState(() => simMode = m);
-                                      },
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: VisionSimulationMode.values.map((m) {
+                                return ChoiceChip(
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.padded,
+                                  label: Text(
+                                    generator.getLocaleString(
+                                      lang,
+                                      m.localeKey,
                                     ),
-                                  );
-                                }).toList(),
-                              ),
+                                  ),
+                                  selected: simMode == m,
+                                  onSelected: (_) {
+                                    HapticFeedback.selectionClick();
+                                    setDialogState(() => simMode = m);
+                                  },
+                                );
+                              }).toList(),
                             ),
                           ],
                         ),
@@ -3301,12 +3347,22 @@ class _MyHomePageState extends State<MyHomePage> {
           final Color badgeColor = isAaa
               ? _successColor(context)
               : Theme.of(context).colorScheme.primary;
-          final String badgeLabel = generator
+          final double renderedPt = _fontSizeNotifier.value / 2.0;
+          final bool isLargeText =
+              renderedPt >= 18.0 || (style.isBold && renderedPt >= 14.0);
+          final String sizeTag = generator.getLocaleString(
+            lang,
+            isLargeText ? "wcag_large_text_tag" : "wcag_normal_text_tag",
+          );
+          final String baseBadgeLabel = generator
               .getLocaleString(
                 lang,
                 isAaa ? "wcag_contrast_aaa" : "wcag_contrast_aa",
               )
               .replaceAll("{ratio}", ratioStr);
+          final String badgeLabel = sizeTag.isNotEmpty
+              ? "$baseBadgeLabel · $sizeTag"
+              : baseBadgeLabel;
           return Padding(
             padding: const EdgeInsets.only(top: 10.0),
             child: Wrap(
@@ -3524,36 +3580,38 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
                           children: [
-                            Expanded(
-                              child: Semantics(
-                                header: true,
-                                child: Row(
-                                  children: [
-                                    ExcludeSemantics(
-                                      child: Icon(
-                                        Icons.text_fields,
-                                        size: 18,
-                                        color: theme.colorScheme.primary,
-                                      ),
+                            Semantics(
+                              header: true,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ExcludeSemantics(
+                                    child: Icon(
+                                      Icons.text_fields,
+                                      size: 18,
+                                      color: theme.colorScheme.primary,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        generator.getLocaleString(
-                                          lang,
-                                          "typography_section_title",
-                                        ),
-                                        style: theme.textTheme.titleSmall
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                            ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      generator.getLocaleString(
+                                        lang,
+                                        "typography_section_title",
                                       ),
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                             if (!textStyle.isDefault)
@@ -4085,7 +4143,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 label: Text(
                                   generator.getLocaleString(
                                     lang,
-                                    "reset_font_size_btn",
+                                    "reset_line_spacing_btn",
                                   ),
                                 ),
                               ),
@@ -4157,6 +4215,123 @@ class _MyHomePageState extends State<MyHomePage> {
                                       );
                                       _updateTextStyle(
                                         textStyle.copyWith(lineHeight: next),
+                                      );
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.add),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              "${generator.getLocaleString(lang, "letter_spacing_label")}: ${textStyle.letterSpacing.toStringAsFixed(1)}",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if ((textStyle.letterSpacing -
+                                        VerseTextStyleOptions
+                                            .defaultLetterSpacing)
+                                    .abs() >
+                                0.05)
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                ),
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  _updateTextStyle(
+                                    textStyle.copyWith(
+                                      letterSpacing: VerseTextStyleOptions
+                                          .defaultLetterSpacing,
+                                    ),
+                                  );
+                                },
+                                icon: const ExcludeSemantics(
+                                  child: Icon(Icons.restart_alt, size: 16),
+                                ),
+                                label: Text(
+                                  generator.getLocaleString(
+                                    lang,
+                                    "reset_letter_spacing_btn",
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              tooltip: generator.getLocaleString(
+                                lang,
+                                "decrease_letter_spacing_tooltip",
+                              ),
+                              onPressed: textStyle.letterSpacing > 0.05
+                                  ? () {
+                                      HapticFeedback.selectionClick();
+                                      final double next = double.parse(
+                                        (textStyle.letterSpacing - 0.1)
+                                            .clamp(0.0, 2.0)
+                                            .toStringAsFixed(2),
+                                      );
+                                      _updateTextStyle(
+                                        textStyle.copyWith(letterSpacing: next),
+                                      );
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.remove),
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value: textStyle.letterSpacing.clamp(0.0, 2.0),
+                                min: 0.0,
+                                max: 2.0,
+                                divisions: 20,
+                                label: textStyle.letterSpacing.toStringAsFixed(
+                                  1,
+                                ),
+                                semanticFormatterCallback: (v) =>
+                                    "${generator.getLocaleString(lang, "letter_spacing_label")}: ${v.toStringAsFixed(1)}",
+                                onChanged: (v) {
+                                  _updateTextStyle(
+                                    textStyle.copyWith(
+                                      letterSpacing: double.parse(
+                                        v.toStringAsFixed(2),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            IconButton(
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              tooltip: generator.getLocaleString(
+                                lang,
+                                "increase_letter_spacing_tooltip",
+                              ),
+                              onPressed: textStyle.letterSpacing < 1.95
+                                  ? () {
+                                      HapticFeedback.selectionClick();
+                                      final double next = double.parse(
+                                        (textStyle.letterSpacing + 0.1)
+                                            .clamp(0.0, 2.0)
+                                            .toStringAsFixed(2),
+                                      );
+                                      _updateTextStyle(
+                                        textStyle.copyWith(letterSpacing: next),
                                       );
                                     }
                                   : null,
@@ -5322,7 +5497,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
-      child: Row(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (hasBack)
             OutlinedButton.icon(
@@ -5330,21 +5508,22 @@ class _MyHomePageState extends State<MyHomePage> {
                 minimumSize: const Size(0, 48),
               ),
               onPressed: () => _selectTab(stepIndex - 1),
-              icon: const Icon(Icons.arrow_back, size: 18),
+              icon: const ExcludeSemantics(
+                child: Icon(Icons.arrow_back, size: 18),
+              ),
               label: Text(generator.getLocaleString(lang, "step_back_btn")),
             ),
-          if (hasBack && hasNext) const SizedBox(width: 12),
           if (hasNext)
-            Expanded(
-              child: FilledButton.tonalIcon(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 48),
-                ),
-                onPressed: () => _selectTab(stepIndex + 1),
-                icon: const Icon(Icons.arrow_forward, size: 18),
-                iconAlignment: IconAlignment.end,
-                label: Text(nextLabel),
+            FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 48),
               ),
+              onPressed: () => _selectTab(stepIndex + 1),
+              icon: const ExcludeSemantics(
+                child: Icon(Icons.arrow_forward, size: 18),
+              ),
+              iconAlignment: IconAlignment.end,
+              label: Text(nextLabel),
             ),
         ],
       ),
@@ -5483,7 +5662,10 @@ class _MyHomePageState extends State<MyHomePage> {
                         minHeight: 48,
                       ),
                       icon: const Icon(Icons.close, size: 18),
-                      tooltip: generator.getLocaleString(lang, "clear_btn"),
+                      tooltip: generator.getLocaleString(
+                        lang,
+                        "dismiss_status_tooltip",
+                      ),
                       onPressed: () {
                         setState(() {
                           statusMessage = "";

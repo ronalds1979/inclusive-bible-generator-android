@@ -488,10 +488,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Font Size: 22"), findsOneWidget);
 
-    final sliderFinder = find.byType(Slider).first;
-    await tester.ensureVisible(sliderFinder);
+    final increaseFontBtn = find.byTooltip("Increase font size");
+    await tester.ensureVisible(increaseFontBtn);
     await tester.pumpAndSettle();
-    await tester.drag(sliderFinder, const Offset(80, 0));
+    await tester.tap(increaseFontBtn);
     await tester.pumpAndSettle();
     expect(find.text("Reset"), findsOneWidget);
 

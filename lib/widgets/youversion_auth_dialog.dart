@@ -103,7 +103,7 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          const Icon(Icons.menu_book),
+          const ExcludeSemantics(child: Icon(Icons.menu_book)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -223,18 +223,26 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                         : null,
                     errorMaxLines: 2,
                     border: const OutlineInputBorder(),
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
                     suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (value.text.isNotEmpty)
                           IconButton(
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
                             icon: const Icon(Icons.clear),
                             tooltip: () {
                               final label = generator.getLocaleString(
                                 lang,
-                                "clear_btn",
+                                "clear_api_key_tooltip",
                               );
-                              return label.isEmpty ? "Clear" : label;
+                              return label.isEmpty ? "Clear API key" : label;
                             }(),
                             onPressed: _isBusy
                                 ? null
@@ -243,6 +251,10 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
                                   },
                           ),
                         IconButton(
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
                           icon: Icon(
                             _obscure ? Icons.visibility : Icons.visibility_off,
                           ),

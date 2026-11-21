@@ -158,7 +158,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.byTooltip('Clear'),
+          matching: find.byTooltip('Clear search'),
         ),
       );
       await tester.pumpAndSettle();
