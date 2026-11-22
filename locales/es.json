@@ -276,6 +276,7 @@
   "clear_verse_tooltip": "Borrar versículo bíblico",
   "clear_search_tooltip": "Borrar búsqueda",
   "clear_api_key_tooltip": "Borrar clave API",
+  "clear_image_desc_tooltip": "Borrar descripción de la imagen",
   "dismiss_status_tooltip": "Descartar mensaje de estado",
   "reset_line_spacing_btn": "Restablecer interlineado",
   "reset_letter_spacing_btn": "Restablecer letras",

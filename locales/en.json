@@ -276,6 +276,7 @@
   "clear_verse_tooltip": "Clear Bible verse",
   "clear_search_tooltip": "Clear search",
   "clear_api_key_tooltip": "Clear API key",
+  "clear_image_desc_tooltip": "Clear image description",
   "dismiss_status_tooltip": "Dismiss status message",
   "reset_line_spacing_btn": "Reset Spacing",
   "reset_letter_spacing_btn": "Reset Tracking",
