@@ -44,9 +44,11 @@ class MainActivity : FlutterActivity() {
                 "describeImage" -> {
                     val imageBytes = call.argument<ByteArray>("imageBytes")
                     val imagePath = call.argument<String>("imagePath")
+                    val targetLanguage = call.argument<String>("targetLanguage")
                     describer.describeImage(
                         imageBytes = imageBytes,
                         imagePath = imagePath,
+                        targetLanguage = targetLanguage,
                         onSuccess = { description -> result.success(description) },
                         onError = { code, message -> result.error(code, message, null) },
                     )

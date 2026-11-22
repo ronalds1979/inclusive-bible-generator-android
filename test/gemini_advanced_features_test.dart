@@ -9,12 +9,14 @@ import 'package:app/services/gemini_nano_service.dart';
 class _FakeGeminiNanoService extends GeminiNanoService {
   final GeminiNanoAvailability availability;
   final GeminiNanoDescriptionResult descriptionResult;
+  final void Function(String? targetLanguage)? onDescribe;
 
   const _FakeGeminiNanoService({
     required this.availability,
     this.descriptionResult = const GeminiNanoDescriptionResult(
       description: 'Golden sunrise over calm ocean waves with soft clouds.',
     ),
+    this.onDescribe,
   }) : super(isAndroidOverride: true);
 
   @override
@@ -22,13 +24,21 @@ class _FakeGeminiNanoService extends GeminiNanoService {
 
   @override
   Future<GeminiNanoDescriptionResult> describeImageBytes(
-    Uint8List imageBytes,
-  ) async => descriptionResult;
+    Uint8List imageBytes, {
+    String? targetLanguage,
+  }) async {
+    onDescribe?.call(targetLanguage);
+    return descriptionResult;
+  }
 
   @override
   Future<GeminiNanoDescriptionResult> describeImageFile(
-    String imagePath,
-  ) async => descriptionResult;
+    String imagePath, {
+    String? targetLanguage,
+  }) async {
+    onDescribe?.call(targetLanguage);
+    return descriptionResult;
+  }
 }
 
 void main() {
@@ -75,10 +85,21 @@ void main() {
 
     test('communicates with MethodChannel on Android', () async {
       const channel = MethodChannel('test/gemini_nano');
+      final List<Map<Object?, Object?>> describeCalls = [];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (MethodCall call) async {
             if (call.method == 'checkAvailability') return 'downloadable';
             if (call.method == 'describeImage') {
+              final args = Map<Object?, Object?>.from(
+                call.arguments as Map<Object?, Object?>,
+              );
+              describeCalls.add(args);
+              if (args['targetLanguage'] == 'pt-BR') {
+                return 'Uma paisagem serena de montanha ao amanhecer.';
+              }
+              if (args['targetLanguage'] == 'es') {
+                return 'Un paisaje sereno de montaña al amanecer.';
+              }
               return 'A serene mountain landscape at dawn.';
             }
             return null;
@@ -96,11 +117,66 @@ void main() {
         await service.checkAvailability(),
         equals(GeminiNanoAvailability.downloadable),
       );
-      final result = await service.describeImageBytes(
+      final enResult = await service.describeImageBytes(
         Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]),
       );
-      expect(result.isSuccess, isTrue);
-      expect(result.description, equals('A serene mountain landscape at dawn.'));
+      expect(enResult.isSuccess, isTrue);
+      expect(
+        enResult.description,
+        equals('A serene mountain landscape at dawn.'),
+      );
+      expect(describeCalls.last.containsKey('targetLanguage'), isFalse);
+
+      final ptResult = await service.describeImageBytes(
+        Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]),
+        targetLanguage: 'pt-BR',
+      );
+      expect(ptResult.isSuccess, isTrue);
+      expect(
+        ptResult.description,
+        equals('Uma paisagem serena de montanha ao amanhecer.'),
+      );
+      expect(describeCalls.last['targetLanguage'], equals('pt-BR'));
+
+      final esResult = await service.describeImageFile(
+        '/tmp/sample.jpg',
+        targetLanguage: 'es',
+      );
+      expect(esResult.isSuccess, isTrue);
+      expect(
+        esResult.description,
+        equals('Un paisaje sereno de montaña al amanecer.'),
+      );
+      expect(describeCalls.last['targetLanguage'], equals('es'));
+    });
+
+    test('propagates translation_failed PlatformException code', () async {
+      const channel = MethodChannel('test/gemini_nano_translate_err');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            if (call.method == 'describeImage') {
+              throw PlatformException(
+                code: 'translation_failed',
+                message: 'Offline',
+              );
+            }
+            return null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      const service = GeminiNanoService(
+        channel: channel,
+        isAndroidOverride: true,
+      );
+      final result = await service.describeImageBytes(
+        Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]),
+        targetLanguage: 'pt-BR',
+      );
+      expect(result.isSuccess, isFalse);
+      expect(result.errorCode, equals('translation_failed'));
     });
   });
 
@@ -277,6 +353,120 @@ void main() {
         // Live Alt-Text & editable description now use the on-device Gemini Nano description!
         expect(
           find.textContaining('Warm golden sunrise over misty hills.'),
+          findsWidgets,
+        );
+      },
+    );
+
+    testWidgets(
+      'passes Portuguese targetLanguage to Gemini Nano when app is in pt-BR',
+      (WidgetTester tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('pt', 'BR');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+        String? requestedLang;
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            MyApp(
+              geminiNanoService: _FakeGeminiNanoService(
+                availability: GeminiNanoAvailability.available,
+                descriptionResult: const GeminiNanoDescriptionResult(
+                  description: 'Nascer do sol dourado sobre colinas suaves.',
+                ),
+                onDescribe: (lang) => requestedLang = lang,
+              ),
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Recursos Avançados'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Alt-Text no Dispositivo (Gemini Nano)'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Fechar'));
+        await tester.pumpAndSettle();
+
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.first, 'Salmos 23:1');
+        await tester.enterText(textFields.at(1), 'O Senhor é o meu pastor.');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Áudio e Texto'));
+        await tester.pumpAndSettle();
+
+        final describeBtn = find.text('Descrever Imagem (Gemini Nano)');
+        await tester.ensureVisible(describeBtn);
+        await tester.runAsync(() async {
+          await tester.tap(describeBtn);
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+
+        expect(requestedLang, equals('pt-BR'));
+        expect(
+          find.textContaining('Nascer do sol dourado sobre colinas suaves.'),
+          findsWidgets,
+        );
+      },
+    );
+
+    testWidgets(
+      'passes Spanish targetLanguage to Gemini Nano when app is in es',
+      (WidgetTester tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('es', 'ES');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+        String? requestedLang;
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            MyApp(
+              geminiNanoService: _FakeGeminiNanoService(
+                availability: GeminiNanoAvailability.available,
+                descriptionResult: const GeminiNanoDescriptionResult(
+                  description: 'Amanecer dorado sobre colinas tranquilas.',
+                ),
+                onDescribe: (lang) => requestedLang = lang,
+              ),
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Funciones Avanzadas'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.text('Texto Alternativo en el Dispositivo (Gemini Nano)'),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Cerrar'));
+        await tester.pumpAndSettle();
+
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.first, 'Salmos 23:1');
+        await tester.enterText(textFields.at(1), 'Jehová es mi pastor.');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Audio y Texto'));
+        await tester.pumpAndSettle();
+
+        final describeBtn = find.text('Describir Imagen (Gemini Nano)');
+        await tester.ensureVisible(describeBtn);
+        await tester.runAsync(() async {
+          await tester.tap(describeBtn);
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+
+        expect(requestedLang, equals('es'));
+        expect(
+          find.textContaining('Amanecer dorado sobre colinas tranquilas.'),
           findsWidgets,
         );
       },

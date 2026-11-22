@@ -448,7 +448,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open Search Topic dialog and verify search query maxLength
-      final Finder searchTopicBtn = find.text('Search Topic');
+      final Finder searchTopicBtn = find.byTooltip('Search Topic');
       await tester.ensureVisible(searchTopicBtn);
       await tester.tap(searchTopicBtn);
       await tester.pumpAndSettle();

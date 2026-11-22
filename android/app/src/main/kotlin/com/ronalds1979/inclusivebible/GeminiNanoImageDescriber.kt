@@ -8,6 +8,7 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
+import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.genai.common.DownloadCallback
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.GenAiException
@@ -16,7 +17,13 @@ import com.google.mlkit.genai.imagedescription.ImageDescriberOptions
 import com.google.mlkit.genai.imagedescription.ImageDescription
 import com.google.mlkit.genai.imagedescription.ImageDescriptionRequest
 import com.google.mlkit.genai.imagedescription.ImageDescriptionResult
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.Translator
+import com.google.mlkit.nl.translate.TranslatorOptions
 import java.io.File
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -30,6 +37,7 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
+    private val translators = ConcurrentHashMap<String, Translator>()
 
     @Volatile
     private var imageDescriber: ImageDescriber? = null
@@ -39,6 +47,26 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
         if (existing != null) return existing
         val options = ImageDescriberOptions.builder(appContext).build()
         return ImageDescription.getClient(options).also { imageDescriber = it }
+    }
+
+    private fun resolveTargetTranslateLanguage(targetLanguage: String?): String? {
+        val normalized = targetLanguage?.trim()?.lowercase(Locale.ROOT).orEmpty()
+        if (normalized.isEmpty() || normalized.startsWith("en")) return null
+        if (normalized.startsWith("pt")) return TranslateLanguage.PORTUGUESE
+        if (normalized.startsWith("es")) return TranslateLanguage.SPANISH
+        val primaryTag = normalized.substringBefore('-').substringBefore('_')
+        val resolved = TranslateLanguage.fromLanguageTag(primaryTag)
+        return if (resolved == null || resolved == TranslateLanguage.ENGLISH) null else resolved
+    }
+
+    private fun getOrCreateTranslator(targetLang: String): Translator {
+        return translators.computeIfAbsent(targetLang) { lang ->
+            val options = TranslatorOptions.Builder()
+                .setSourceLanguage(TranslateLanguage.ENGLISH)
+                .setTargetLanguage(lang)
+                .build()
+            Translation.getClient(options)
+        }
     }
 
     fun checkAvailability(onResult: (String) -> Unit) {
@@ -72,9 +100,11 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
     fun describeImage(
         imageBytes: ByteArray?,
         imagePath: String?,
+        targetLanguage: String? = null,
         onSuccess: (String) -> Unit,
         onError: (code: String, message: String) -> Unit,
     ) {
+        val translateTargetLang = resolveTargetTranslateLanguage(targetLanguage)
         ioExecutor.execute {
             val bitmap = decodeSampledBitmap(imageBytes, imagePath, maxDimension = 1024)
             if (bitmap == null) {
@@ -95,6 +125,7 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
                                 FeatureStatus.AVAILABLE -> runInference(
                                     describer = describer,
                                     bitmap = bitmap,
+                                    translateTargetLang = translateTargetLang,
                                     onSuccess = onSuccess,
                                     onError = onError,
                                 )
@@ -109,6 +140,7 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
                                                 runInference(
                                                     describer = describer,
                                                     bitmap = bitmap,
+                                                    translateTargetLang = translateTargetLang,
                                                     onSuccess = onSuccess,
                                                     onError = onError,
                                                 )
@@ -174,6 +206,7 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
     private fun runInference(
         describer: ImageDescriber,
         bitmap: Bitmap,
+        translateTargetLang: String?,
         onSuccess: (String) -> Unit,
         onError: (code: String, message: String) -> Unit,
     ) {
@@ -190,6 +223,13 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
                             mainHandler.post {
                                 onError("empty_result", "Gemini Nano returned an empty description.")
                             }
+                        } else if (translateTargetLang != null) {
+                            translateDescription(
+                                englishText = text,
+                                targetLang = translateTargetLang,
+                                onSuccess = onSuccess,
+                                onError = onError,
+                            )
                         } else {
                             mainHandler.post { onSuccess(text) }
                         }
@@ -213,6 +253,58 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
                 onError(
                     "inference_error",
                     t.message ?: "Failed to start Gemini Nano inference.",
+                )
+            }
+        }
+    }
+
+    private fun translateDescription(
+        englishText: String,
+        targetLang: String,
+        onSuccess: (String) -> Unit,
+        onError: (code: String, message: String) -> Unit,
+    ) {
+        try {
+            val translator = getOrCreateTranslator(targetLang)
+            val conditions = DownloadConditions.Builder().build()
+            translator.downloadModelIfNeeded(conditions)
+                .addOnSuccessListener {
+                    translator.translate(englishText)
+                        .addOnSuccessListener { translated ->
+                            val trimmed = translated.trim()
+                            if (trimmed.isEmpty()) {
+                                mainHandler.post {
+                                    onError(
+                                        "translation_failed",
+                                        "On-device translator returned an empty description.",
+                                    )
+                                }
+                            } else {
+                                mainHandler.post { onSuccess(trimmed) }
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            mainHandler.post {
+                                onError(
+                                    "translation_failed",
+                                    e.message ?: "Failed to translate image description on-device.",
+                                )
+                            }
+                        }
+                }
+                .addOnFailureListener { e ->
+                    mainHandler.post {
+                        onError(
+                            "translation_failed",
+                            e.message ?: "Failed to download on-device translation model.",
+                        )
+                    }
+                }
+        } catch (t: Throwable) {
+            mainHandler.post {
+                onError(
+                    "translation_failed",
+                    t.message ?: "Unexpected error translating image description on-device.",
                 )
             }
         }
@@ -302,6 +394,13 @@ class GeminiNanoImageDescriber(private val appContext: Context) {
         } catch (_: Throwable) {
         } finally {
             imageDescriber = null
+            translators.values.forEach { translator ->
+                try {
+                    translator.close()
+                } catch (_: Throwable) {
+                }
+            }
+            translators.clear()
             ioExecutor.shutdown()
         }
     }

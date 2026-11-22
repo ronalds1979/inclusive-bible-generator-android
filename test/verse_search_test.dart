@@ -94,7 +94,7 @@ void main() {
       });
       await tester.pumpAndSettle();
 
-      final searchTopicBtn = find.text('Search Topic');
+      final searchTopicBtn = find.byTooltip('Search Topic');
       await tester.ensureVisible(searchTopicBtn);
       await tester.tap(searchTopicBtn);
       await tester.pumpAndSettle();
@@ -134,8 +134,8 @@ void main() {
       });
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Search Topic'));
-      await tester.tap(find.text('Search Topic'));
+      await tester.ensureVisible(find.byTooltip('Search Topic'));
+      await tester.tap(find.byTooltip('Search Topic'));
       await tester.pumpAndSettle();
 
       FilledButton searchButton() => tester.widget<FilledButton>(

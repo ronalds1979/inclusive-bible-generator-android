@@ -530,6 +530,11 @@ class GetBibleAPI {
     return [];
   }
 
+  static Map<String, String?> parseReference(
+    String reference, {
+    String lang = "en",
+  }) => _parseReference(reference, lang: lang);
+
   static Map<String, String?> _parseReference(
     String reference, {
     String lang = "en",

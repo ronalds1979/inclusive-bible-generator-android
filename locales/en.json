@@ -137,6 +137,7 @@
   "gemini_nano_success_msg": "On-device image description generated with Gemini Nano!",
   "gemini_nano_downloading_msg": "Gemini Nano model is downloading. Please try again shortly.",
   "gemini_nano_error_msg": "Could not generate an on-device description. Using default Alt-Text.",
+  "gemini_nano_translation_error_msg": "Could not translate the on-device description. Connect to the internet once to download the language model.",
   "gemini_nano_clear_btn": "Reset Description",
   "gemini_handoff_toggle_title": "Continue in Gemini App",
   "gemini_handoff_toggle_subtitle": "Send a ready-made prompt to your own free Gemini app — no API key or cost.",

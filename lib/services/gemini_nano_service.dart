@@ -79,24 +79,42 @@ class GeminiNanoService {
 
   /// Generates an on-device Alt-Text description from raw image bytes
   /// (for example, a built-in background asset).
+  ///
+  /// When [targetLanguage] is a non-English language tag (such as `'pt-BR'` or
+  /// `'es'`), the native Android layer translates the Gemini Nano English
+  /// output on-device into that language.
   Future<GeminiNanoDescriptionResult> describeImageBytes(
-    Uint8List imageBytes,
-  ) async {
+    Uint8List imageBytes, {
+    String? targetLanguage,
+  }) async {
     if (!_isAndroid) {
       return const GeminiNanoDescriptionResult(errorCode: 'unavailable');
     }
-    return _invokeDescribe({'imageBytes': imageBytes});
+    return _invokeDescribe({
+      'imageBytes': imageBytes,
+      if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
+        'targetLanguage': targetLanguage.trim(),
+    });
   }
 
   /// Generates an on-device Alt-Text description from a local image file path
   /// (for example, a stock photo or custom gallery image).
+  ///
+  /// When [targetLanguage] is a non-English language tag (such as `'pt-BR'` or
+  /// `'es'`), the native Android layer translates the Gemini Nano English
+  /// output on-device into that language.
   Future<GeminiNanoDescriptionResult> describeImageFile(
-    String imagePath,
-  ) async {
+    String imagePath, {
+    String? targetLanguage,
+  }) async {
     if (!_isAndroid) {
       return const GeminiNanoDescriptionResult(errorCode: 'unavailable');
     }
-    return _invokeDescribe({'imagePath': imagePath});
+    return _invokeDescribe({
+      'imagePath': imagePath,
+      if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
+        'targetLanguage': targetLanguage.trim(),
+    });
   }
 
   Future<GeminiNanoDescriptionResult> _invokeDescribe(

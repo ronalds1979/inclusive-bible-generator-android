@@ -137,6 +137,7 @@
   "gemini_nano_success_msg": "Descrição gerada no dispositivo com Gemini Nano com sucesso!",
   "gemini_nano_downloading_msg": "O modelo Gemini Nano está sendo baixado. Tente novamente em instantes.",
   "gemini_nano_error_msg": "Não foi possível gerar a descrição no dispositivo. Usando Alt-Text padrão.",
+  "gemini_nano_translation_error_msg": "Não foi possível traduzir a descrição no dispositivo. Conecte-se à internet uma vez para baixar o modelo de idioma.",
   "gemini_nano_clear_btn": "Redefinir Descrição",
   "gemini_handoff_toggle_title": "Continuar no App Gemini",
   "gemini_handoff_toggle_subtitle": "Envia um prompt pronto para o seu próprio app Gemini gratuito — sem chave API ou custo.",

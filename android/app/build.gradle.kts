@@ -84,5 +84,6 @@ flutter {
 
 dependencies {
     implementation("com.google.mlkit:genai-image-description:1.0.0-beta1")
+    implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.guava:guava:33.3.1-android")
 }

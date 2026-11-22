@@ -132,7 +132,7 @@ void main() {
         });
         await tester.pumpAndSettle();
 
-        // 1. Voice-to-Verse button is visible and populates reference
+        // 1. Voice-to-Verse button is visible, populates reference, and syncs Book/Chapter/Verse selectors
         final voiceBtn = find.byTooltip('Speak Bible verse reference');
         expect(voiceBtn, findsOneWidget);
         await tester.ensureVisible(voiceBtn);
@@ -142,8 +142,11 @@ void main() {
         });
         await tester.pumpAndSettle();
         expect(find.textContaining('Psalm 23:1'), findsWidgets);
+        expect(find.text('Psalms'), findsOneWidget);
+        expect(find.text('23'), findsOneWidget);
 
-        // 2. Full-Screen Preview includes Vision Simulator chips
+        // 2. Full-Screen Preview uses eye icon and includes Vision Simulator chips
+        expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
         await tester.tap(find.byTooltip('Expand preview'));
         await tester.pumpAndSettle();
         expect(find.text('Vision Preview'), findsOneWidget);
@@ -212,6 +215,45 @@ void main() {
         expect(find.text('About Inclusive Bible Generator'), findsOneWidget);
         expect(find.text('Powered by YouVersion Platform'), findsOneWidget);
         expect(find.text('Visit YouVersion Platform'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Voice-to-verse syncs Book, Chapter, and Verse selectors above with spoken reference',
+      (WidgetTester tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            const MyApp(
+              voiceVerseService: _FakeVoiceVerseService(
+                available: true,
+                spokenResult: 'John chapter 3 verse 16',
+              ),
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        // Initially defaults to Psalms, not John
+        expect(find.text('Psalms'), findsOneWidget);
+        expect(find.text('John'), findsNothing);
+
+        final voiceBtn = find.byTooltip('Speak Bible verse reference');
+        await tester.ensureVisible(voiceBtn);
+        await tester.runAsync(() async {
+          await tester.tap(voiceBtn);
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+
+        // Book, Chapter, and Verse selectors above are now synced to John 3:16
+        expect(find.text('John'), findsOneWidget);
+        expect(find.text('3'), findsOneWidget);
+        expect(find.text('16'), findsOneWidget);
+        expect(find.textContaining('John 3:16'), findsWidgets);
       },
     );
   });
