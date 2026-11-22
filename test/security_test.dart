@@ -4,10 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:app/generator.dart';
 import 'package:app/getbible_api.dart';
+import 'package:app/main.dart';
 import 'package:app/services/contrast_sampler.dart';
 import 'package:app/services/image_validation.dart';
 import 'package:app/services/temp_file_cleanup.dart';
@@ -16,6 +18,10 @@ import 'package:app/widgets/youversion_auth_dialog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    GoogleFonts.config.allowRuntimeFetching = false;
+  });
 
   test(
     'GetBibleAPI does not crash on invalid version fetch (simulating error)',
@@ -413,6 +419,66 @@ void main() {
         VoiceVerseService.normalizeSpokenReference('John chapter 3 verse 16'),
         equals('John 3:16'),
       );
+    },
+  );
+
+  testWidgets(
+    'Search Topic and custom image description TextFields enforce maxLength bounds',
+    (WidgetTester tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MyApp(
+            verseSearchOverride: (query, versionId, lang) async => const [
+              BibleSearchResult(
+                bookName: 'John',
+                bookNumber: 43,
+                chapter: 14,
+                verse: 27,
+                reference: 'John 14:27',
+                text: 'Peace I leave with you.',
+              ),
+            ],
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      // Open Search Topic dialog and verify search query maxLength
+      final Finder searchTopicBtn = find.byTooltip('Search Topic');
+      await tester.ensureVisible(searchTopicBtn);
+      await tester.tap(searchTopicBtn);
+      await tester.pumpAndSettle();
+
+      final Finder dialogFieldFinder = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      expect(dialogFieldFinder, findsOneWidget);
+      final TextField searchField = tester.widget<TextField>(dialogFieldFinder);
+      expect(searchField.maxLength, equals(160));
+
+      // Select a verse so the Audio & Text tab renders the custom description field
+      await tester.tap(find.text('Peace'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('John 14:27'));
+      await tester.pumpAndSettle();
+
+      final Finder audioTab = find.text('Audio & Text');
+      await tester.ensureVisible(audioTab);
+      await tester.tap(audioTab);
+      await tester.pumpAndSettle();
+
+      final Finder descFieldFinder = find.ancestor(
+        of: find.text('Image Description (for Alt-Text)'),
+        matching: find.byType(TextField),
+      );
+      expect(descFieldFinder, findsOneWidget);
+      final TextField descField = tester.widget<TextField>(descFieldFinder);
+      expect(descField.maxLength, equals(500));
     },
   );
 }

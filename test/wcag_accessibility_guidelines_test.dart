@@ -357,7 +357,7 @@ void main() {
           await tester.pumpAndSettle();
 
           // Search Topic dialog
-          final Finder searchBtn = find.text('Search Topic');
+          final Finder searchBtn = find.byTooltip('Search Topic');
           await tester.ensureVisible(searchBtn);
           await tester.tap(searchBtn);
           await tester.pumpAndSettle();

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:app/getbible_api.dart';
 import 'package:app/main.dart';
 import 'package:app/services/contrast_sampler.dart';
 import 'package:app/services/voice_verse_service.dart';
@@ -110,6 +111,62 @@ void main() {
         equals('1 Corinthians 13:4-7'),
       );
     });
+
+    test('normalizes and parses natural Spanish spoken references', () {
+      final cases = <String, ({String normalized, String bookNr, String chapter, String start, String? end})>{
+        'Salmo 23 versículo 1': (normalized: 'Salmo 23:1', bookNr: '19', chapter: '23', start: '1', end: null),
+        'Salmo 23': (normalized: 'Salmo 23:1', bookNr: '19', chapter: '23', start: '1', end: null),
+        'Salmo 23 del 1 al 4': (normalized: 'Salmo 23:1-4', bookNr: '19', chapter: '23', start: '1', end: '4'),
+        'Salmos 23 versículos del 1 al 4': (normalized: 'Salmos 23:1-4', bookNr: '19', chapter: '23', start: '1', end: '4'),
+        'Primera de Corintios 13 versículo 4': (normalized: '1 Corintios 13:4', bookNr: '46', chapter: '13', start: '4', end: null),
+        '1.ª de Juan 4 8': (normalized: '1 Juan 4:8', bookNr: '62', chapter: '4', start: '8', end: null),
+        '1ª de Pedro 5 versículo 7': (normalized: '1 Pedro 5:7', bookNr: '60', chapter: '5', start: '7', end: null),
+        '2da de Reyes 2 11': (normalized: '2 Reyes 2:11', bookNr: '12', chapter: '2', start: '11', end: null),
+        'Primer libro de Samuel 17 45': (normalized: '1 Samuel 17:45', bookNr: '9', chapter: '17', start: '45', end: null),
+        'Tercer Juan 1 versículo 2': (normalized: '3 Juan 1:2', bookNr: '64', chapter: '1', start: '2', end: null),
+        'San Juan 3 16': (normalized: 'San Juan 3:16', bookNr: '43', chapter: '3', start: '16', end: null),
+        'Evangelio según San Mateo 5 versículo 14.': (normalized: 'San Mateo 5:14', bookNr: '40', chapter: '5', start: '14', end: null),
+        'Juan capítulo 3, versículo 16.': (normalized: 'Juan 3:16', bookNr: '43', chapter: '3', start: '16', end: null),
+        'Juan 3 verso 16 hasta el 18': (normalized: 'Juan 3:16-18', bookNr: '43', chapter: '3', start: '16', end: '18'),
+        'Génesis uno uno': (normalized: 'Génesis 1:1', bookNr: '1', chapter: '1', start: '1', end: null),
+        'Juan capítulo tres versículo dieciséis': (normalized: 'Juan 3:16', bookNr: '43', chapter: '3', start: '16', end: null),
+        'Salmo noventa y uno versículo uno': (normalized: 'Salmo 91:1', bookNr: '19', chapter: '91', start: '1', end: null),
+        'Salmo ciento diecinueve ciento cinco': (normalized: 'Salmo 119:105', bookNr: '19', chapter: '119', start: '105', end: null),
+        'Cantar de los Cantares 2 1': (normalized: 'Cantar de los Cantares 2:1', bookNr: '22', chapter: '2', start: '1', end: null),
+        'Hechos de los Apóstoles 2 38': (normalized: 'Hechos de los Apóstoles 2:38', bookNr: '44', chapter: '2', start: '38', end: null),
+        'Juan 3 dos puntos 16': (normalized: 'Juan 3:16', bookNr: '43', chapter: '3', start: '16', end: null),
+      };
+
+      for (final entry in cases.entries) {
+        final String normalized = VoiceVerseService.normalizeSpokenReference(entry.key);
+        expect(normalized, equals(entry.value.normalized), reason: 'normalize("${entry.key}")');
+        final parsed = GetBibleAPI.parseReference(normalized, lang: 'es');
+        expect(parsed['book_nr'], equals(entry.value.bookNr), reason: 'book_nr for "${entry.key}" -> "$normalized"');
+        expect(parsed['chapter'], equals(entry.value.chapter), reason: 'chapter for "${entry.key}"');
+        expect(parsed['start_verse'], equals(entry.value.start), reason: 'start_verse for "${entry.key}"');
+        expect(parsed['end_verse'], equals(entry.value.end), reason: 'end_verse for "${entry.key}"');
+      }
+    });
+
+    test('selectBestCandidate picks the first valid Spanish Bible reference from STT alternatives', () {
+      final best = VoiceVerseService.selectBestCandidate(
+        ['salmo dos tres', 'Salmo 23 versículo 1'],
+        lang: 'es',
+      );
+      expect(best, equals('salmo 2:3'));
+
+      final fallbackToValid = VoiceVerseService.selectBestCandidate(
+        ['hola mundo', 'San Juan 3 16', 'Juan 3 6'],
+        lang: 'es',
+      );
+      expect(fallbackToValid, equals('San Juan 3:16'));
+
+      final misplacedAccent = GetBibleAPI.parseReference(
+        'Eclesiástes 3:1',
+        lang: 'es',
+      );
+      expect(misplacedAccent['book_nr'], equals('21'));
+    });
   });
 
   group('End-to-end accessibility award features widget tests', () {
@@ -132,7 +189,7 @@ void main() {
         });
         await tester.pumpAndSettle();
 
-        // 1. Voice-to-Verse button is visible and populates reference
+        // 1. Voice-to-Verse button is visible, populates reference, and syncs Book/Chapter/Verse selectors
         final voiceBtn = find.byTooltip('Speak Bible verse reference');
         expect(voiceBtn, findsOneWidget);
         await tester.ensureVisible(voiceBtn);
@@ -142,8 +199,11 @@ void main() {
         });
         await tester.pumpAndSettle();
         expect(find.textContaining('Psalm 23:1'), findsWidgets);
+        expect(find.text('Psalms'), findsOneWidget);
+        expect(find.text('23'), findsOneWidget);
 
-        // 2. Full-Screen Preview includes Vision Simulator chips
+        // 2. Full-Screen Preview uses eye icon and includes Vision Simulator chips
+        expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
         await tester.tap(find.byTooltip('Expand preview'));
         await tester.pumpAndSettle();
         expect(find.text('Vision Preview'), findsOneWidget);
@@ -212,6 +272,45 @@ void main() {
         expect(find.text('About Inclusive Bible Generator'), findsOneWidget);
         expect(find.text('Powered by YouVersion Platform'), findsOneWidget);
         expect(find.text('Visit YouVersion Platform'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Voice-to-verse syncs Book, Chapter, and Verse selectors above with spoken reference',
+      (WidgetTester tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            const MyApp(
+              voiceVerseService: _FakeVoiceVerseService(
+                available: true,
+                spokenResult: 'John chapter 3 verse 16',
+              ),
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        // Initially defaults to Psalms, not John
+        expect(find.text('Psalms'), findsOneWidget);
+        expect(find.text('John'), findsNothing);
+
+        final voiceBtn = find.byTooltip('Speak Bible verse reference');
+        await tester.ensureVisible(voiceBtn);
+        await tester.runAsync(() async {
+          await tester.tap(voiceBtn);
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+
+        // Book, Chapter, and Verse selectors above are now synced to John 3:16
+        expect(find.text('John'), findsOneWidget);
+        expect(find.text('3'), findsOneWidget);
+        expect(find.text('16'), findsOneWidget);
+        expect(find.textContaining('John 3:16'), findsWidgets);
       },
     );
   });

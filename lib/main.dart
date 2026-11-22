@@ -331,6 +331,20 @@ class _MyHomePageState extends State<MyHomePage> {
     return "PT-BR";
   }
 
+  static String _shortBibleLangCode(String code) {
+    if (code == "en") return "EN-US";
+    if (code == "es") return "ES-ES";
+    return "PT-BR";
+  }
+
+  static String _fullBibleLangLabel(String code) {
+    if (code == "en") return "English";
+    if (code == "es") return "Español";
+    return "Português";
+  }
+
+  static const List<String> _bibleLangCodes = ["pt", "en", "es"];
+
   String bibleLang = "pt";
   String youVersionApiKey = GetBibleAPI.defaultYouVersionApiKey;
 
@@ -558,6 +572,7 @@ class _MyHomePageState extends State<MyHomePage> {
       final Directory tempDir = await getTemporaryDirectory();
       await Future.wait([
         pruneTransientFiles(tempDir, prefix: 'verse_', suffix: '.png'),
+        pruneTransientFiles(tempDir, prefix: 'verse_video_', suffix: '.mp4'),
         pruneTransientFiles(tempDir, prefix: 'gemini_bg_', suffix: '.png'),
         pruneTransientFiles(tempDir, prefix: 'stock_bg_', suffix: '.jpg'),
         pruneTransientFiles(tempDir, prefix: 'verse_audio_', suffix: '.wav'),
@@ -664,6 +679,26 @@ class _MyHomePageState extends State<MyHomePage> {
   void _onQuickReferenceChanged() {
     _applyQuickReferenceSelector();
     _fetchVerse();
+  }
+
+  bool _syncSelectorsFromReference(String reference) {
+    final Map<String, String?> parsed = GetBibleAPI.parseReference(
+      reference,
+      lang: bibleLang,
+    );
+    final int? bookNr = int.tryParse(parsed["book_nr"] ?? "");
+    if (bookNr == null) return false;
+    final String? canonicalBook = getBookNameByNumber(bookNr, bibleLang);
+    if (canonicalBook == null) return false;
+
+    selectedBook = canonicalBook;
+    selectedChapter = int.tryParse(parsed["chapter"] ?? "1") ?? 1;
+    selectedVerse = int.tryParse(parsed["start_verse"] ?? "1") ?? 1;
+    final int? parsedEnd = int.tryParse(parsed["end_verse"] ?? "");
+    selectedEndVerse =
+        (parsedEnd != null && parsedEnd > selectedVerse) ? parsedEnd : null;
+    _clampChapterAndVerse();
+    return true;
   }
 
   void _rebuildBackgroundCaches() {
@@ -947,6 +982,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     final int seq = ++_verseFetchSeq;
     setState(() {
+      _syncSelectorsFromReference(reference);
       isFetching = true;
       _updateStatus(
         generator.getLocaleString(getLangKey(), "fetching_verse_msg"),
@@ -1155,9 +1191,12 @@ class _MyHomePageState extends State<MyHomePage> {
                               Expanded(
                                 child: TextField(
                                   controller: _verseSearchController,
+                                  // 🛡️ Sentinel: Cap search query length at the UI boundary (matches GetBibleAPI.searchVerses)
+                                  maxLength: 160,
                                   autofocus: true,
                                   textInputAction: TextInputAction.search,
                                   decoration: InputDecoration(
+                                    counterText: '',
                                     labelText: generator.getLocaleString(
                                       lang,
                                       "verse_search_input_label",
@@ -1574,20 +1613,24 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _isListeningVoice = true;
     });
-    final String? spoken = await voiceVerseService.listenForVerse(
-      locale: locale,
-      prompt: generator.getLocaleString(lang, "voice_verse_prompt"),
-    );
+    final List<String> candidates = await voiceVerseService
+        .listenForVerseCandidates(
+          locale: locale,
+          prompt: generator.getLocaleString(lang, "voice_verse_prompt"),
+        );
     if (!mounted) return;
     setState(() {
       _isListeningVoice = false;
     });
-    if (spoken == null || spoken.trim().isEmpty) return;
-    final String normalized = VoiceVerseService.normalizeSpokenReference(
-      spoken,
+    if (candidates.isEmpty) return;
+    final String normalized = VoiceVerseService.selectBestCandidate(
+      candidates,
+      lang: bibleLang,
     );
+    if (normalized.isEmpty) return;
     referenceController.text = normalized;
     setState(() {
+      _syncSelectorsFromReference(normalized);
       _updateStatus(
         generator
             .getLocaleString(lang, "voice_verse_heard_msg")
@@ -1663,7 +1706,10 @@ class _MyHomePageState extends State<MyHomePage> {
     GeminiNanoDescriptionResult result;
     try {
       if (customImagePath != null) {
-        result = await geminiNanoService.describeImageFile(customImagePath!);
+        result = await geminiNanoService.describeImageFile(
+          customImagePath!,
+          targetLanguage: lang,
+        );
       } else {
         final String safeBgName = selectedBackground
             .split('/')
@@ -1675,6 +1721,7 @@ class _MyHomePageState extends State<MyHomePage> {
         );
         result = await geminiNanoService.describeImageBytes(
           assetData.buffer.asUint8List(),
+          targetLanguage: lang,
         );
       }
     } catch (_) {
@@ -1696,6 +1743,11 @@ class _MyHomePageState extends State<MyHomePage> {
         _geminiNanoAvailability = GeminiNanoAvailability.downloading;
         _updateStatus(
           generator.getLocaleString(lang, "gemini_nano_downloading_msg"),
+        );
+      } else if (result.errorCode == 'translation_failed') {
+        _updateStatus(
+          generator.getLocaleString(lang, "gemini_nano_translation_error_msg"),
+          forceError: true,
         );
       } else {
         _updateStatus(
@@ -2204,91 +2256,173 @@ class _MyHomePageState extends State<MyHomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Bible Text Language selector
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            Semantics(
-              header: true,
-              child: Text(
-                generator.getLocaleString(lang, "bible_lang_label"),
-                style: const TextStyle(fontWeight: FontWeight.w600),
+        // Compact Bible language pill + Mic + Search Topic + Version selector row
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final Widget bibleLangPicker = Semantics(
+              label:
+                  "${generator.getLocaleString(lang, "bible_lang_label")}: ${_fullBibleLangLabel(bibleLang)}",
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 48, minWidth: 76),
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ExcludeSemantics(
+                      child: Icon(
+                        Icons.language,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isDense: true,
+                        itemHeight: null,
+                        iconSize: 18,
+                        value: bibleLang,
+                        selectedItemBuilder: (BuildContext context) {
+                          return _bibleLangCodes
+                              .map<Widget>(
+                                (String code) => Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    _shortBibleLangCode(code),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              )
+                              .toList();
+                        },
+                        onChanged: (String? newCode) {
+                          if (newCode != null && newCode != bibleLang) {
+                            _switchBibleLanguage(newCode);
+                          }
+                        },
+                        items: _bibleLangCodes
+                            .map<DropdownMenuItem<String>>(
+                              (String code) => DropdownMenuItem<String>(
+                                value: code,
+                                child: Text(
+                                  _fullBibleLangLabel(code),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            ChoiceChip(
-              label: const Text("Português"),
-              selected: bibleLang == "pt",
-              materialTapTargetSize: MaterialTapTargetSize.padded,
-              onSelected: (selected) {
-                if (selected && bibleLang != "pt") {
-                  _switchBibleLanguage("pt");
-                }
-              },
-            ),
-            ChoiceChip(
-              label: const Text("English"),
-              selected: bibleLang == "en",
-              materialTapTargetSize: MaterialTapTargetSize.padded,
-              onSelected: (selected) {
-                if (selected && bibleLang != "en") {
-                  _switchBibleLanguage("en");
-                }
-              },
-            ),
-            ChoiceChip(
-              label: const Text("Español"),
-              selected: bibleLang == "es",
-              materialTapTargetSize: MaterialTapTargetSize.padded,
-              onSelected: (selected) {
-                if (selected && bibleLang != "es") {
-                  _switchBibleLanguage("es");
-                }
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            ExcludeSemantics(
-              child: Text(
-                generator.getLocaleString(lang, "bible_version_label"),
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-            Semantics(
+            );
+
+            final Widget? micButton = _voiceInputAvailable
+                ? IconButton.filledTonal(
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    tooltip: generator.getLocaleString(
+                      lang,
+                      "voice_verse_tooltip",
+                    ),
+                    onPressed: _isListeningVoice || isFetching
+                        ? null
+                        : _listenForVerseByVoice,
+                    icon: _isListeningVoice
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.mic),
+                  )
+                : null;
+
+            final Widget searchTopicButton = IconButton.filledTonal(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              tooltip: generator.getLocaleString(lang, "verse_search_btn"),
+              onPressed: isFetching ? null : _showVerseSearchDialog,
+              icon: const Icon(Icons.search),
+            );
+
+            final Widget versionDropdown = Semantics(
               label: generator.getLocaleString(lang, "bible_version_label"),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48, maxWidth: 300),
+                constraints: const BoxConstraints(minHeight: 48),
                 child: DropdownButton<String>(
                   isExpanded: true,
                   itemHeight: null,
                   value: selectedBibleVersion,
-                items: bibleVersions
-                    .map(
-                      (v) => DropdownMenuItem(
-                        value: v,
-                        child: Text(v, overflow: TextOverflow.ellipsis),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => selectedBibleVersion = v);
-                  _savePreferredBibleVersion(bibleLang, v);
-                  if (referenceController.text.trim().isNotEmpty) {
-                    _fetchVerse();
-                  }
-                },
+                  items: bibleVersions
+                      .map(
+                        (v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => selectedBibleVersion = v);
+                    _savePreferredBibleVersion(bibleLang, v);
+                    if (referenceController.text.trim().isNotEmpty) {
+                      _fetchVerse();
+                    }
+                  },
+                ),
               ),
-            ),
-            ),
-          ],
+            );
+
+            final double textScale = MediaQuery.textScalerOf(context).scale(1.0);
+            final bool singleRow =
+                constraints.maxWidth >= 320 && textScale <= 1.3;
+
+            if (singleRow) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  bibleLangPicker,
+                  if (micButton != null) ...[
+                    const SizedBox(width: 6),
+                    micButton,
+                  ],
+                  const SizedBox(width: 6),
+                  searchTopicButton,
+                  const SizedBox(width: 8),
+                  Expanded(child: versionDropdown),
+                ],
+              );
+            }
+
+            return Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                bibleLangPicker,
+                ?micButton,
+                searchTopicButton,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: versionDropdown,
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 8),
         // Interactive Book -> Chapter -> Verse dropdown selector row
@@ -2507,38 +2641,12 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         const SizedBox(height: 10),
-        // Fetch Verse + Verse of the Day action row right after Book/Chapter/Verse
+        // Verse of the Day action row right after Book/Chapter/Verse
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 10,
           runSpacing: 8,
           children: [
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: referenceController,
-              builder: (context, value, child) {
-                return FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                  ),
-                  onPressed:
-                      isFetching ||
-                          selectedBibleVersion == "-" ||
-                          (value.text.trim().isEmpty && selectedBook == null)
-                      ? null
-                      : _fetchVerse,
-                  icon: isFetching
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download, size: 18),
-                  label: Text(
-                    generator.getLocaleString(lang, "fetch_verse_btn"),
-                  ),
-                );
-              },
-            ),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 48),
@@ -2547,32 +2655,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   isFetching || selectedBibleVersion == "-"
                       ? null
                       : _fetchVerseOfTheDay,
-              icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+              icon: isFetching
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wb_sunny_outlined, size: 18),
               label: Text(generator.getLocaleString(lang, "votd_btn")),
             ),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 48),
-              ),
-              onPressed: isFetching ? null : _showVerseSearchDialog,
-              icon: const Icon(Icons.search, size: 18),
-              label: Text(generator.getLocaleString(lang, "verse_search_btn")),
-            ),
-            if (_voiceInputAvailable)
-              IconButton.filledTonal(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                tooltip: generator.getLocaleString(lang, "voice_verse_tooltip"),
-                onPressed: _isListeningVoice || isFetching
-                    ? null
-                    : _listenForVerseByVoice,
-                icon: _isListeningVoice
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.mic),
-              ),
           ],
         ),
         const SizedBox(height: 10),
@@ -2582,8 +2673,15 @@ class _MyHomePageState extends State<MyHomePage> {
             return TextField(
               controller: referenceController,
               maxLength: 50,
-              textInputAction: TextInputAction.next,
+              textInputAction: TextInputAction.search,
               textCapitalization: TextCapitalization.words,
+              onSubmitted: (_) {
+                if (!isFetching &&
+                    selectedBibleVersion != "-" &&
+                    referenceController.text.trim().isNotEmpty) {
+                  _fetchVerse();
+                }
+              },
               decoration: InputDecoration(
                 isDense: true,
                 border: const OutlineInputBorder(),
@@ -2593,17 +2691,45 @@ class _MyHomePageState extends State<MyHomePage> {
                   minHeight: 48,
                 ),
                 suffixIcon: value.text.isNotEmpty
-                    ? IconButton(
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        icon: const Icon(Icons.clear),
-                        tooltip: generator.getLocaleString(
-                          lang,
-                          "clear_reference_tooltip",
-                        ),
-                        onPressed: referenceController.clear,
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            icon: isFetching
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.download, size: 20),
+                            tooltip: generator.getLocaleString(
+                              lang,
+                              "fetch_verse_btn",
+                            ),
+                            onPressed:
+                                isFetching || selectedBibleVersion == "-"
+                                ? null
+                                : _fetchVerse,
+                          ),
+                          IconButton(
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            icon: const Icon(Icons.clear),
+                            tooltip: generator.getLocaleString(
+                              lang,
+                              "clear_reference_tooltip",
+                            ),
+                            onPressed: referenceController.clear,
+                          ),
+                        ],
                       )
                     : null,
               ),
@@ -2950,7 +3076,7 @@ class _MyHomePageState extends State<MyHomePage> {
             },
           ),
         ],
-        _buildContrastWarningCard(lang),
+        _buildContrastWarningCard(lang, tabIndex: 1),
         _buildStepNavigationRow(lang, 1),
       ],
     );
@@ -3194,6 +3320,10 @@ class _MyHomePageState extends State<MyHomePage> {
     return AnimatedBuilder(
       animation: _contrastListenable,
       builder: (context, _) {
+        // ⚡ Bolt: Skip tone badge luminance calculations & widget builds when Background tab (1) is inactive
+        if (_selectedTabIndex != 1) {
+          return const SizedBox.shrink();
+        }
         final double bgLum = _effectiveBackgroundLuminance();
         final bool isDark = bgLum < 0.22;
         final bool isLight = bgLum > 0.55;
@@ -3241,10 +3371,14 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildContrastWarningCard(String lang) {
+  Widget _buildContrastWarningCard(String lang, {required int tabIndex}) {
     return AnimatedBuilder(
       animation: _contrastListenable,
       builder: (context, _) {
+        // ⚡ Bolt: Skip WCAG/CVD contrast & placement math when this tab is hidden inside IndexedStack
+        if (_selectedTabIndex != tabIndex) {
+          return const SizedBox.shrink();
+        }
         final double dimValue = _backgroundDimNotifier.value;
         final Color currentFontColor = _fontColorNotifier.value;
         final double fgLuminance = currentFontColor.computeLuminance();
@@ -4570,7 +4704,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           },
         ),
-        _buildContrastWarningCard(lang),
+        _buildContrastWarningCard(lang, tabIndex: 2),
         const SizedBox(height: 12),
         ValueListenableBuilder<double>(
           valueListenable: _fontSizeNotifier,
@@ -5064,21 +5198,53 @@ class _MyHomePageState extends State<MyHomePage> {
               children: [
                 if (liveAltText.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _imageDescriptionController,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: generator.getLocaleString(
-                        lang,
-                        "custom_image_desc_label",
-                      ),
-                      hintText: generator.getLocaleString(
-                        lang,
-                        "custom_image_desc_hint",
-                      ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _imageDescriptionController,
+                    builder: (context, value, child) {
+                      return TextField(
+                        controller: _imageDescriptionController,
+                        // 🛡️ Sentinel: Bound custom image description input length to prevent oversized text payloads
+                        maxLength: 500,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          counterText: '',
+                          alignLabelWithHint: true,
+                          labelText: generator.getLocaleString(
+                            lang,
+                            "custom_image_desc_label",
+                          ),
+                          hintText: generator.getLocaleString(
+                            lang,
+                            "custom_image_desc_hint",
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          suffixIcon: value.text.isNotEmpty
+                              ? IconButton(
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
+                                  icon: const Icon(Icons.clear),
+                                  tooltip: generator.getLocaleString(
+                                    lang,
+                                    "clear_image_desc_tooltip",
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _onDeviceImageDescription = null;
+                                      _imageDescriptionController.clear();
+                                    });
+                                  },
+                                )
+                              : null,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                   Semantics(
@@ -5255,6 +5421,10 @@ class _MyHomePageState extends State<MyHomePage> {
     return AnimatedBuilder(
       animation: _scorecardListenable,
       builder: (context, _) {
+        // ⚡ Bolt: Skip scorecard WCAG/CVD contrast checks & chip rebuilds when Audio/Text tab (3) is inactive
+        if (_selectedTabIndex != 3) {
+          return const SizedBox.shrink();
+        }
         final String verseText = verseController.text.trim();
         final String refText = referenceController.text.trim();
         final bool hasVerse = verseText.isNotEmpty && refText.isNotEmpty;
@@ -5795,7 +5965,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             IconButton(
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              icon: const Icon(Icons.fullscreen, size: 20),
+              icon: const Icon(Icons.visibility_outlined, size: 20),
               tooltip: generator.getLocaleString(
                 lang,
                 "expand_preview_tooltip",
@@ -5923,8 +6093,17 @@ class _MyHomePageState extends State<MyHomePage> {
                         },
                         onChanged: (String? newValue) {
                           if (newValue == null) return;
+                          final bool langChanged = newValue != currentLang;
                           setState(() {
                             currentLang = newValue;
+                            if (langChanged &&
+                                _onDeviceImageDescription != null) {
+                              if (_imageDescriptionController.text.trim() ==
+                                  _onDeviceImageDescription!.trim()) {
+                                _imageDescriptionController.clear();
+                              }
+                              _onDeviceImageDescription = null;
+                            }
                           });
                           widget.onLocaleChanged?.call(
                             resolveLocaleForAppLanguage(newValue),

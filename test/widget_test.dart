@@ -159,8 +159,14 @@ void main() {
       });
       await tester.pumpAndSettle();
 
-      expect(find.text("ES-ES"), findsOneWidget);
-      expect(find.text("Buscar Versículo"), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text("ES-ES"),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text("Versículo del Día"), findsOneWidget);
     },
   );
 
@@ -181,13 +187,18 @@ void main() {
       expect(find.text("Inclusive Bible Generator"), findsOneWidget);
       expect(find.byType(NavigationBar), findsOneWidget);
 
-      // Switch language to English (US/UK)
-      await tester.tap(find.text("PT-BR"));
+      // Switch language to English (US/UK) using AppBar language selector
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text("PT-BR"),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text("English (US/UK)").last);
       await tester.pumpAndSettle();
 
-      expect(find.text("Fetch Verse"), findsOneWidget);
+      expect(find.text("Verse of the Day"), findsOneWidget);
       expect(find.text("World English Bible"), findsOneWidget);
 
       // Verify Chapter and Verse dropdowns are rendered
@@ -301,13 +312,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Almeida Revista e Atualizada (ARA)"), findsOneWidget);
 
-    // Switch Bible language to English
-    await tester.tap(find.text("English"));
+    // Switch Bible language to English via the compact Verse tab pill dropdown
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.text("PT-BR"),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("English").last);
     await tester.pumpAndSettle();
     expect(find.text("World English Bible"), findsOneWidget);
 
     // Switch back to Portuguese and verify ARA is remembered
-    await tester.tap(find.text("Português"));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.text("EN-US"),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Português").last);
     await tester.pumpAndSettle();
     expect(find.text("Almeida Revista e Atualizada (ARA)"), findsOneWidget);
   });
