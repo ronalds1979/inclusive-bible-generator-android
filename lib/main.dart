@@ -1155,9 +1155,12 @@ class _MyHomePageState extends State<MyHomePage> {
                               Expanded(
                                 child: TextField(
                                   controller: _verseSearchController,
+                                  // 🛡️ Sentinel: Cap search query length at the UI boundary (matches GetBibleAPI.searchVerses)
+                                  maxLength: 160,
                                   autofocus: true,
                                   textInputAction: TextInputAction.search,
                                   decoration: InputDecoration(
+                                    counterText: '',
                                     labelText: generator.getLocaleString(
                                       lang,
                                       "verse_search_input_label",
@@ -5064,21 +5067,53 @@ class _MyHomePageState extends State<MyHomePage> {
               children: [
                 if (liveAltText.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _imageDescriptionController,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: generator.getLocaleString(
-                        lang,
-                        "custom_image_desc_label",
-                      ),
-                      hintText: generator.getLocaleString(
-                        lang,
-                        "custom_image_desc_hint",
-                      ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _imageDescriptionController,
+                    builder: (context, value, child) {
+                      return TextField(
+                        controller: _imageDescriptionController,
+                        // 🛡️ Sentinel: Bound custom image description input length to prevent oversized text payloads
+                        maxLength: 500,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          counterText: '',
+                          alignLabelWithHint: true,
+                          labelText: generator.getLocaleString(
+                            lang,
+                            "custom_image_desc_label",
+                          ),
+                          hintText: generator.getLocaleString(
+                            lang,
+                            "custom_image_desc_hint",
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          suffixIcon: value.text.isNotEmpty
+                              ? IconButton(
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
+                                  icon: const Icon(Icons.clear),
+                                  tooltip: generator.getLocaleString(
+                                    lang,
+                                    "clear_image_desc_tooltip",
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _onDeviceImageDescription = null;
+                                      _imageDescriptionController.clear();
+                                    });
+                                  },
+                                )
+                              : null,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                   Semantics(
