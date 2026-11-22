@@ -94,13 +94,34 @@ class GetBibleAPI {
   static final RegExp _whitespaceRegExp = RegExp(r'\s+');
   static final http.Client _sharedHttpClient = http.Client();
 
-  // ⚡ Bolt: Pre-compute lowercase book mappings once so case-insensitive
-  // fallback lookups are O(1) instead of O(N) with per-entry .toLowerCase() allocations.
+  // ⚡ Bolt: Pre-compute lowercase and diacritic-stripped book mappings once so
+  // case-insensitive and accent-insensitive fallback lookups are O(1).
+  static String _stripDiacritics(String input) {
+    const String accented = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+    const String plain = 'aaaaaeeeeiiiiooooouuuucn';
+    final String lower = input.toLowerCase();
+    final StringBuffer sb = StringBuffer();
+    for (int i = 0; i < lower.length; i++) {
+      final String ch = lower[i];
+      final int idx = accented.indexOf(ch);
+      sb.write(idx >= 0 ? plain[idx] : ch);
+    }
+    return sb.toString();
+  }
+
   static final Map<String, Map<String, int>> _lowercaseBookMapping = {
     for (final langEntry in bookMapping.entries)
       langEntry.key: {
         for (final bookEntry in langEntry.value.entries)
           bookEntry.key.toLowerCase(): bookEntry.value,
+      },
+  };
+
+  static final Map<String, Map<String, int>> _asciiBookMapping = {
+    for (final langEntry in bookMapping.entries)
+      langEntry.key: {
+        for (final bookEntry in langEntry.value.entries)
+          _stripDiacritics(bookEntry.key): bookEntry.value,
       },
   };
 
@@ -604,11 +625,22 @@ class GetBibleAPI {
 
     int? bookNr = mapping[bookName];
     if (bookNr == null) {
+      final String lowerBook = bookName.toLowerCase();
       // Check across all languages so a user can type or switch languages seamlessly
       for (final prefix in [langPrefix, "pt", "en", "es"]) {
         final Map<String, int>? lowerMap = _lowercaseBookMapping[prefix];
         if (lowerMap != null) {
-          bookNr = lowerMap[bookName.toLowerCase()];
+          bookNr = lowerMap[lowerBook];
+          if (bookNr != null) break;
+        }
+      }
+    }
+    if (bookNr == null) {
+      final String asciiBook = _stripDiacritics(bookName);
+      for (final prefix in [langPrefix, "pt", "en", "es"]) {
+        final Map<String, int>? asciiMap = _asciiBookMapping[prefix];
+        if (asciiMap != null) {
+          bookNr = asciiMap[asciiBook];
           if (bookNr != null) break;
         }
       }

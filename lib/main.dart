@@ -572,6 +572,7 @@ class _MyHomePageState extends State<MyHomePage> {
       final Directory tempDir = await getTemporaryDirectory();
       await Future.wait([
         pruneTransientFiles(tempDir, prefix: 'verse_', suffix: '.png'),
+        pruneTransientFiles(tempDir, prefix: 'verse_video_', suffix: '.mp4'),
         pruneTransientFiles(tempDir, prefix: 'gemini_bg_', suffix: '.png'),
         pruneTransientFiles(tempDir, prefix: 'stock_bg_', suffix: '.jpg'),
         pruneTransientFiles(tempDir, prefix: 'verse_audio_', suffix: '.wav'),
@@ -1612,18 +1613,21 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _isListeningVoice = true;
     });
-    final String? spoken = await voiceVerseService.listenForVerse(
-      locale: locale,
-      prompt: generator.getLocaleString(lang, "voice_verse_prompt"),
-    );
+    final List<String> candidates = await voiceVerseService
+        .listenForVerseCandidates(
+          locale: locale,
+          prompt: generator.getLocaleString(lang, "voice_verse_prompt"),
+        );
     if (!mounted) return;
     setState(() {
       _isListeningVoice = false;
     });
-    if (spoken == null || spoken.trim().isEmpty) return;
-    final String normalized = VoiceVerseService.normalizeSpokenReference(
-      spoken,
+    if (candidates.isEmpty) return;
+    final String normalized = VoiceVerseService.selectBestCandidate(
+      candidates,
+      lang: bibleLang,
     );
+    if (normalized.isEmpty) return;
     referenceController.text = normalized;
     setState(() {
       _syncSelectorsFromReference(normalized);
