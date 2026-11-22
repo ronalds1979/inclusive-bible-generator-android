@@ -2953,7 +2953,7 @@ class _MyHomePageState extends State<MyHomePage> {
             },
           ),
         ],
-        _buildContrastWarningCard(lang),
+        _buildContrastWarningCard(lang, tabIndex: 1),
         _buildStepNavigationRow(lang, 1),
       ],
     );
@@ -3197,6 +3197,10 @@ class _MyHomePageState extends State<MyHomePage> {
     return AnimatedBuilder(
       animation: _contrastListenable,
       builder: (context, _) {
+        // ⚡ Bolt: Skip tone badge luminance calculations & widget builds when Background tab (1) is inactive
+        if (_selectedTabIndex != 1) {
+          return const SizedBox.shrink();
+        }
         final double bgLum = _effectiveBackgroundLuminance();
         final bool isDark = bgLum < 0.22;
         final bool isLight = bgLum > 0.55;
@@ -3244,10 +3248,14 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildContrastWarningCard(String lang) {
+  Widget _buildContrastWarningCard(String lang, {required int tabIndex}) {
     return AnimatedBuilder(
       animation: _contrastListenable,
       builder: (context, _) {
+        // ⚡ Bolt: Skip WCAG/CVD contrast & placement math when this tab is hidden inside IndexedStack
+        if (_selectedTabIndex != tabIndex) {
+          return const SizedBox.shrink();
+        }
         final double dimValue = _backgroundDimNotifier.value;
         final Color currentFontColor = _fontColorNotifier.value;
         final double fgLuminance = currentFontColor.computeLuminance();
@@ -4573,7 +4581,7 @@ class _MyHomePageState extends State<MyHomePage> {
             );
           },
         ),
-        _buildContrastWarningCard(lang),
+        _buildContrastWarningCard(lang, tabIndex: 2),
         const SizedBox(height: 12),
         ValueListenableBuilder<double>(
           valueListenable: _fontSizeNotifier,
@@ -5290,6 +5298,10 @@ class _MyHomePageState extends State<MyHomePage> {
     return AnimatedBuilder(
       animation: _scorecardListenable,
       builder: (context, _) {
+        // ⚡ Bolt: Skip scorecard WCAG/CVD contrast checks & chip rebuilds when Audio/Text tab (3) is inactive
+        if (_selectedTabIndex != 3) {
+          return const SizedBox.shrink();
+        }
         final String verseText = verseController.text.trim();
         final String refText = referenceController.text.trim();
         final bool hasVerse = verseText.isNotEmpty && refText.isNotEmpty;
