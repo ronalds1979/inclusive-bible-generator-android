@@ -99,14 +99,26 @@ class BackgroundLuminanceProfile {
 /// using a tiny downsampled decode for fast, accurate WCAG contrast checks.
 class ContrastSampler {
   static const int maxImageBytes = 20 * 1024 * 1024;
+  static const int _maxAssetCacheEntries = 64;
+
+  // ⚡ Bolt: Precompute the 256-entry sRGB-to-linear LUT once instead of invoking
+  // math.pow() ~7,000 times per sampled image.
+  static final Float64List _srgbToLinearLut = Float64List.fromList(
+    List<double>.generate(256, (int channel8) {
+      final double c = channel8 / 255.0;
+      return c <= 0.03928
+          ? c / 12.92
+          : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    }, growable: false),
+  );
+
+  static final Map<String, BackgroundLuminanceProfile> _assetProfileCache =
+      <String, BackgroundLuminanceProfile>{};
 
   const ContrastSampler();
 
   static double _srgbChannelToLinear(int channel8) {
-    final double c = channel8 / 255.0;
-    return c <= 0.03928
-        ? c / 12.92
-        : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    return _srgbToLinearLut[channel8.clamp(0, 255)];
   }
 
   /// Computes W3C relative luminance from 8-bit RGB channels.
@@ -262,9 +274,22 @@ class ContrastSampler {
   }
 
   Future<BackgroundLuminanceProfile?> sampleAsset(String assetPath) async {
+    // ⚡ Bolt: Built-in background assets are immutable, so caching their sampled
+    // luminance profiles skips repeated rootBundle loads, Skia decodes, and pixel scans.
+    final BackgroundLuminanceProfile? cached = _assetProfileCache[assetPath];
+    if (cached != null) return cached;
     try {
       final ByteData data = await rootBundle.load(assetPath);
-      return await sampleImageBytes(data.buffer.asUint8List());
+      final BackgroundLuminanceProfile? profile = await sampleImageBytes(
+        data.buffer.asUint8List(),
+      );
+      if (profile != null) {
+        if (_assetProfileCache.length >= _maxAssetCacheEntries) {
+          _assetProfileCache.remove(_assetProfileCache.keys.first);
+        }
+        _assetProfileCache[assetPath] = profile;
+      }
+      return profile;
     } catch (_) {
       return null;
     }
