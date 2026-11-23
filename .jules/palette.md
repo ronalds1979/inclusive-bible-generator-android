@@ -49,3 +49,7 @@
 ## 2026-11-20 - Co-locate Contrast Warning with Background Dim Controls
 **Learning:** Placing the low-contrast warning exclusively in the Style tab hides real-time readability feedback while users pick bright backgrounds or adjust Background Dim in the Background tab.
 **Action:** Extract `_buildContrastWarningCard` into a shared helper and render it beneath Background Dim as well as below Text Color so `Auto-Dim` is immediately accessible where dim adjustments happen.
+
+## 2026-11-23 - Same-Tab ActionChip Focus Jumps in Inclusivity Scorecard
+**Learning:** An `ActionChip` `onFix` callback that only calls `_selectTab(3)` becomes a silent no-op when the user is already on Tab 3 (for example, when custom-photo Alt-Text needs a manual description).
+**Action:** Pair `_selectTab(3)` with a post-frame `Scrollable.ensureVisible` and `FocusNode.requestFocus()` on the target input so fixing a scorecard item always scrolls to and focuses the exact control needed.

@@ -311,6 +311,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _onDeviceImageDescription;
   final TextEditingController _imageDescriptionController =
       TextEditingController();
+  final FocusNode _imageDescriptionFocusNode = FocusNode();
   final TextEditingController _verseSearchController = TextEditingController();
   BackgroundLuminanceProfile? _sampledBgProfile;
   int _sampleSeq = 0;
@@ -560,6 +561,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _yOffsetNotifier.dispose();
     _textStyleNotifier.dispose();
     _imageDescriptionController.dispose();
+    _imageDescriptionFocusNode.dispose();
     _verseSearchController.dispose();
     referenceController.dispose();
     verseController.dispose();
@@ -5203,6 +5205,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     builder: (context, value, child) {
                       return TextField(
                         controller: _imageDescriptionController,
+                        focusNode: _imageDescriptionFocusNode,
                         // 🛡️ Sentinel: Bound custom image description input length to prevent oversized text payloads
                         maxLength: 500,
                         maxLines: 2,
@@ -5575,7 +5578,29 @@ class _MyHomePageState extends State<MyHomePage> {
                           "inclusivity_check_alt_text",
                         ),
                         ok: altTextOk,
-                        onFix: () => _selectTab(hasVerse ? 3 : 0),
+                        onFix: () {
+                          if (!hasVerse) {
+                            _selectTab(0);
+                            return;
+                          }
+                          _selectTab(3);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            final BuildContext? targetCtx =
+                                _imageDescriptionFocusNode.context;
+                            if (targetCtx != null) {
+                              Scrollable.ensureVisible(
+                                targetCtx,
+                                duration:
+                                    MediaQuery.of(context).disableAnimations
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 220),
+                                alignment: 0.25,
+                              );
+                            }
+                            _imageDescriptionFocusNode.requestFocus();
+                          });
+                        },
                       ),
                       buildCheckChip(
                         label: generator.getLocaleString(
