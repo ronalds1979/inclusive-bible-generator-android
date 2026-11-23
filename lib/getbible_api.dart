@@ -83,12 +83,12 @@ class GetBibleAPI {
     r'^((?:\d\s+)?[a-zA-ZáéíóúâêîôûãõçñÁÉÍÓÚÂÊÎÔÛÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêîôûãõçñÁÉÍÓÚÂÊÎÔÛÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
   );
   // ⚡ Bolt: Pre-compile verse cleanup patterns once and reuse a persistent HTTP client
+  // 🛡️ Sentinel: Use negated character classes [^<>]* / [^<]* so unclosed `<sup` tags run in O(N) linear time without ReDoS backtracking
   static final RegExp _footnoteTagRegExp = RegExp(
-    r'<(sup|S)\b[^>]*>.*?</\1>',
+    r'<(sup|S)\b[^<>]*>[^<]*</\1>',
     caseSensitive: false,
-    dotAll: true,
   );
-  static final RegExp _htmlTagRegExp = RegExp(r'<[^>]+>');
+  static final RegExp _htmlTagRegExp = RegExp(r'<[^<>]+>');
   static final RegExp _circledMarkerRegExp = RegExp(r'[\u24B6-\u24E9\u2460-\u2473]');
   static final RegExp _bracketNumberRegExp = RegExp(r'\[\d+\]');
   static final RegExp _whitespaceRegExp = RegExp(r'\s+');

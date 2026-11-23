@@ -481,4 +481,24 @@ void main() {
       expect(descField.maxLength, equals(500));
     },
   );
+
+  test(
+    'GetBibleAPI.cleanVerseText strips tags in linear time without ReDoS backtracking',
+    () {
+      expect(
+        GetBibleAPI.cleanVerseText(
+          'In the <b>beginning</b><sup>1</sup> God<S>H430</S> created [2].',
+        ),
+        equals('In the beginning God created .'),
+      );
+
+      final Stopwatch sw = Stopwatch()..start();
+      final String evilClosed = '<sup>' * 20000;
+      final String evilUnclosed = '<sup ' * 20000;
+      expect(GetBibleAPI.cleanVerseText(evilClosed), isEmpty);
+      expect(GetBibleAPI.cleanVerseText(evilUnclosed), isNotEmpty);
+      sw.stop();
+      expect(sw.elapsedMilliseconds, lessThan(500));
+    },
+  );
 }
