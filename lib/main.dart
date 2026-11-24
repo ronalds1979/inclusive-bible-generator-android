@@ -315,7 +315,10 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _verseSearchController = TextEditingController();
   BackgroundLuminanceProfile? _sampledBgProfile;
   int _sampleSeq = 0;
-  (int, int)? _spokenWordRange;
+  // ⚡ Bolt: Isolate TTS word-highlight ticks to a ValueNotifier so word progress
+  // updates only rebuild the transcript text instead of the entire page tree.
+  final ValueNotifier<(int, int)?> _spokenWordRangeNotifier =
+      ValueNotifier<(int, int)?>(null);
 
   int _selectedTabIndex = 0;
 
@@ -560,6 +563,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _fontSizeNotifier.dispose();
     _yOffsetNotifier.dispose();
     _textStyleNotifier.dispose();
+    _spokenWordRangeNotifier.dispose();
     _imageDescriptionController.dispose();
     _imageDescriptionFocusNode.dispose();
     _verseSearchController.dispose();
@@ -1646,9 +1650,9 @@ class _MyHomePageState extends State<MyHomePage> {
     HapticFeedback.selectionClick();
     if (isPlayingAudioPreview) {
       await ttsService.stop();
+      _spokenWordRangeNotifier.value = null;
       setState(() {
         isPlayingAudioPreview = false;
-        _spokenWordRange = null;
       });
       return;
     }
@@ -1656,9 +1660,9 @@ class _MyHomePageState extends State<MyHomePage> {
     final String verse = verseController.text.trim();
     if (verse.isEmpty) return;
 
+    _spokenWordRangeNotifier.value = null;
     setState(() {
       isPlayingAudioPreview = true;
-      _spokenWordRange = null;
     });
     await ttsService.speakPreview(
       verse: verse,
@@ -1668,15 +1672,16 @@ class _MyHomePageState extends State<MyHomePage> {
       speechRate: TtsService.documentarySpeechRate * _ttsSpeedMultiplier,
       onWordProgress: (int start, int end) {
         if (!mounted || !isPlayingAudioPreview) return;
-        setState(() {
-          _spokenWordRange = (start, end);
-        });
+        final (int, int) nextRange = (start, end);
+        if (_spokenWordRangeNotifier.value != nextRange) {
+          _spokenWordRangeNotifier.value = nextRange;
+        }
       },
     );
     if (mounted) {
+      _spokenWordRangeNotifier.value = null;
       setState(() {
         isPlayingAudioPreview = false;
-        _spokenWordRange = null;
       });
     }
   }
@@ -5084,9 +5089,9 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Builder(
-                              builder: (context) {
-                                final (int, int)? range = _spokenWordRange;
+                            ValueListenableBuilder<(int, int)?>(
+                              valueListenable: _spokenWordRangeNotifier,
+                              builder: (context, range, _) {
                                 final TextStyle? baseTranscriptStyle = Theme.of(
                                   context,
                                 ).textTheme.bodySmall;
