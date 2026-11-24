@@ -478,20 +478,24 @@ class GetBibleAPI {
     http.Client? httpClient,
   }) async {
     final String? safeApiKey = normalizeYouVersionApiKey(apiKey);
-    if (safeApiKey == null) return [];
+    final String safeLang = langPrefix.trim().toLowerCase();
+    // 🛡️ Sentinel: Enforce strict 2-letter ISO language code allowlist before cache-key or URL interpolation
+    if (safeApiKey == null || !RegExp(r'^[a-z]{2}$').hasMatch(safeLang)) {
+      return [];
+    }
 
-    final String cacheKey = "$langPrefix:${_keyFingerprint(safeApiKey)}";
+    final String cacheKey = "$safeLang:${_keyFingerprint(safeApiKey)}";
     if (httpClient == null) {
       final List<Map<String, String>>? cached = _youVersionBiblesCache[cacheKey];
       if (cached != null) return cached;
     }
 
     final client = httpClient ?? _sharedHttpClient;
-    final String iso3 = langPrefix == "pt"
+    final String iso3 = safeLang == "pt"
         ? "por"
-        : (langPrefix == "es" ? "spa" : "eng");
+        : (safeLang == "es" ? "spa" : "eng");
     final Uri uri = Uri.parse(
-      "$youVersionBaseUrl/bibles?language_ranges%5B%5D=$langPrefix&language_ranges%5B%5D=$iso3&page_size=50",
+      "$youVersionBaseUrl/bibles?language_ranges%5B%5D=$safeLang&language_ranges%5B%5D=$iso3&page_size=50",
     );
 
     try {
@@ -666,6 +670,11 @@ class GetBibleAPI {
     // Remove stray circled footnote markers or bracketed numbers if any remain
     text = text.replaceAll(_circledMarkerRegExp, '');
     text = text.replaceAll(_bracketNumberRegExp, '');
+    // 🛡️ Sentinel: Strip C0/C1 control chars and Unicode Bidi override/isolate chars to prevent text spoofing
+    text = text.replaceAll(
+      RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\u200E\u200F\u202A-\u202E\u2066-\u2069]'),
+      '',
+    );
     // Collapse multiple spaces
     return text.replaceAll(_whitespaceRegExp, ' ').trim();
   }
@@ -759,7 +768,7 @@ class GetBibleAPI {
 
     // 3. Fallback to GetBible v2 (`api.getbible.net/v2`)
     return _fetchFromGetBible(
-      bibleId: bibleId,
+      bibleId: safeBibleId,
       bookNr: bookNrStr,
       chapter: chapter,
       startVerse: startVerse,

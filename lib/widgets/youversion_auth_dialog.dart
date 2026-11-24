@@ -73,10 +73,12 @@ class _YouVersionAuthDialogState extends State<YouVersionAuthDialog> {
   Future<void> _openYouVersionPortal() async {
     final Uri uri = Uri.parse(GetBibleAPI.youVersionPortalUrl);
     bool launched = false;
-    try {
-      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      launched = false;
+    if (uri.scheme == 'https' && uri.host.isNotEmpty) {
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = false;
+      }
     }
     if (!launched && mounted) {
       final String msg = widget.generator.getLocaleString(

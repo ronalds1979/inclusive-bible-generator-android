@@ -1395,10 +1395,13 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _launchExternalUrl(Uri uri, String lang) async {
     bool launched = false;
-    try {
-      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      launched = false;
+    // 🛡️ Sentinel: Restrict external browser launches strictly to HTTPS URLs
+    if (uri.scheme == 'https' && uri.host.isNotEmpty) {
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = false;
+      }
     }
     if (!launched && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

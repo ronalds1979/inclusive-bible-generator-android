@@ -491,6 +491,10 @@ void main() {
         ),
         equals('In the beginning God created .'),
       );
+      expect(
+        GetBibleAPI.cleanVerseText('Grace\u202Eevil\x07 and peace\u2066'),
+        equals('Graceevil and peace'),
+      );
 
       final Stopwatch sw = Stopwatch()..start();
       final String evilClosed = '<sup>' * 20000;
@@ -546,6 +550,19 @@ void main() {
       } finally {
         await tempDir.delete(recursive: true);
       }
+
+      var networkCalled = false;
+      final MockClient mockClient = MockClient((_) async {
+        networkCalled = true;
+        return http.Response('{}', 200);
+      });
+      final res = await GetBibleAPI.fetchYouVersionBibles(
+        langPrefix: 'en&page_size=9999',
+        apiKey: 'yv-valid-test-key-123456',
+        httpClient: mockClient,
+      );
+      expect(res, isEmpty);
+      expect(networkCalled, isFalse);
     },
   );
 }
