@@ -285,5 +285,6 @@
   "decrease_letter_spacing_tooltip": "Diminuir espaçamento entre letras",
   "increase_letter_spacing_tooltip": "Aumentar espaçamento entre letras",
   "wcag_large_text_tag": "Texto grande (mín. 3:1)",
-  "wcag_normal_text_tag": "Texto normal (mín. 4.5:1)"
+  "wcag_normal_text_tag": "Texto normal (mín. 4.5:1)",
+  "reset_bg_dim_btn": "Padrão (15%)"
 }

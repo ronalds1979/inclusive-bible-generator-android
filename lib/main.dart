@@ -2984,6 +2984,7 @@ class _MyHomePageState extends State<MyHomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Text(
@@ -2991,6 +2992,22 @@ class _MyHomePageState extends State<MyHomePage> {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
+                    if ((dimValue * 100).round() != 15)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          _backgroundDimNotifier.value = 0.15;
+                        },
+                        icon: const ExcludeSemantics(
+                          child: Icon(Icons.restart_alt, size: 16),
+                        ),
+                        label: Text(
+                          generator.getLocaleString(lang, "reset_bg_dim_btn"),
+                        ),
+                      ),
                   ],
                 ),
                 Row(
