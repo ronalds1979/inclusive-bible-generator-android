@@ -501,4 +501,51 @@ void main() {
       expect(sw.elapsedMilliseconds, lessThan(500));
     },
   );
+
+  test(
+    'isSafeImageDimensions and ContrastSampler reject extreme-aspect pixel bombs',
+    () async {
+      expect(isSafeImageDimensions(1080, 1440), isTrue);
+      expect(isSafeImageDimensions(0, 100), isFalse);
+      expect(isSafeImageDimensions(1, 100000), isFalse);
+      expect(isSafeImageDimensions(10000, 10000), isFalse);
+
+      // Build minimal PNG header claiming 1 x 100000 pixels (valid magic + IHDR)
+      Uint8List buildHeaderPng(int w, int h) {
+        final BytesBuilder ihdrBody = BytesBuilder()
+          ..add([0x49, 0x48, 0x44, 0x52]) // IHDR
+          ..add([(w >> 24) & 0xFF, (w >> 16) & 0xFF, (w >> 8) & 0xFF, w & 0xFF])
+          ..add([(h >> 24) & 0xFF, (h >> 16) & 0xFF, (h >> 8) & 0xFF, h & 0xFF])
+          ..add([8, 2, 0, 0, 0]);
+        final Uint8List ihdrBytes = ihdrBody.toBytes();
+        int crc = 0xFFFFFFFF;
+        for (final int b in ihdrBytes) {
+          crc ^= b;
+          for (int i = 0; i < 8; i++) {
+            crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+          }
+        }
+        crc ^= 0xFFFFFFFF;
+        return (BytesBuilder()
+              ..add([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+              ..add([0, 0, 0, 13])
+              ..add(ihdrBytes)
+              ..add([(crc >> 24) & 0xFF, (crc >> 16) & 0xFF, (crc >> 8) & 0xFF, crc & 0xFF])
+              ..add([0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]))
+            .toBytes();
+      }
+
+      final Uint8List bombPng = buildHeaderPng(1, 100000);
+      expect(isValidRasterImageBytes(bombPng), isTrue);
+      expect(await ContrastSampler().sampleImageBytes(bombPng), isNull);
+
+      final Directory tempDir = await Directory.systemTemp.createTemp('ibg_dim_test_');
+      try {
+        final File bombFile = File('${tempDir.path}/bomb.png')..writeAsBytesSync(bombPng);
+        expect(await hasSafeImageDimensionsFile(bombFile.path), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    },
+  );
 }

@@ -230,10 +230,32 @@ class ContrastSampler {
         !isValidRasterImageBytes(bytes)) {
       return null;
     }
+    ui.ImmutableBuffer? buffer;
+    ui.ImageDescriptor? descriptor;
     ui.Codec? codec;
     ui.Image? image;
     try {
-      codec = await ui.instantiateImageCodec(bytes, targetWidth: 48);
+      // 🛡️ Sentinel: Inspect header dimensions before decoding and bound both target axes to prevent pixel-bomb OOMs
+      buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final int srcW = descriptor.width;
+      final int srcH = descriptor.height;
+      if (!isSafeImageDimensions(srcW, srcH)) {
+        return null;
+      }
+      final int targetWidth;
+      final int targetHeight;
+      if (srcW >= srcH) {
+        targetWidth = math.min(48, srcW);
+        targetHeight = math.max(1, (targetWidth * srcH / srcW).round());
+      } else {
+        targetHeight = math.min(48, srcH);
+        targetWidth = math.max(1, (targetHeight * srcW / srcH).round());
+      }
+      codec = await descriptor.instantiateCodec(
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
+      );
       final ui.FrameInfo frame = await codec.getNextFrame();
       image = frame.image;
       final ByteData? rgba = await image.toByteData(
@@ -250,6 +272,8 @@ class ContrastSampler {
     } finally {
       image?.dispose();
       codec?.dispose();
+      descriptor?.dispose();
+      buffer?.dispose();
     }
   }
 

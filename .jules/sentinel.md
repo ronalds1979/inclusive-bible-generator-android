@@ -58,3 +58,8 @@
 **Vulnerability:** `StockPhotoService` used `stream.timeout(duration)` inside `await for`, which resets on every incoming chunk and allows a slow-drip response to hold connections open indefinitely.
 **Learning:** Unlike `Future.timeout()` around the entire stream collection loop, Dart's `Stream.timeout()` only enforces an inter-chunk idle timeout.
 **Prevention:** Always wrap the full stream-reading loop in an async helper and apply `.timeout(deadline)` to the resulting `Future`, as done in `_readBoundedBytes`.
+
+## 2026-11-24 - Unbounded Height in Flutter Image Decoders (Pixel-Bomb OOM DoS)
+**Vulnerability:** `ContrastSampler.sampleImageBytes` (`targetWidth: 48` with `targetHeight: null`), `VersePreviewCard` (`ResizeImage.resizeIfNeeded(1080, null, ...)`), and `_selectCustomImage` checked file bytes (<= 20 MB) and magic headers but did not inspect image dimensions or bound both decode axes, allowing a tiny `1 x 100,000` PNG to decode up to `48 x 4,800,000` pixels (~921 MB RGBA).
+**Learning:** Leaving either `targetHeight` or `height` as `null` in `ui.instantiateImageCodec` or `ResizeImage` scales the unconstrained axis proportionally, magnifying extreme aspect-ratio inputs into OOM crashes even when byte size is tiny.
+**Prevention:** Inspect encoded dimensions via `ui.ImageDescriptor.encoded` (`isSafeImageDimensions`) before decoding, and always bound both axes (`targetWidth`+`targetHeight` or `ResizeImagePolicy.fit`).

@@ -730,12 +730,14 @@ class _VersePreviewCardState extends State<VersePreviewCard> {
     // dragging text or adjusting dim/font size never rebuilds the image provider.
     final Widget backgroundImage = RepaintBoundary(
       child: Image(
-        image: ResizeImage.resizeIfNeeded(
-          1080,
-          null,
+        // 🛡️ Sentinel: Bound both decoded texture axes via ResizeImagePolicy.fit to prevent extreme aspect-ratio OOMs
+        image: ResizeImage(
           widget.customImagePath != null
               ? FileImage(File(widget.customImagePath!)) as ImageProvider
               : AssetImage("assets/backgrounds/$safeBgName"),
+          width: 1440,
+          height: 1440,
+          policy: ResizeImagePolicy.fit,
         ),
         fit: BoxFit.cover,
         width: width,

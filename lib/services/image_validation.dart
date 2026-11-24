@@ -1,4 +1,31 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+const int maxImageDimension = 16384;
+const int maxImagePixels = 64000000;
+
+/// Returns true when raster image dimensions are positive and bounded against pixel-bomb OOMs.
+bool isSafeImageDimensions(int width, int height) {
+  if (width <= 0 || height <= 0) return false;
+  if (width > maxImageDimension || height > maxImageDimension) return false;
+  return width <= maxImagePixels ~/ height;
+}
+
+/// Inspects an encoded image header without decoding pixels and checks dimension bounds.
+Future<bool> hasSafeImageDimensionsFile(String path) async {
+  ui.ImmutableBuffer? buffer;
+  ui.ImageDescriptor? descriptor;
+  try {
+    buffer = await ui.ImmutableBuffer.fromFilePath(path);
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    return isSafeImageDimensions(descriptor.width, descriptor.height);
+  } catch (_) {
+    return false;
+  } finally {
+    descriptor?.dispose();
+    buffer?.dispose();
+  }
+}
 
 /// Verifies PNG, JPEG, or WebP raster image magic bytes before decoding/saving.
 bool isValidRasterImageBytes(Uint8List bytes) {

@@ -1109,7 +1109,8 @@ class _MyHomePageState extends State<MyHomePage> {
           .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
       if (fileSize <= 0 ||
           fileSize > 20 * 1024 * 1024 ||
-          !isValidRasterImageBytes(Uint8List.fromList(headerBytes))) {
+          !isValidRasterImageBytes(Uint8List.fromList(headerBytes)) ||
+          !await hasSafeImageDimensionsFile(selectedFile.path)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2876,6 +2877,8 @@ class _MyHomePageState extends State<MyHomePage> {
                           image: ResizeImage(
                             FileImage(File(customImagePath!)),
                             width: 204,
+                            height: 204,
+                            policy: ResizeImagePolicy.fit,
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -2946,6 +2949,8 @@ class _MyHomePageState extends State<MyHomePage> {
                           image: ResizeImage(
                             AssetImage("assets/backgrounds/$safeBgName"),
                             width: 204,
+                            height: 204,
+                            policy: ResizeImagePolicy.fit,
                           ),
                           fit: BoxFit.cover,
                         ),
