@@ -67,6 +67,7 @@ class GetBibleAPI {
   static const String youVersionBaseUrl = "https://api.youversion.com/v1";
   static const String youVersionPortalUrl = "https://platform.youversion.com/";
   static const int maxResponseBytes = 2 * 1024 * 1024;
+  static const int maxPassageChars = 5000;
   static const int _maxYouVersionCacheEntries = 16;
   static const String defaultYouVersionApiKey = String.fromEnvironment(
     'YOUVERSION_API_KEY',
@@ -518,18 +519,22 @@ class GetBibleAPI {
         final List<Map<String, String>> result = [];
         for (final item in items) {
           if (item is Map<String, dynamic> && item["id"] != null) {
-            final String id = item["id"].toString();
-            final String abbr =
-                (item["abbreviation"] ?? item["local_abbreviation"] ?? "")
-                    .toString()
-                    .trim();
-            final String title =
-                (item["title"] ?? item["name"] ?? item["local_title"] ?? "Bible $id")
-                    .toString()
-                    .trim();
-            final String displayName = abbr.isNotEmpty && !title.contains(abbr)
-                ? "$title ($abbr • YouVersion)"
-                : "$title (YouVersion)";
+            final String id = item["id"].toString().trim();
+            // 🛡️ Sentinel: Validate remote YouVersion ID and sanitize display metadata against Bidi/control/HTML injection
+            if (!RegExp(r'^\d{1,12}$').hasMatch(id)) continue;
+            final String abbr = cleanVerseText(
+              (item["abbreviation"] ?? item["local_abbreviation"] ?? "")
+                  .toString(),
+            );
+            final String title = cleanVerseText(
+              (item["title"] ?? item["name"] ?? item["local_title"] ?? "Bible $id")
+                  .toString(),
+            );
+            final String safeTitle = title.isEmpty ? "Bible $id" : title;
+            final String displayName =
+                abbr.isNotEmpty && !safeTitle.contains(abbr)
+                ? "$safeTitle ($abbr • YouVersion)"
+                : "$safeTitle (YouVersion)";
             result.add({"id": "yv:$id", "name": displayName});
           }
         }
@@ -777,6 +782,12 @@ class GetBibleAPI {
     );
   }
 
+  static String _boundPassageLength(String text) {
+    return text.length > maxPassageChars
+        ? text.substring(0, maxPassageChars)
+        : text;
+  }
+
   static Future<String?> _fetchFromYouVersion({
     required int bibleId,
     required String usfmRef,
@@ -806,7 +817,7 @@ class GetBibleAPI {
                   ? (decoded["data"] as Map<String, dynamic>)["content"]
                   : null);
           if (content is String && content.trim().isNotEmpty) {
-            return cleanVerseText(content);
+            return _boundPassageLength(cleanVerseText(content));
           }
         }
       } else {
@@ -894,7 +905,8 @@ class GetBibleAPI {
     }
 
     if (cached != null) {
-      return cached.extractRange(startVerse, endVerse);
+      final String? extracted = cached.extractRange(startVerse, endVerse);
+      return extracted != null ? _boundPassageLength(extracted) : null;
     }
     return null;
   }
@@ -922,13 +934,14 @@ class GetBibleAPI {
           timeout: const Duration(seconds: 10),
         );
         if (response.statusCode == 200) {
-          var data = jsonDecode(response.body);
-          final parsedVerses = data["verses"];
+          final dynamic data = jsonDecode(response.body);
+          final dynamic parsedVerses = data is Map ? data["verses"] : null;
           if (parsedVerses is List && parsedVerses.isNotEmpty) {
             final Map<int, String> byVerse = {};
             final StringBuffer fullBuf = StringBuffer();
             for (int i = 0; i < parsedVerses.length; i++) {
-              final v = parsedVerses[i];
+              final dynamic v = parsedVerses[i];
+              if (v is! Map) continue;
               final String cleaned = cleanVerseText(
                 (v["text"] ?? "").toString(),
               );
@@ -953,7 +966,8 @@ class GetBibleAPI {
     }
 
     if (cached != null) {
-      return cached.extractRange(startVerse, endVerse);
+      final String? extracted = cached.extractRange(startVerse, endVerse);
+      return extracted != null ? _boundPassageLength(extracted) : null;
     }
     return null;
   }
@@ -1065,13 +1079,17 @@ class GetBibleAPI {
     final String? bookName = getBookNameByNumber(bookNr, lang);
     if (bookName == null) return null;
 
-    final String chapter = startTokens[1];
-    String versePart = startTokens.length >= 3 ? startTokens[2] : "1";
+    final String chapter = startTokens[1].trim();
+    if (!RegExp(r'^\d{1,3}$').hasMatch(chapter)) return null;
+    String versePart = startTokens.length >= 3 ? startTokens[2].trim() : "1";
+    if (!RegExp(r'^\d{1,3}$').hasMatch(versePart)) return null;
 
     if (rangeParts.length > 1) {
       final List<String> endTokens = rangeParts.last.split('.');
-      final String endVerse = endTokens.last;
-      if (endVerse.isNotEmpty && endVerse != versePart) {
+      final String endVerse = endTokens.last.trim();
+      if (endVerse.isNotEmpty &&
+          RegExp(r'^\d{1,3}$').hasMatch(endVerse) &&
+          endVerse != versePart) {
         versePart = "$versePart-$endVerse";
       }
     }

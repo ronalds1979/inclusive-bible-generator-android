@@ -565,4 +565,67 @@ void main() {
       expect(networkCalled, isFalse);
     },
   );
+
+  test(
+    'GetBibleAPI sanitizes YouVersion metadata, bounds passage length, and guards malformed JSON',
+    () async {
+      final yvClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'data': [
+                {'id': '206', 'abbreviation': 'WEB\u202E', 'title': '<b>World</b>\x07 English'},
+                {'id': '../evil', 'abbreviation': 'BAD', 'title': 'Malicious'},
+              ],
+            }),
+          ),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final versions = await GetBibleAPI.fetchYouVersionBibles(
+        langPrefix: 'en',
+        apiKey: 'yv-valid-test-key-123456',
+        httpClient: yvClient,
+      );
+      expect(versions, hasLength(1));
+      expect(versions.first['id'], equals('yv:206'));
+      expect(versions.first['name'], equals('World English (WEB • YouVersion)'));
+
+      final malformedClient = MockClient((request) async {
+        return http.Response('["unexpected-array"]', 200);
+      });
+      expect(
+        await GetBibleAPI.getPassage(
+          'almeida',
+          'John 3:16',
+          lang: 'pt',
+          httpClient: malformedClient,
+        ),
+        isNull,
+      );
+
+      GetBibleAPI.clearChapterCache();
+      final hugeClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'verses': [{'text': 'A' * 7000}]})),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final bounded = await GetBibleAPI.getPassage(
+        'almeida',
+        'John 3:1',
+        lang: 'pt',
+        httpClient: hugeClient,
+      );
+      expect(bounded, isNotNull);
+      expect(bounded!.length, equals(GetBibleAPI.maxPassageChars));
+
+      expect(
+        GetBibleAPI.resolveUsfmToLocalizedReference('JHN.3.evil', lang: 'en'),
+        isNull,
+      );
+    },
+  );
 }
