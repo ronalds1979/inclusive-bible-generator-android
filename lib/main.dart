@@ -312,6 +312,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _imageDescriptionController =
       TextEditingController();
   final FocusNode _imageDescriptionFocusNode = FocusNode();
+  final FocusNode _verseFocusNode = FocusNode();
+  final GlobalKey _typographySectionKey = GlobalKey();
+  final GlobalKey _contrastSectionKey = GlobalKey();
   final TextEditingController _verseSearchController = TextEditingController();
   BackgroundLuminanceProfile? _sampledBgProfile;
   int _sampleSeq = 0;
@@ -566,6 +569,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _spokenWordRangeNotifier.dispose();
     _imageDescriptionController.dispose();
     _imageDescriptionFocusNode.dispose();
+    _verseFocusNode.dispose();
     _verseSearchController.dispose();
     referenceController.dispose();
     verseController.dispose();
@@ -2753,6 +2757,7 @@ class _MyHomePageState extends State<MyHomePage> {
           builder: (context, value, child) {
             return TextField(
               controller: verseController,
+              focusNode: _verseFocusNode,
               maxLength: 2000,
               maxLines: 3,
               textCapitalization: TextCapitalization.sentences,
@@ -3749,6 +3754,7 @@ class _MyHomePageState extends State<MyHomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Card.outlined(
+                  key: _typographySectionKey,
                   margin: EdgeInsets.zero,
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
@@ -4524,6 +4530,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         const SizedBox(height: 12),
         Semantics(
+          key: _contrastSectionKey,
           header: true,
           child: Text(
             generator.getLocaleString(lang, "font_color_label"),
@@ -4758,8 +4765,13 @@ class _MyHomePageState extends State<MyHomePage> {
                         style: TextButton.styleFrom(
                           minimumSize: const Size(0, 48),
                         ),
-                        onPressed: () => _fontSizeNotifier.value = 22.0,
-                        icon: const Icon(Icons.restart_alt, size: 16),
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          _fontSizeNotifier.value = 22.0;
+                        },
+                        icon: const ExcludeSemantics(
+                          child: Icon(Icons.restart_alt, size: 16),
+                        ),
                         label: Text(
                           generator.getLocaleString(lang, "reset_font_size_btn"),
                         ),
@@ -4842,8 +4854,13 @@ class _MyHomePageState extends State<MyHomePage> {
                         style: TextButton.styleFrom(
                           minimumSize: const Size(0, 48),
                         ),
-                        onPressed: () => _yOffsetNotifier.value = 0.0,
-                        icon: const Icon(Icons.vertical_align_center, size: 16),
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          _yOffsetNotifier.value = 0.0;
+                        },
+                        icon: const ExcludeSemantics(
+                          child: Icon(Icons.vertical_align_center, size: 16),
+                        ),
                         label: Text(
                           generator.getLocaleString(lang, "reset_position_btn"),
                         ),
@@ -5600,7 +5617,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           "inclusivity_check_contrast",
                         ),
                         ok: contrastOk,
-                        onFix: () => _selectTab(2),
+                        onFix: () => _jumpToFixTarget(
+                          tabIndex: 2,
+                          sectionKey: _contrastSectionKey,
+                        ),
                       ),
                       buildCheckChip(
                         label: generator.getLocaleString(
@@ -5610,26 +5630,16 @@ class _MyHomePageState extends State<MyHomePage> {
                         ok: altTextOk,
                         onFix: () {
                           if (!hasVerse) {
-                            _selectTab(0);
+                            _jumpToFixTarget(
+                              tabIndex: 0,
+                              focusNode: _verseFocusNode,
+                            );
                             return;
                           }
-                          _selectTab(3);
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!mounted) return;
-                            final BuildContext? targetCtx =
-                                _imageDescriptionFocusNode.context;
-                            if (targetCtx != null) {
-                              Scrollable.ensureVisible(
-                                targetCtx,
-                                duration:
-                                    MediaQuery.of(context).disableAnimations
-                                    ? Duration.zero
-                                    : const Duration(milliseconds: 220),
-                                alignment: 0.25,
-                              );
-                            }
-                            _imageDescriptionFocusNode.requestFocus();
-                          });
+                          _jumpToFixTarget(
+                            tabIndex: 3,
+                            focusNode: _imageDescriptionFocusNode,
+                          );
                         },
                       ),
                       buildCheckChip(
@@ -5638,7 +5648,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           "inclusivity_check_typography",
                         ),
                         ok: typographyOk,
-                        onFix: () => _selectTab(2),
+                        onFix: () => _jumpToFixTarget(
+                          tabIndex: 2,
+                          sectionKey: _typographySectionKey,
+                        ),
                       ),
                       buildCheckChip(
                         label: generator.getLocaleString(
@@ -5646,7 +5659,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           "inclusivity_check_captions",
                         ),
                         ok: captionsOk,
-                        onFix: () => _selectTab(0),
+                        onFix: () => _jumpToFixTarget(
+                          tabIndex: 0,
+                          focusNode: _verseFocusNode,
+                        ),
                       ),
                     ],
                   ),
@@ -5657,6 +5673,29 @@ class _MyHomePageState extends State<MyHomePage> {
         );
       },
     );
+  }
+
+  void _jumpToFixTarget({
+    required int tabIndex,
+    GlobalKey? sectionKey,
+    FocusNode? focusNode,
+  }) {
+    _selectTab(tabIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final BuildContext? targetCtx =
+          focusNode?.context ?? sectionKey?.currentContext;
+      if (targetCtx != null) {
+        Scrollable.ensureVisible(
+          targetCtx,
+          duration: MediaQuery.of(context).disableAnimations
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          alignment: 0.2,
+        );
+      }
+      focusNode?.requestFocus();
+    });
   }
 
   void _selectTab(int index) {
