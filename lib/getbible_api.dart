@@ -93,6 +93,12 @@ class GetBibleAPI {
   static final RegExp _circledMarkerRegExp = RegExp(r'[\u24B6-\u24E9\u2460-\u2473]');
   static final RegExp _bracketNumberRegExp = RegExp(r'\[\d+\]');
   static final RegExp _whitespaceRegExp = RegExp(r'\s+');
+  static final RegExp _unsafeTextCharsRegExp = RegExp(
+    r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\u200E\u200F\u202A-\u202E\u2066-\u2069]',
+  );
+  static final RegExp _isoLangRegExp = RegExp(r'^[a-z]{2}$');
+  static final RegExp _youVersionIdRegExp = RegExp(r'^\d{1,12}$');
+  static final RegExp _usfmDigitsRegExp = RegExp(r'^\d{1,3}$');
   static final http.Client _sharedHttpClient = http.Client();
 
   // ⚡ Bolt: Pre-compute lowercase and diacritic-stripped book mappings once so
@@ -481,7 +487,7 @@ class GetBibleAPI {
     final String? safeApiKey = normalizeYouVersionApiKey(apiKey);
     final String safeLang = langPrefix.trim().toLowerCase();
     // 🛡️ Sentinel: Enforce strict 2-letter ISO language code allowlist before cache-key or URL interpolation
-    if (safeApiKey == null || !RegExp(r'^[a-z]{2}$').hasMatch(safeLang)) {
+    if (safeApiKey == null || !_isoLangRegExp.hasMatch(safeLang)) {
       return [];
     }
 
@@ -521,7 +527,7 @@ class GetBibleAPI {
           if (item is Map<String, dynamic> && item["id"] != null) {
             final String id = item["id"].toString().trim();
             // 🛡️ Sentinel: Validate remote YouVersion ID and sanitize display metadata against Bidi/control/HTML injection
-            if (!RegExp(r'^\d{1,12}$').hasMatch(id)) continue;
+            if (!_youVersionIdRegExp.hasMatch(id)) continue;
             final String abbr = cleanVerseText(
               (item["abbreviation"] ?? item["local_abbreviation"] ?? "")
                   .toString(),
@@ -668,18 +674,21 @@ class GetBibleAPI {
   static String cleanVerseText(String raw) {
     if (raw.isEmpty) return raw;
     String text = raw;
-    // Remove footnote and Strong's number tags along with their inner content
-    text = text.replaceAll(_footnoteTagRegExp, '');
-    // Remove remaining HTML tags
-    text = text.replaceAll(_htmlTagRegExp, ' ');
+    // ⚡ Bolt: Skip HTML/bracket regex scans when delimiter characters are absent,
+    // and reuse pre-compiled _unsafeTextCharsRegExp instead of compiling per verse.
+    if (text.contains('<')) {
+      // Remove footnote and Strong's number tags along with their inner content
+      text = text.replaceAll(_footnoteTagRegExp, '');
+      // Remove remaining HTML tags
+      text = text.replaceAll(_htmlTagRegExp, ' ');
+    }
     // Remove stray circled footnote markers or bracketed numbers if any remain
     text = text.replaceAll(_circledMarkerRegExp, '');
-    text = text.replaceAll(_bracketNumberRegExp, '');
+    if (text.contains('[')) {
+      text = text.replaceAll(_bracketNumberRegExp, '');
+    }
     // 🛡️ Sentinel: Strip C0/C1 control chars and Unicode Bidi override/isolate chars to prevent text spoofing
-    text = text.replaceAll(
-      RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\u200E\u200F\u202A-\u202E\u2066-\u2069]'),
-      '',
-    );
+    text = text.replaceAll(_unsafeTextCharsRegExp, '');
     // Collapse multiple spaces
     return text.replaceAll(_whitespaceRegExp, ' ').trim();
   }
@@ -1080,15 +1089,15 @@ class GetBibleAPI {
     if (bookName == null) return null;
 
     final String chapter = startTokens[1].trim();
-    if (!RegExp(r'^\d{1,3}$').hasMatch(chapter)) return null;
+    if (!_usfmDigitsRegExp.hasMatch(chapter)) return null;
     String versePart = startTokens.length >= 3 ? startTokens[2].trim() : "1";
-    if (!RegExp(r'^\d{1,3}$').hasMatch(versePart)) return null;
+    if (!_usfmDigitsRegExp.hasMatch(versePart)) return null;
 
     if (rangeParts.length > 1) {
       final List<String> endTokens = rangeParts.last.split('.');
       final String endVerse = endTokens.last.trim();
       if (endVerse.isNotEmpty &&
-          RegExp(r'^\d{1,3}$').hasMatch(endVerse) &&
+          _usfmDigitsRegExp.hasMatch(endVerse) &&
           endVerse != versePart) {
         versePart = "$versePart-$endVerse";
       }
