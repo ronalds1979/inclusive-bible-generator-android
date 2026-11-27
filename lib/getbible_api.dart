@@ -78,7 +78,10 @@ class GetBibleAPI {
       FlutterSecureStorage();
 
   static final RegExp _yvKeyRegExp = RegExp(r'^[A-Za-z0-9\-_.:]{8,128}$');
-  static final RegExp _bibleIdRegExp = RegExp(r'^[a-zA-Z0-9:_-]{1,32}$');
+  // 🛡️ Sentinel: Restrict YouVersion IDs strictly to `yv:<digits>` and built-in/GetBible IDs to safe slug chars without colons
+  static final RegExp _bibleIdRegExp = RegExp(
+    r'^(?:yv:\d{1,12}|[a-zA-Z0-9_-]{1,32})$',
+  );
 
   static final RegExp _referenceRegExp = RegExp(
     r'^((?:\d\s+)?[a-zA-ZáéíóúâêîôûãõçñÁÉÍÓÚÂÊÎÔÛÃÕÇÑ]+(?:\s+[a-zA-ZáéíóúâêîôûãõçñÁÉÍÓÚÂÊÎÔÛÃÕÇÑ]+)*)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$',
@@ -738,7 +741,11 @@ class GetBibleAPI {
     // if `bibleId` is a `yv:<id>` version OR if `effectiveYvKey` is set for a mapped version
     int? yvBibleId;
     if (normalizedId.startsWith("yv:")) {
-      yvBibleId = int.tryParse(normalizedId.substring(3));
+      final int? parsedYvId = int.tryParse(normalizedId.substring(3));
+      if (parsedYvId == null || parsedYvId <= 0) {
+        return null;
+      }
+      yvBibleId = parsedYvId;
     } else if (effectiveYvKey.isNotEmpty &&
         _youVersionIdMap.containsKey(normalizedId)) {
       yvBibleId = _youVersionIdMap[normalizedId];
@@ -881,6 +888,7 @@ class GetBibleAPI {
                 final int? vNum = (item["verse"] is int)
                     ? item["verse"] as int
                     : int.tryParse(item["verse"]?.toString() ?? "");
+                if (vNum != null && (vNum < 1 || vNum > 200)) continue;
                 final String cleaned = cleanVerseText(
                   (item["text"] ?? "").toString(),
                 );
@@ -1163,6 +1171,7 @@ class GetBibleAPI {
         return const [];
       }
 
+      final int maxResults = limit.clamp(1, 25);
       final List<String> canonicalBooks = getCanonicalBooks(langPrefix);
       final List<BibleSearchResult> matches = [];
       for (final item in rawResults) {
@@ -1177,11 +1186,16 @@ class GetBibleAPI {
             ? item['verse'] as int
             : int.tryParse('${item['verse']}');
         final String cleaned = cleanVerseText('${item['text'] ?? ''}');
+        // 🛡️ Sentinel: Enforce valid chapter/verse ranges and cap parsed results to maxResults
         if (bookNr == null ||
             bookNr < 1 ||
             bookNr > canonicalBooks.length ||
             chapter == null ||
+            chapter < 1 ||
+            chapter > 150 ||
             verse == null ||
+            verse < 1 ||
+            verse > 200 ||
             cleaned.isEmpty) {
           continue;
         }
@@ -1196,6 +1210,9 @@ class GetBibleAPI {
             text: cleaned,
           ),
         );
+        if (matches.length >= maxResults) {
+          break;
+        }
       }
       return matches;
     } catch (e) {

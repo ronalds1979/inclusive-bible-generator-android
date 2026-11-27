@@ -626,6 +626,53 @@ void main() {
         GetBibleAPI.resolveUsfmToLocalizedReference('JHN.3.evil', lang: 'en'),
         isNull,
       );
+
+      // Reject negative/zero YouVersion IDs and colon-containing non-yv IDs without issuing HTTP requests
+      expect(
+        await GetBibleAPI.getPassage(
+          'yv:-1',
+          'John 3:16',
+          lang: 'en',
+          youVersionApiKey: 'yv-valid-test-key-123456',
+          httpClient: MockClient((_) async => fail('Should not fetch invalid yv:-1')),
+        ),
+        isNull,
+      );
+      expect(
+        await GetBibleAPI.getPassage(
+          'yv:0',
+          'John 3:16',
+          lang: 'en',
+          youVersionApiKey: 'yv-valid-test-key-123456',
+          httpClient: MockClient((_) async => fail('Should not fetch invalid yv:0')),
+        ),
+        isNull,
+      );
+
+      // Enforce chapter/verse bounds and limit cap in searchVerses
+      final searchClient = MockClient((_) async {
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode([
+              {'book': 43, 'chapter': -1, 'verse': 16, 'text': 'Bad chapter'},
+              {'book': 43, 'chapter': 3, 'verse': 999, 'text': 'Bad verse'},
+              {'book': 43, 'chapter': 3, 'verse': 16, 'text': 'Valid first'},
+              {'book': 43, 'chapter': 3, 'verse': 17, 'text': 'Valid second'},
+            ]),
+          ),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final searchResults = await GetBibleAPI.searchVerses(
+        query: 'love',
+        versionId: 'web',
+        lang: 'en',
+        limit: 1,
+        client: searchClient,
+      );
+      expect(searchResults, hasLength(1));
+      expect(searchResults.first.text, equals('Valid first'));
     },
   );
 }
