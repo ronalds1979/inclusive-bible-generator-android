@@ -63,3 +63,9 @@
 **Vulnerability:** `ContrastSampler.sampleImageBytes` (`targetWidth: 48` with `targetHeight: null`), `VersePreviewCard` (`ResizeImage.resizeIfNeeded(1080, null, ...)`), and `_selectCustomImage` checked file bytes (<= 20 MB) and magic headers but did not inspect image dimensions or bound both decode axes, allowing a tiny `1 x 100,000` PNG to decode up to `48 x 4,800,000` pixels (~921 MB RGBA).
 **Learning:** Leaving either `targetHeight` or `height` as `null` in `ui.instantiateImageCodec` or `ResizeImage` scales the unconstrained axis proportionally, magnifying extreme aspect-ratio inputs into OOM crashes even when byte size is tiny.
 **Prevention:** Inspect encoded dimensions via `ui.ImageDescriptor.encoded` (`isSafeImageDimensions`) before decoding, and always bound both axes (`targetWidth`+`targetHeight` or `ResizeImagePolicy.fit`).
+
+
+## 2026-11-28 - Unbounded Bitmap Decode & Media Size in Native VerseVideoMuxer
+**Vulnerability:** `VerseVideoMuxer` (`VerseVideoMuxer.kt`) called `BitmapFactory.decodeFile` with `inPreferredConfig = ARGB_8888` and no `inSampleSize`, dimension/pixel caps, or file-size bounds on the input image and WAV audio files.
+**Learning:** Bounding image dimensions only at the Dart picker/preview layer leaves native Kotlin `MethodChannel` helpers exposed to pixel-bomb and oversized-media OOM crashes when invoked directly or with large exported buffers.
+**Prevention:** Enforce explicit `MAX_IMAGE_BYTES`, `MAX_AUDIO_BYTES`, `MAX_IMAGE_DIMENSION`, `MAX_IMAGE_PIXELS`, and `inSampleSize` downsampling in `VerseVideoMuxer` before allocating native `Bitmap` or AAC sample buffers.

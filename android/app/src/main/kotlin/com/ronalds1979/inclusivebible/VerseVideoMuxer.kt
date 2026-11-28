@@ -32,6 +32,10 @@ object VerseVideoMuxer {
     private const val VIDEO_BITRATE = 1_500_000
     private const val I_FRAME_INTERVAL_SECONDS = 2
     private const val MAX_VIDEO_DIMENSION = 1280
+    private const val MAX_IMAGE_BYTES = 20L * 1024L * 1024L
+    private const val MAX_AUDIO_BYTES = 50L * 1024L * 1024L
+    private const val MAX_IMAGE_DIMENSION = 16384
+    private const val MAX_IMAGE_PIXELS = 64_000_000L
     private const val CODEC_TIMEOUT_US = 10_000L
     private const val TAIL_PADDING_US = 300_000L
 
@@ -76,11 +80,12 @@ object VerseVideoMuxer {
     ): String {
         val imageFile = File(imagePath)
         val audioFile = File(audioPath)
-        require(imageFile.exists() && imageFile.length() > 0) {
-            "Image file does not exist or is empty: $imagePath"
+        // 🛡️ Sentinel: Enforce regular-file and byte-size bounds before opening/decoding native media inputs
+        require(imageFile.exists() && imageFile.isFile && imageFile.length() in 1L..MAX_IMAGE_BYTES) {
+            "Image file does not exist or exceeds maximum allowed size."
         }
-        require(audioFile.exists() && audioFile.length() > 44) {
-            "Audio file does not exist or is invalid: $audioPath"
+        require(audioFile.exists() && audioFile.isFile && audioFile.length() in 45L..MAX_AUDIO_BYTES) {
+            "Audio file does not exist or exceeds maximum allowed size."
         }
 
         val outFile = File(outputPath)
@@ -298,20 +303,35 @@ object VerseVideoMuxer {
     private fun loadAndConvertImageToYuv(imageFile: File): YuvFrame {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(imageFile.absolutePath, bounds)
-        require(bounds.outWidth > 0 && bounds.outHeight > 0) {
-            "Could not decode image dimensions."
+        val srcWidth = bounds.outWidth
+        val srcHeight = bounds.outHeight
+        // 🛡️ Sentinel: Reject extreme-dimension or pixel-bomb images before native ARGB_8888 allocation
+        require(
+            srcWidth in 1..MAX_IMAGE_DIMENSION &&
+                srcHeight in 1..MAX_IMAGE_DIMENSION &&
+                srcWidth.toLong() * srcHeight.toLong() <= MAX_IMAGE_PIXELS,
+        ) {
+            "Image dimensions are invalid or exceed maximum allowed pixels."
         }
 
         // Compute target dimensions <= MAX_VIDEO_DIMENSION, multiples of 16 for H.264 compatibility.
         val scale = min(
             1.0,
-            MAX_VIDEO_DIMENSION.toDouble() / max(bounds.outWidth, bounds.outHeight).toDouble(),
+            MAX_VIDEO_DIMENSION.toDouble() / max(srcWidth, srcHeight).toDouble(),
         )
-        val targetWidth = alignTo16((bounds.outWidth * scale).roundToInt())
-        val targetHeight = alignTo16((bounds.outHeight * scale).roundToInt())
+        val targetWidth = alignTo16((srcWidth * scale).roundToInt())
+        val targetHeight = alignTo16((srcHeight * scale).roundToInt())
+
+        var sampleSize = 1
+        while (srcWidth / (sampleSize * 2) >= targetWidth &&
+            srcHeight / (sampleSize * 2) >= targetHeight
+        ) {
+            sampleSize *= 2
+        }
 
         val decodeOpts = BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.ARGB_8888
+            inSampleSize = sampleSize
         }
         val decoded = requireNotNull(BitmapFactory.decodeFile(imageFile.absolutePath, decodeOpts)) {
             "Could not decode image bitmap."
