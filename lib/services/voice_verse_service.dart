@@ -201,6 +201,43 @@ class VoiceVerseService {
     return result;
   }
 
+  // ⚡ Bolt: Pre-compile spoken-reference normalization RegExps once and collapse
+  // 15 sequential ordinal word passes into a single regex + O(1) map lookup.
+  static final RegExp _multiSpaceRegex = RegExp(r'\s+');
+  static final RegExp _dosPuntosRegex = RegExp(
+    r'\bdos\s+puntos\b',
+    caseSensitive: false,
+  );
+  static final RegExp _portugueseRangePrepRegex = RegExp(
+    r'\b(ao|aos)\b',
+    caseSensitive: false,
+  );
+  static final RegExp _spanishHastaRegex = RegExp(
+    r'\bhasta(?:\s+(?:el|la))?\b',
+    caseSensitive: false,
+  );
+  static const Map<String, String> _ordinalWordMap = {
+    'primeiro': '1',
+    'primeira': '1',
+    'primero': '1',
+    'primera': '1',
+    'primer': '1',
+    'first': '1',
+    'segundo': '2',
+    'segunda': '2',
+    'second': '2',
+    'terceiro': '3',
+    'terceira': '3',
+    'tercero': '3',
+    'tercera': '3',
+    'tercer': '3',
+    'third': '3',
+  };
+  static final RegExp _ordinalWordRegex = RegExp(
+    r'\b(primeir[oa]|primer[oa]?|first|segund[oa]|second|terceir[oa]|tercer[oa]?|third)\b',
+    caseSensitive: false,
+  );
+
   static final RegExp _spokenRefRegex = RegExp(
     r'^((?:[1-3]\s+)?[^\d]+?)\s+(?:(?:chapter|cap[ií]tulo|cap\.?)\s+)?(?:n[uú]mero\s+)?(\d+)(?:(?:\s*[:.,;]\s*|\s+(?:y|con|en\s+el)\s+|\s+)(?:(?:verses?|vers[ií]culos?|versos?|vv?\.?)\s+)?(?:(?:del|desde\s+el|do|from)\s+)?(\d+)(?:\s*(?:[-–]|,?\s*(?:to|through|a|al|at[eé]))\s*(\d+))?)?$',
     caseSensitive: false,
@@ -219,33 +256,21 @@ class VoiceVerseService {
     }
     String cleaned = trimmed
         .replaceAll(_edgePunctuationRegex, '')
-        .replaceAll(RegExp(r'\s+'), ' ');
+        .replaceAll(_multiSpaceRegex, ' ');
     if (cleaned.isEmpty) return trimmed;
 
     cleaned = cleaned
-        .replaceAll(RegExp(r'\bdos\s+puntos\b', caseSensitive: false), ':')
-        .replaceAll(RegExp(r'\b(ao|aos)\b', caseSensitive: false), 'a')
-        .replaceAll(RegExp(r'\bhasta\s+(?:el|la)\b', caseSensitive: false), 'al')
-        .replaceAll(RegExp(r'\bhasta\b', caseSensitive: false), 'al')
-        .replaceAll(RegExp(r'\bprimeiro\b', caseSensitive: false), '1')
-        .replaceAll(RegExp(r'\bprimeira\b', caseSensitive: false), '1')
-        .replaceAll(RegExp(r'\bprimero\b', caseSensitive: false), '1')
-        .replaceAll(RegExp(r'\bprimera\b', caseSensitive: false), '1')
-        .replaceAll(RegExp(r'\bprimer\b', caseSensitive: false), '1')
-        .replaceAll(RegExp(r'\bfirst\b', caseSensitive: false), '1')
-        .replaceAll(RegExp(r'\bsegundo\b', caseSensitive: false), '2')
-        .replaceAll(RegExp(r'\bsegunda\b', caseSensitive: false), '2')
-        .replaceAll(RegExp(r'\bsecond\b', caseSensitive: false), '2')
-        .replaceAll(RegExp(r'\bterceiro\b', caseSensitive: false), '3')
-        .replaceAll(RegExp(r'\bterceira\b', caseSensitive: false), '3')
-        .replaceAll(RegExp(r'\btercero\b', caseSensitive: false), '3')
-        .replaceAll(RegExp(r'\btercera\b', caseSensitive: false), '3')
-        .replaceAll(RegExp(r'\btercer\b', caseSensitive: false), '3')
-        .replaceAll(RegExp(r'\bthird\b', caseSensitive: false), '3')
+        .replaceAll(_dosPuntosRegex, ':')
+        .replaceAll(_portugueseRangePrepRegex, 'a')
+        .replaceAll(_spanishHastaRegex, 'al')
+        .replaceAllMapped(
+          _ordinalWordRegex,
+          (m) => _ordinalWordMap[m.group(1)!.toLowerCase()] ?? m.group(0)!,
+        )
         .replaceFirstMapped(_symbolicOrdinalPrefixRegex, (m) => '${m.group(1)} ')
         .replaceFirst(_leadingBookIntroRegex, '')
         .replaceFirstMapped(_numberedBookConnectorRegex, (m) => '${m.group(1)} ')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(_multiSpaceRegex, ' ')
         .trim();
 
     cleaned = _replaceSpanishNumberWords(cleaned);
