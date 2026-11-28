@@ -5325,7 +5325,12 @@ class _MyHomePageState extends State<MyHomePage> {
                               : null,
                         ),
                         label: Text(
-                          generator.getLocaleString(lang, "copy_alt_text_btn"),
+                          generator.getLocaleString(
+                            lang,
+                            _copiedField == "alt"
+                                ? "copied_btn"
+                                : "copy_alt_text_btn",
+                          ),
                         ),
                       ),
                       if (_geminiNanoAvailability.isCompatible &&
@@ -5403,7 +5408,12 @@ class _MyHomePageState extends State<MyHomePage> {
                           : null,
                     ),
                     label: Text(
-                      generator.getLocaleString(lang, "copy_caption_btn"),
+                      generator.getLocaleString(
+                        lang,
+                        _copiedField == "caption"
+                            ? "copied_btn"
+                            : "copy_caption_btn",
+                      ),
                     ),
                   ),
                 ],
@@ -5973,7 +5983,12 @@ class _MyHomePageState extends State<MyHomePage> {
                           )
                         : const Icon(Icons.share),
                     label: Text(
-                      generator.getLocaleString(lang, "generate_btn"),
+                      generator.getLocaleString(
+                        lang,
+                        isGenerating
+                            ? "generating_content_msg"
+                            : "generate_btn",
+                      ),
                     ),
                   );
                 },
