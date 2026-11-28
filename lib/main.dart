@@ -1333,7 +1333,27 @@ class _MyHomePageState extends State<MyHomePage> {
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         )
-                      else
+                      else ...[
+                        Semantics(
+                          liveRegion: true,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: Text(
+                              generator.getLocaleString(
+                                lang,
+                                "verse_search_results_count",
+                                kwargs: {"count": "${results.length}"},
+                              ),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                        ),
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxHeight: 260),
                           child: ListView.separated(
@@ -1369,6 +1389,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             },
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ),
