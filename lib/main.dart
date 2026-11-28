@@ -1105,16 +1105,23 @@ class _MyHomePageState extends State<MyHomePage> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      // 🛡️ Sentinel: Validate file size (1B..20MB) and raster image magic bytes before UI rendering
+      // 🛡️ Sentinel: Validate file size (1B..20MB) and raster image magic bytes inside try/catch so unreadable gallery URIs fail closed
       final File selectedFile = File(image.path);
-      final int fileSize = await selectedFile.length();
-      final List<int> headerBytes = await selectedFile
-          .openRead(0, 12)
-          .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
-      if (fileSize <= 0 ||
-          fileSize > 20 * 1024 * 1024 ||
-          !isValidRasterImageBytes(Uint8List.fromList(headerBytes)) ||
-          !await hasSafeImageDimensionsFile(selectedFile.path)) {
+      bool isSafeImage = false;
+      try {
+        final int fileSize = await selectedFile.length();
+        final List<int> headerBytes = await selectedFile
+            .openRead(0, 12)
+            .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+        isSafeImage =
+            fileSize > 0 &&
+            fileSize <= 20 * 1024 * 1024 &&
+            isValidRasterImageBytes(Uint8List.fromList(headerBytes)) &&
+            await hasSafeImageDimensionsFile(selectedFile.path);
+      } catch (_) {
+        isSafeImage = false;
+      }
+      if (!isSafeImage) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

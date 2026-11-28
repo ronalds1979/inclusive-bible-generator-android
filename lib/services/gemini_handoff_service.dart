@@ -10,6 +10,12 @@ enum GeminiHandoffTask { devotionalCaption, customBackground }
 /// their personal free Gemini quota with no API key or developer billing.
 class GeminiHandoffService {
   static final Uri geminiAppUri = Uri.parse('https://gemini.google.com/app');
+  static const int maxVersePromptChars = 5000;
+  static const int maxReferencePromptChars = 100;
+  static final RegExp _unsafePromptCharsRegExp = RegExp(
+    r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\u200E\u200F\u202A-\u202E\u2066-\u2069]',
+  );
+  static final RegExp _safeAspectRatioRegExp = RegExp(r'^\d{1,2}:\d{1,2}$');
 
   final Future<void> Function(String text, String? imagePath)? _shareHandler;
   final Future<bool> Function(Uri uri)? _launchHandler;
@@ -34,26 +40,36 @@ class GeminiHandoffService {
     required GeminiHandoffTask task,
   }) {
     final String normalized = _normalizeLang(lang);
-    final String cleanVerse = verse.trim();
-    final String cleanRef = reference.trim();
+    // 🛡️ Sentinel: Strip C0/C1 control and Unicode Bidi override chars and bound lengths before external share/clipboard handoff
+    final String strippedVerse = verse.replaceAll(_unsafePromptCharsRegExp, '').trim();
+    final String cleanVerse = strippedVerse.length > maxVersePromptChars
+        ? strippedVerse.substring(0, maxVersePromptChars)
+        : strippedVerse;
+    final String strippedRef = reference.replaceAll(_unsafePromptCharsRegExp, '').trim();
+    final String cleanRef = strippedRef.length > maxReferencePromptChars
+        ? strippedRef.substring(0, maxReferencePromptChars)
+        : strippedRef;
+    final String safeRatio = _safeAspectRatioRegExp.hasMatch(aspectRatio.trim())
+        ? aspectRatio.trim()
+        : '4:5';
 
     if (task == GeminiHandoffTask.customBackground) {
       switch (normalized) {
         case 'pt-BR':
           return 'Crie uma imagem de fundo serena e sem nenhum texto na imagem '
-              '(proporção $aspectRatio) inspirada neste versículo bíblico:\n'
+              '(proporção $safeRatio) inspirada neste versículo bíblico:\n'
               '"$cleanVerse" — $cleanRef\n\n'
               'Use iluminação suave e uma área calma com bom contraste para '
               'sobrepor texto legível em um cartão acessível.';
         case 'es':
           return 'Crea una imagen de fondo serena y sin texto en la imagen '
-              '(relación de aspecto $aspectRatio) inspirada en este versículo bíblico:\n'
+              '(relación de aspecto $safeRatio) inspirada en este versículo bíblico:\n'
               '"$cleanVerse" — $cleanRef\n\n'
               'Usa iluminación suave y un área tranquila con buen contraste para '
               'superponer texto legible en una tarjeta accesible.';
         default:
           return 'Create a serene, text-free background image '
-              '(aspect ratio $aspectRatio) inspired by this Bible verse:\n'
+              '(aspect ratio $safeRatio) inspired by this Bible verse:\n'
               '"$cleanVerse" — $cleanRef\n\n'
               'Use soft lighting and a calm, uncluttered area with good contrast '
               'so overlaid verse text stays accessible and easy to read.';

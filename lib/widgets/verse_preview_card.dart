@@ -327,15 +327,16 @@ class VerseTextStyleOptions {
       default:
         parsedAlign = TextAlign.center;
     }
-    final num? rawLineHeight = json['lineHeight'] as num?;
-    final double clampedLineHeight = rawLineHeight != null
-        ? double.parse(rawLineHeight.toDouble().clamp(1.0, 2.0).toStringAsFixed(2))
+    // 🛡️ Sentinel: Type-check and require finite numeric values so corrupted JSON or NaN/Infinity cannot throw TypeError/FormatException
+    final Object? rawLineHeight = json['lineHeight'];
+    final double? lineHeightNum = rawLineHeight is num ? rawLineHeight.toDouble() : null;
+    final double clampedLineHeight = lineHeightNum != null && lineHeightNum.isFinite
+        ? double.parse(lineHeightNum.clamp(1.0, 2.0).toStringAsFixed(2))
         : defaultLineHeight;
-    final num? rawLetterSpacing = json['letterSpacing'] as num?;
-    final double clampedLetterSpacing = rawLetterSpacing != null
-        ? double.parse(
-            rawLetterSpacing.toDouble().clamp(-1.0, 4.0).toStringAsFixed(2),
-          )
+    final Object? rawLetterSpacing = json['letterSpacing'];
+    final double? letterSpacingNum = rawLetterSpacing is num ? rawLetterSpacing.toDouble() : null;
+    final double clampedLetterSpacing = letterSpacingNum != null && letterSpacingNum.isFinite
+        ? double.parse(letterSpacingNum.clamp(-1.0, 4.0).toStringAsFixed(2))
         : defaultLetterSpacing;
     return VerseTextStyleOptions(
       fontFamily: family,
